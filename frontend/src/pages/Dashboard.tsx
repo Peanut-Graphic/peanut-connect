@@ -156,7 +156,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-500">
             Last sync: {dashboard?.hub?.last_sync
-              ? formatDistanceToNow(new Date(dashboard.hub.last_sync), { addSuffix: true })
+              ? formatDistanceToNow(new Date(dashboard.hub.last_sync + (dashboard.hub.last_sync.includes('Z') || dashboard.hub.last_sync.includes('+') ? '' : 'Z')), { addSuffix: true })
               : 'Never'}
           </span>
         </div>
@@ -279,7 +279,7 @@ export default function Dashboard() {
               {dashboard.hub.last_sync && (
                 <p className="text-sm text-slate-500">
                   Last sync:{' '}
-                  {formatDistanceToNow(new Date(dashboard.hub.last_sync), {
+                  {formatDistanceToNow(new Date(dashboard.hub.last_sync + (dashboard.hub.last_sync.includes('Z') || dashboard.hub.last_sync.includes('+') ? '' : 'Z')), {
                     addSuffix: true,
                   })}
                 </p>

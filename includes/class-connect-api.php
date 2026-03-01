@@ -1016,15 +1016,62 @@ class Peanut_Connect_API {
      * Trigger Hub sync
      */
     public function trigger_hub_sync(WP_REST_Request $request): WP_REST_Response {
-        // First send heartbeat with health data
+        // Send heartbeat with health data
         $heartbeat_result = Peanut_Connect_Hub_Sync::send_heartbeat();
 
+        // Run the full data sync (visitors, events, touches, conversions, etc.)
+        $sync_result = Peanut_Connect_Hub_Sync::run_sync();
+
+        $sync_success = $sync_result['success'] ?? false;
+        $heartbeat_success = $heartbeat_result['success'] ?? false;
+        $stats = $sync_result['stats'] ?? null;
+
+        // Build detailed message showing both results
+        $messages = [];
+
+        if ($sync_success && $stats) {
+            $total = array_sum($stats);
+            if ($total > 0) {
+                $parts = [];
+                foreach ($stats as $type => $count) {
+                    if ($count > 0) {
+                        $parts[] = "$count $type";
+                    }
+                }
+                $messages[] = sprintf(
+                    __('Synced: %s.', 'peanut-connect'),
+                    implode(', ', $parts)
+                );
+            } else {
+                $messages[] = __('No new records to sync.', 'peanut-connect');
+            }
+        } elseif (!$sync_success) {
+            $messages[] = sprintf(
+                __('Sync failed: %s', 'peanut-connect'),
+                $sync_result['message'] ?? __('Unknown error', 'peanut-connect')
+            );
+        }
+
+        if (!$heartbeat_success) {
+            $messages[] = sprintf(
+                __('Heartbeat failed: %s', 'peanut-connect'),
+                $heartbeat_result['message'] ?? __('Unknown error', 'peanut-connect')
+            );
+        }
+
+        $success = $sync_success;
+        $message = implode(' ', $messages) ?: __('Sync completed.', 'peanut-connect');
+
         return new WP_REST_Response([
-            'success' => $heartbeat_result['success'],
-            'message' => $heartbeat_result['success']
-                ? __('Sync completed successfully.', 'peanut-connect')
-                : ($heartbeat_result['message'] ?? __('Sync failed.', 'peanut-connect')),
-        ], $heartbeat_result['success'] ? 200 : 400);
+            'success' => $success,
+            'message' => $message,
+            'stats' => $stats,
+            'debug' => [
+                'heartbeat' => $heartbeat_success,
+                'sync' => $sync_success,
+                'sync_error' => !$sync_success ? ($sync_result['message'] ?? null) : null,
+            ],
+        ], $success ? 200 : 400);
     }
 
     /**

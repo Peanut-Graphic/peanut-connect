@@ -92,14 +92,25 @@ export default function Settings() {
     },
   });
 
+  const [syncElapsed, setSyncElapsed] = useState(0);
+  const [syncResult, setSyncResult] = useState<{ message: string; stats?: Record<string, number>; success: boolean } | null>(null);
+
   const triggerHubSyncMutation = useMutation({
     mutationFn: settingsApi.triggerHubSync,
-    onSuccess: (data) => {
-      toast.success(data.message || 'Sync completed');
+    onMutate: () => {
+      setSyncResult(null);
+      setSyncElapsed(0);
+      const interval = setInterval(() => setSyncElapsed((s) => s + 1), 1000);
+      return { interval };
+    },
+    onSuccess: (data, _, context) => {
+      clearInterval(context?.interval);
+      setSyncResult({ message: data.message, stats: data.stats, success: true });
       queryClient.invalidateQueries({ queryKey: ['settings'] });
     },
-    onError: (err) => {
-      toast.error((err as Error).message || 'Sync failed');
+    onError: (err, _, context) => {
+      clearInterval(context?.interval);
+      setSyncResult({ message: (err as Error).message || 'Sync failed', success: false });
     },
   });
 
@@ -272,30 +283,78 @@ export default function Settings() {
             {settings.hub.last_sync && (
               <p className="text-sm text-slate-500">
                 Last sync:{' '}
-                {formatDistanceToNow(new Date(settings.hub.last_sync), {
+                {formatDistanceToNow(new Date(settings.hub.last_sync + (settings.hub.last_sync.includes('Z') || settings.hub.last_sync.includes('+') ? '' : 'Z')), {
                   addSuffix: true,
                 })}
               </p>
             )}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => triggerHubSyncMutation.mutate()}
-                loading={triggerHubSyncMutation.isPending}
-                icon={<Send className="w-4 h-4" />}
-              >
-                Sync Now
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => testHubConnectionMutation.mutate()}
-                loading={testHubConnectionMutation.isPending}
-                icon={<RefreshCw className="w-4 h-4" />}
-              >
-                Test Connection
-              </Button>
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => triggerHubSyncMutation.mutate()}
+                  loading={triggerHubSyncMutation.isPending}
+                  icon={<Send className="w-4 h-4" />}
+                  disabled={triggerHubSyncMutation.isPending}
+                >
+                  Sync Now
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => testHubConnectionMutation.mutate()}
+                  loading={testHubConnectionMutation.isPending}
+                  icon={<RefreshCw className="w-4 h-4" />}
+                >
+                  Test Connection
+                </Button>
+              </div>
+
+              {/* Sync Progress */}
+              {triggerHubSyncMutation.isPending && (
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-blue-900">Syncing data to Hub...</span>
+                    <span className="text-xs text-blue-600">{syncElapsed}s</span>
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
+                    <div className="h-full bg-blue-600 rounded-full animate-pulse" style={{ width: '100%', animation: 'syncPulse 1.5s ease-in-out infinite' }} />
+                  </div>
+                  <p className="text-xs text-blue-600 mt-1.5">
+                    {syncElapsed < 5 ? 'Connecting...' : syncElapsed < 15 ? 'Syncing events and visitors...' : syncElapsed < 30 ? 'Processing large dataset...' : 'Still working (high-traffic site)...'}
+                  </p>
+                  <style>{`@keyframes syncPulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }`}</style>
+                </div>
+              )}
+
+              {/* Sync Result */}
+              {syncResult && !triggerHubSyncMutation.isPending && (
+                <div className={`p-3 rounded-lg border ${syncResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                  <div className="flex items-start gap-2">
+                    {syncResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${syncResult.success ? 'text-green-900' : 'text-red-900'}`}>
+                        {syncResult.message}
+                      </p>
+                      {syncResult.stats && (
+                        <div className="flex flex-wrap gap-2 mt-1.5">
+                          {Object.entries(syncResult.stats).map(([type, count]) => (
+                            <span key={type} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white border border-green-300 text-green-700">
+                              {count} {type}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs text-slate-500 mt-1">Completed in {syncElapsed}s</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Hub Mode Setting */}

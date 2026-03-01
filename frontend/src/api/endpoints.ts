@@ -50,7 +50,7 @@ export const settingsApi = {
   },
 
   // Hub settings - trigger sync
-  triggerHubSync: async (): Promise<{ success: boolean; message: string }> => {
+  triggerHubSync: async (): Promise<{ success: boolean; message: string; stats?: Record<string, number> }> => {
     const response = await api.post('/settings/hub/sync');
     return response.data;
   },

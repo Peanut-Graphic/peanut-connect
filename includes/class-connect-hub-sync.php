@@ -20,7 +20,7 @@ class Peanut_Connect_Hub_Sync {
     /**
      * Batch size for syncing
      */
-    const BATCH_SIZE = 100;
+    const BATCH_SIZE = 200;
 
     /**
      * Sync interval in minutes
@@ -114,6 +114,10 @@ class Peanut_Connect_Hub_Sync {
 
     /**
      * Run the sync process
+     *
+     * Only syncs campaign-related data (events with click_id from Hub links)
+     * and the visitors associated with those events. This keeps sync fast
+     * even on high-traffic sites with tens of thousands of visitors.
      */
     public static function run_sync(): array {
         $hub_url = get_option('peanut_connect_hub_url');
@@ -127,27 +131,32 @@ class Peanut_Connect_Hub_Sync {
         }
 
         $stats = [
-            'visitors' => 0,
             'events' => 0,
-            'touches' => 0,
+            'visitors' => 0,
             'conversions' => 0,
-            'popup_interactions' => 0,
             'form_submissions' => 0,
+            'popup_interactions' => 0,
         ];
 
         try {
-            // Sync each data type
-            $stats['visitors'] = self::sync_visitors($hub_url, $api_key);
-            $stats['events'] = self::sync_events($hub_url, $api_key);
-            $stats['touches'] = self::sync_touches($hub_url, $api_key);
-            $stats['conversions'] = self::sync_conversions($hub_url, $api_key);
+            // 1. Sync campaign events (events with click_id) — this is the core data
+            $stats['events'] = self::sync_campaign_events($hub_url, $api_key);
+
+            // 2. Sync visitors that are associated with campaign events
+            $stats['visitors'] = self::sync_campaign_visitors($hub_url, $api_key);
+
+            // 3. Sync popup interactions (usually small volume)
             $stats['popup_interactions'] = self::sync_popup_interactions($hub_url, $api_key);
+
+            // 4. Sync form submissions (usually small volume)
             $stats['form_submissions'] = self::sync_form_submissions($hub_url, $api_key);
+
+            // 5. Mark all non-campaign events as synced so they don't pile up
+            self::mark_non_campaign_data_synced();
 
             // Update last sync time
             update_option('peanut_connect_last_hub_sync', current_time('mysql', true));
 
-            // Log success
             Peanut_Connect_Activity_Log::log('hub_sync', 'success', 0, [
                 'stats' => $stats,
             ]);
@@ -170,45 +179,9 @@ class Peanut_Connect_Hub_Sync {
     }
 
     /**
-     * Sync visitors to hub
+     * Sync only events that have a click_id (came from Hub campaign links)
      */
-    private static function sync_visitors(string $hub_url, string $api_key): int {
-        global $wpdb;
-
-        $table = Peanut_Connect_Database::table('visitors');
-        $synced = 0;
-
-        while (true) {
-            $visitors = $wpdb->get_results(
-                $wpdb->prepare(
-                    "SELECT * FROM $table WHERE synced = 0 ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                    self::BATCH_SIZE
-                ),
-                ARRAY_A
-            );
-
-            if (empty($visitors)) {
-                break;
-            }
-
-            $response = self::send_to_hub($hub_url, $api_key, ['visitors' => $visitors]);
-
-            if ($response['success']) {
-                $ids = array_column($visitors, 'id');
-                self::mark_synced($table, $ids);
-                $synced += count($visitors);
-            } else {
-                throw new \Exception('Failed to sync visitors: ' . ($response['message'] ?? 'Unknown error'));
-            }
-        }
-
-        return $synced;
-    }
-
-    /**
-     * Sync events to hub
-     */
-    private static function sync_events(string $hub_url, string $api_key): int {
+    private static function sync_campaign_events(string $hub_url, string $api_key): int {
         global $wpdb;
 
         $table = Peanut_Connect_Database::table('events');
@@ -217,7 +190,7 @@ class Peanut_Connect_Hub_Sync {
         while (true) {
             $events = $wpdb->get_results(
                 $wpdb->prepare(
-                    "SELECT * FROM $table WHERE synced = 0 ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                    "SELECT * FROM $table WHERE synced = 0 AND click_id IS NOT NULL AND click_id != '' ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
                     self::BATCH_SIZE
                 ),
                 ARRAY_A
@@ -242,71 +215,40 @@ class Peanut_Connect_Hub_Sync {
     }
 
     /**
-     * Sync touches to hub
+     * Sync only visitors that are associated with campaign events (have click_id)
      */
-    private static function sync_touches(string $hub_url, string $api_key): int {
+    private static function sync_campaign_visitors(string $hub_url, string $api_key): int {
         global $wpdb;
 
-        $table = Peanut_Connect_Database::table('touches');
+        $visitors_table = Peanut_Connect_Database::table('visitors');
+        $events_table = Peanut_Connect_Database::table('events');
         $synced = 0;
 
         while (true) {
-            $touches = $wpdb->get_results(
+            // Get unsynced visitors that have at least one event with a click_id
+            $visitors = $wpdb->get_results(
                 $wpdb->prepare(
-                    "SELECT * FROM $table WHERE synced = 0 ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                    "SELECT DISTINCT v.* FROM $visitors_table v
+                     INNER JOIN $events_table e ON v.visitor_id = e.visitor_id
+                     WHERE v.synced = 0 AND e.click_id IS NOT NULL AND e.click_id != ''
+                     ORDER BY v.id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
                     self::BATCH_SIZE
                 ),
                 ARRAY_A
             );
 
-            if (empty($touches)) {
+            if (empty($visitors)) {
                 break;
             }
 
-            $response = self::send_to_hub($hub_url, $api_key, ['touches' => $touches]);
+            $response = self::send_to_hub($hub_url, $api_key, ['visitors' => $visitors]);
 
             if ($response['success']) {
-                $ids = array_column($touches, 'id');
-                self::mark_synced($table, $ids);
-                $synced += count($touches);
+                $ids = array_column($visitors, 'id');
+                self::mark_synced($visitors_table, $ids);
+                $synced += count($visitors);
             } else {
-                throw new \Exception('Failed to sync touches: ' . ($response['message'] ?? 'Unknown error'));
-            }
-        }
-
-        return $synced;
-    }
-
-    /**
-     * Sync conversions to hub
-     */
-    private static function sync_conversions(string $hub_url, string $api_key): int {
-        global $wpdb;
-
-        $table = Peanut_Connect_Database::table('conversions');
-        $synced = 0;
-
-        while (true) {
-            $conversions = $wpdb->get_results(
-                $wpdb->prepare(
-                    "SELECT * FROM $table WHERE synced = 0 ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                    self::BATCH_SIZE
-                ),
-                ARRAY_A
-            );
-
-            if (empty($conversions)) {
-                break;
-            }
-
-            $response = self::send_to_hub($hub_url, $api_key, ['conversions' => $conversions]);
-
-            if ($response['success']) {
-                $ids = array_column($conversions, 'id');
-                self::mark_synced($table, $ids);
-                $synced += count($conversions);
-            } else {
-                throw new \Exception('Failed to sync conversions: ' . ($response['message'] ?? 'Unknown error'));
+                throw new \Exception('Failed to sync visitors: ' . ($response['message'] ?? 'Unknown error'));
             }
         }
 
@@ -366,7 +308,6 @@ class Peanut_Connect_Hub_Sync {
                 break;
             }
 
-            // Format submissions for Hub API
             $formatted = [];
             foreach ($submissions as $sub) {
                 $formatted[] = [
@@ -394,6 +335,54 @@ class Peanut_Connect_Hub_Sync {
         }
 
         return $synced;
+    }
+
+    /**
+     * Mark non-campaign data as synced so it doesn't pile up forever.
+     * Events without click_id and visitors not tied to campaigns get marked synced.
+     */
+    private static function mark_non_campaign_data_synced(): void {
+        global $wpdb;
+
+        $events_table = Peanut_Connect_Database::table('events');
+        $visitors_table = Peanut_Connect_Database::table('visitors');
+        $touches_table = Peanut_Connect_Database::table('touches');
+        $conversions_table = Peanut_Connect_Database::table('conversions');
+        $now = current_time('mysql', true);
+
+        // Mark non-campaign events as synced
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE $events_table SET synced = 1, synced_at = %s WHERE synced = 0 AND (click_id IS NULL OR click_id = '')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $now
+            )
+        );
+
+        // Mark non-campaign visitors as synced
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE $visitors_table SET synced = 1, synced_at = %s WHERE synced = 0 AND visitor_id NOT IN (
+                    SELECT DISTINCT visitor_id FROM $events_table WHERE click_id IS NOT NULL AND click_id != ''
+                )", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $now
+            )
+        );
+
+        // Mark all touches as synced (not needed for journey tracking)
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE $touches_table SET synced = 1, synced_at = %s WHERE synced = 0", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $now
+            )
+        );
+
+        // Mark all conversions as synced (not needed for journey tracking)
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE $conversions_table SET synced = 1, synced_at = %s WHERE synced = 0", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $now
+            )
+        );
     }
 
     /**
