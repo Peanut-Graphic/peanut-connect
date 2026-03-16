@@ -742,6 +742,60 @@ class Peanut_Connect_API {
             'callback' => [$this, 'get_banner_diagnostics'],
             'permission_callback' => [Peanut_Connect_Auth::class, 'hub_permission_callback'],
         ]);
+
+        // =====================
+        // Backup, Restore & Update endpoints (v3.4.0+)
+        // =====================
+
+        // Create a site backup (database + files)
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/backup', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'create_backup'],
+            'permission_callback' => [Peanut_Connect_Auth::class, 'hub_permission_callback'],
+            'args' => [
+                'type' => [
+                    'default' => 'full',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'storage_driver' => [
+                    'default' => 'local',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+            ],
+        ]);
+
+        // Restore from a backup archive
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/restore', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'restore_backup'],
+            'permission_callback' => [Peanut_Connect_Auth::class, 'hub_permission_callback'],
+            'args' => [
+                'backup_url' => [
+                    'required' => true,
+                    'sanitize_callback' => 'esc_url_raw',
+                ],
+            ],
+        ]);
+
+        // Unified update endpoint (plugin, theme, or core)
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/update', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'apply_update'],
+            'permission_callback' => Peanut_Connect_Auth::hub_permission_callback_for('perform_updates'),
+            'args' => [
+                'component_type' => [
+                    'required' => true,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'slug' => [
+                    'required' => true,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'version' => [
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+            ],
+        ]);
     }
 
     /**
@@ -2549,6 +2603,101 @@ class Peanut_Connect_API {
         return new WP_REST_Response([
             'success' => true,
             'data' => Peanut_Connect_Event_Banner::get_diagnostics(),
+        ], 200);
+    }
+
+    // =====================
+    // Backup, Restore & Update endpoint callbacks (v3.4.0+)
+    // =====================
+
+    /**
+     * Create a site backup (database + wp-content)
+     *
+     * @param WP_REST_Request $request REST request object.
+     * @return WP_REST_Response Response with backup details or error.
+     * @since 3.4.0
+     */
+    public function create_backup(WP_REST_Request $request): WP_REST_Response {
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup.php';
+
+        $result = Peanut_Connect_Backup::create_backup([
+            'type' => $request->get_param('type'),
+            'storage_driver' => $request->get_param('storage_driver'),
+        ]);
+
+        if (is_wp_error($result)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'code' => $result->get_error_code(),
+                'message' => $result->get_error_message(),
+            ], 500);
+        }
+
+        Peanut_Connect_Activity_Log::log('backup_created', $result);
+
+        return new WP_REST_Response($result, 200);
+    }
+
+    /**
+     * Restore from a backup archive URL
+     *
+     * @param WP_REST_Request $request REST request object with backup_url parameter.
+     * @return WP_REST_Response Response with restore result or error.
+     * @since 3.4.0
+     */
+    public function restore_backup(WP_REST_Request $request): WP_REST_Response {
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup.php';
+
+        $result = Peanut_Connect_Backup::restore_backup($request->get_param('backup_url'));
+
+        if (is_wp_error($result)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'code' => $result->get_error_code(),
+                'message' => $result->get_error_message(),
+            ], 500);
+        }
+
+        Peanut_Connect_Activity_Log::log('backup_restored', $result);
+
+        return new WP_REST_Response($result, 200);
+    }
+
+    /**
+     * Unified update endpoint — update a plugin, theme, or WordPress core
+     *
+     * Delegates to the existing Peanut_Connect_Updates::perform_update() method
+     * and runs a post-update health check.
+     *
+     * @param WP_REST_Request $request REST request with component_type, slug, and optional version.
+     * @return WP_REST_Response Response with update result and health check.
+     * @since 3.4.0
+     */
+    public function apply_update(WP_REST_Request $request): WP_REST_Response {
+        $type = $request->get_param('component_type'); // plugin, theme, core
+        $slug = $request->get_param('slug');
+
+        // Use existing Updates class
+        $result = Peanut_Connect_Updates::perform_update($type, $slug);
+
+        if (is_wp_error($result)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'code' => $result->get_error_code(),
+                'message' => $result->get_error_message(),
+            ], 400);
+        }
+
+        // Run health check after update
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup.php';
+        $health = Peanut_Connect_Backup::health_check();
+
+        Peanut_Connect_Activity_Log::log('update_applied', array_merge($result, ['health' => $health]));
+
+        return new WP_REST_Response([
+            'success' => true,
+            'update' => $result,
+            'health_check' => $health,
         ], 200);
     }
 }

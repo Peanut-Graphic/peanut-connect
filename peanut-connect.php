@@ -3,7 +3,7 @@
  * Plugin Name: Peanut Connect
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: Connector plugin for Peanut Hub. Enables centralized site health monitoring and management from your agency dashboard.
- * Version: 3.3.9
+ * Version: 3.4.0
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.3.9');
+define('PEANUT_CONNECT_VERSION', '3.4.0');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
