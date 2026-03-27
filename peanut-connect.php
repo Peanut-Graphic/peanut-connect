@@ -90,6 +90,9 @@ final class Peanut_Connect {
         // Forms integration for Hub (v3.3.0+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-forms.php';
 
+        // ML anomaly detection (v3.5.0+)
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-ml-anomaly.php';
+
         // Initialize logging early
         Peanut_Connect_Activity_Log::init();
         Peanut_Connect_Error_Log::init();
@@ -144,6 +147,12 @@ final class Peanut_Connect {
         add_action('peanut_connect_cleanup', [Peanut_Connect_Database::class, 'cleanup_old_records']);
         if (!wp_next_scheduled('peanut_connect_cleanup')) {
             wp_schedule_event(time(), 'daily', 'peanut_connect_cleanup');
+        }
+
+        // Schedule weekly ML model retraining (v3.5.0+)
+        add_action('peanut_ml_connect_train', [$this, 'run_ml_training']);
+        if (!wp_next_scheduled('peanut_ml_connect_train')) {
+            wp_schedule_event(time(), 'weekly', 'peanut_ml_connect_train');
         }
 
         // Register custom cron schedule
@@ -593,6 +602,25 @@ final class Peanut_Connect {
         array_unshift($links, $settings_link);
         return $links;
     }
+
+    /**
+     * Run ML model retraining
+     *
+     * Executed weekly via cron job. Trains the ML anomaly detection model
+     * with current health metrics.
+     *
+     * @since 3.5.0
+     */
+    public function run_ml_training(): void {
+        if (!class_exists('Peanut_Connect_ML_Anomaly')) {
+            return;
+        }
+
+        $ml = new Peanut_Connect_ML_Anomaly();
+        if ($ml->is_available()) {
+            $ml->train_model();
+        }
+    }
 }
 
 /**
@@ -649,4 +677,7 @@ register_deactivation_hook(__FILE__, function() {
     wp_clear_scheduled_hook('peanut_connect_hub_sync');
     wp_clear_scheduled_hook('peanut_connect_hub_heartbeat');
     wp_clear_scheduled_hook('peanut_connect_cleanup');
+
+    // Clear ML training cron job (v3.5.0+)
+    wp_clear_scheduled_hook('peanut_ml_connect_train');
 });

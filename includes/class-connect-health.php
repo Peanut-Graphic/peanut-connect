@@ -54,6 +54,18 @@ class Peanut_Connect_Health {
             '_cached_at' => current_time('mysql'),
         ];
 
+        // ML anomaly detection (v3.5.0+)
+        // Non-blocking integration with anomaly detection if ML service is available
+        if (class_exists('Peanut_Connect_ML_Anomaly')) {
+            $ml = new Peanut_Connect_ML_Anomaly();
+            if ($ml->is_available()) {
+                $anomaly_data = $ml->detect_anomalies($data);
+                if ($anomaly_data) {
+                    $data['ml_anomaly_analysis'] = $anomaly_data;
+                }
+            }
+        }
+
         // Cache the result
         set_transient($cache_key, $data, self::HEALTH_CACHE_TTL);
 
