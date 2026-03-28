@@ -591,7 +591,7 @@ export default function Settings() {
                   value={hubUrl}
                   onChange={(e) => setHubUrl(e.target.value)}
                   placeholder="https://hub.peanutgraphic.com"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               <Button
@@ -893,7 +893,7 @@ export default function Settings() {
                   value={loginSlug || securitySettings?.hide_login?.custom_slug || ''}
                   onChange={(e) => setLoginSlug(e.target.value)}
                   placeholder="my-login"
-                  className="flex-1 max-w-[200px] px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 max-w-[200px] px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <Button
                   size="sm"

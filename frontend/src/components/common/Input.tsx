@@ -51,7 +51,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             id={inputId}
             style={leftIcon ? { paddingLeft: '44px' } : undefined}
             className={clsx(
-              'block rounded-lg border bg-white text-slate-900 placeholder-slate-400',
+              'block rounded-lg border bg-white text-slate-900 dark:text-slate-100 placeholder-slate-400',
               'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
               'disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed',
               fullWidth && 'w-full',
