@@ -96,7 +96,7 @@ export function Tooltip({
       case 'bottom':
         return { ...base, top: coords.top, left: coords.left, transform: 'translateX(-50%)' };
       case 'left':
-        return { ...base, top: coords.top, right: `calc(100vw - ${coords.left}px)`, transform: 'translateY(-50%)' };
+        return { ...base, top: coords.top, right: `calc(100% - ${coords.left}px)`, transform: 'translateY(-50%)' };
       case 'right':
         return { ...base, top: coords.top, left: coords.left, transform: 'translateY(-50%)' };
     }

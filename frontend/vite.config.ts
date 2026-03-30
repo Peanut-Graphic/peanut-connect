@@ -11,6 +11,7 @@ export default defineConfig({
     },
   },
   build: {
+    target: ['es2020', 'chrome80', 'firefox80', 'safari14', 'edge80'],
     outDir: '../assets/dist',
     emptyOutDir: true,
     manifest: true,
