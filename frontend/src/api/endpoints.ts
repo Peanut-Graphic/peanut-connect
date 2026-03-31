@@ -180,7 +180,7 @@ export const securityApi = {
   // Get security settings
   get: async (): Promise<SecuritySettings> => {
     const response = await api.get('/security');
-    return response.data.data;
+    return response.data;
   },
 
   // Update security settings
