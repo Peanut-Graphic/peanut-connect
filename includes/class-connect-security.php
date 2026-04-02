@@ -148,24 +148,18 @@ class Peanut_Connect_Security {
      * Hide WordPress login page with custom slug
      */
     private static function hide_login(string $custom_slug): void {
-        // Store the custom slug for rewrite rules
-        add_action('init', function () use ($custom_slug) {
-            // Add rewrite rule for custom login URL
-            add_rewrite_rule(
-                '^' . preg_quote($custom_slug, '/') . '/?$',
-                'wp-login.php',
-                'top'
-            );
-        });
-
         // Intercept login page requests
         add_action('init', function () use ($custom_slug) {
             $request_uri = $_SERVER['REQUEST_URI'] ?? '';
             $request_path = parse_url($request_uri, PHP_URL_PATH);
+            $trimmed_path = trim($request_path, '/');
 
-            // Allow access if using custom slug
-            if (trim($request_path, '/') === $custom_slug) {
-                return;
+            // Serve wp-login.php when accessing custom slug
+            if ($trimmed_path === $custom_slug) {
+                // Pass query string through (for ?action=logout, etc.)
+                $_SERVER['REQUEST_URI'] = '/wp-login.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== '' ? '?' . $_SERVER['QUERY_STRING'] : '');
+                require_once ABSPATH . 'wp-login.php';
+                exit;
             }
 
             // Block direct access to wp-login.php
