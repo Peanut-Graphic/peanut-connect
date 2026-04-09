@@ -121,8 +121,9 @@ class Peanut_Connect_ML_Anomaly {
             return $cached;
         }
 
-        $response = $this->make_request('POST', '/connect/detect', [
-            'metrics' => $health_data,
+        $response = $this->make_request('POST', '/connect/detect-anomalies', [
+            'site_id' => get_current_blog_id(),
+            'lookback_days' => 7,
         ]);
 
         if (!is_null($response)) {
@@ -145,10 +146,9 @@ class Peanut_Connect_ML_Anomaly {
             return false;
         }
 
-        $health_data = Peanut_Connect_Health::get_health_data();
-
-        $response = $this->make_request('POST', '/connect/train', [
-            'metrics' => $health_data,
+        $response = $this->make_request('POST', '/connect/train-baseline', [
+            'site_id' => get_current_blog_id(),
+            'training_days' => 30,
         ]);
 
         return !is_null($response);
