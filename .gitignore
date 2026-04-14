@@ -35,3 +35,7 @@ frontend/coverage/
 
 # Composer
 composer.lock
+
+# --- added by gitignore-sync on 2026-04-13 ---
+.claude/worktrees/
+.phpunit.result.cache
