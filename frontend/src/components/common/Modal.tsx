@@ -36,21 +36,26 @@ export default function Modal({
   return (
     <Fragment>
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
         className="fixed inset-0 bg-black/50 z-[100] transition-opacity"
         onClick={onClose}
+        aria-label="Close dialog"
       />
 
       {/* Modal */}
       <div className="fixed inset-0 z-[101] overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center p-4">
+        <div className="flex min-h-[100dvh] items-end justify-center p-3 sm:items-center sm:p-4">
           <div
             className={clsx(
-              'relative bg-white rounded-xl shadow-xl w-full transform transition-all animate-scale-in',
+              'relative w-full max-h-[calc(100dvh-1.5rem)] overflow-hidden rounded-t-2xl bg-white shadow-xl transform transition-all animate-scale-in sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl',
               sizes[size],
               className
             )}
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={title || 'Dialog'}
           >
             {/* Header */}
             {(title || showClose) && (
@@ -68,7 +73,8 @@ export default function Modal({
                 {showClose && (
                   <button
                     onClick={onClose}
-                    className="text-slate-400 hover:text-slate-600 transition-colors"
+                    className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                    aria-label="Close dialog"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -77,7 +83,9 @@ export default function Modal({
             )}
 
             {/* Content */}
-            <div className="p-5">{children}</div>
+            <div className="max-h-[calc(100dvh-9rem)] overflow-y-auto p-5 sm:max-h-[calc(100dvh-10rem)]">
+              {children}
+            </div>
           </div>
         </div>
       </div>

@@ -23,7 +23,6 @@ export function Tooltip({
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const [actualPosition, setActualPosition] = useState(position);
   const triggerRef = useRef<HTMLSpanElement>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
 
   const iconSizes = {
     sm: 'w-3.5 h-3.5',
@@ -34,8 +33,6 @@ export function Tooltip({
   useEffect(() => {
     if (isVisible && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      const scrollY = window.scrollY;
-      const scrollX = window.scrollX;
 
       // Estimate tooltip height (will adjust after render)
       const estimatedTooltipHeight = 100;
@@ -56,27 +53,27 @@ export function Tooltip({
 
       switch (bestPosition) {
         case 'top':
-          top = rect.top + scrollY - 8;
-          left = rect.left + scrollX + rect.width / 2;
+          top = rect.top - 8;
+          left = rect.left + rect.width / 2;
           break;
         case 'bottom':
-          top = rect.bottom + scrollY + 8;
-          left = rect.left + scrollX + rect.width / 2;
+          top = rect.bottom + 8;
+          left = rect.left + rect.width / 2;
           break;
         case 'left':
-          top = rect.top + scrollY + rect.height / 2;
-          left = rect.left + scrollX - 8;
+          top = rect.top + rect.height / 2;
+          left = rect.left - 8;
           break;
         case 'right':
-          top = rect.top + scrollY + rect.height / 2;
-          left = rect.right + scrollX + 8;
+          top = rect.top + rect.height / 2;
+          left = rect.right + 8;
           break;
       }
 
       // Clamp left position to stay within viewport
       const maxWidthNum = parseInt(maxWidth) || 280;
-      const minLeft = scrollX + maxWidthNum / 2 + 10;
-      const maxLeft = scrollX + window.innerWidth - maxWidthNum / 2 - 10;
+      const minLeft = maxWidthNum / 2 + 10;
+      const maxLeft = window.innerWidth - maxWidthNum / 2 - 10;
       left = Math.max(minLeft, Math.min(maxLeft, left));
 
       setCoords({ top, left });
@@ -85,18 +82,18 @@ export function Tooltip({
 
   const getTooltipStyle = (): React.CSSProperties => {
     const base: React.CSSProperties = {
-      position: 'absolute',
+      position: 'fixed',
       zIndex: 99999,
       maxWidth,
     };
 
     switch (actualPosition) {
       case 'top':
-        return { ...base, bottom: `calc(100vh - ${coords.top}px)`, left: coords.left, transform: 'translateX(-50%)' };
+        return { ...base, top: coords.top, left: coords.left, transform: 'translate(-50%, -100%)' };
       case 'bottom':
         return { ...base, top: coords.top, left: coords.left, transform: 'translateX(-50%)' };
       case 'left':
-        return { ...base, top: coords.top, right: `calc(100% - ${coords.left}px)`, transform: 'translateY(-50%)' };
+        return { ...base, top: coords.top, left: coords.left, transform: 'translate(-100%, -50%)' };
       case 'right':
         return { ...base, top: coords.top, left: coords.left, transform: 'translateY(-50%)' };
     }
@@ -110,7 +107,7 @@ export function Tooltip({
   };
 
   const tooltipContent = isVisible && (
-    <div ref={tooltipRef} style={getTooltipStyle()}>
+    <div style={getTooltipStyle()}>
       <div className="bg-slate-800 text-white text-xs leading-relaxed px-3 py-2 rounded-lg shadow-lg relative">
         {content}
         <span className={`absolute w-0 h-0 border-4 ${arrowClasses[actualPosition]}`} />

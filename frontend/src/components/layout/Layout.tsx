@@ -28,22 +28,22 @@ const navigation = [
 
 export default function Layout({ children, title, description, action }: LayoutProps) {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-[100dvh] bg-slate-50">
       {/* Top Navigation */}
       <header className="bg-white border-b border-slate-200">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
+        <div className="px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
               {description && (
                 <p className="text-sm text-slate-500 mt-0.5">{description}</p>
               )}
             </div>
-            {action && <div>{action}</div>}
+            {action && <div className="sm:flex-shrink-0">{action}</div>}
           </div>
         </div>
         {/* Tab Navigation */}
-        <nav className="px-6 flex gap-1 overflow-x-auto">
+        <nav className="px-3 sm:px-6 flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {navigation.map((item) => (
             <NavLink
               key={item.name}
@@ -65,7 +65,7 @@ export default function Layout({ children, title, description, action }: LayoutP
       </header>
 
       {/* Main Content */}
-      <main id="main-content" tabIndex={-1} className="p-6 overflow-x-hidden">
+      <main id="main-content" tabIndex={-1} className="p-4 sm:p-6 overflow-x-hidden">
         {children}
       </main>
     </div>
