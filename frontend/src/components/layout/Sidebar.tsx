@@ -10,6 +10,10 @@ import {
   Link2,
   History,
   AlertTriangle,
+  Megaphone,
+  Tag,
+  BarChart3,
+  Code2,
 } from 'lucide-react';
 import { getVersion } from '@/api';
 
@@ -26,6 +30,11 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
+  { name: 'UTMs', href: '/utms', icon: Tag },
+  { name: 'Links', href: '/links', icon: Link2 },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Tracking', href: '/tracking', icon: Code2 },
   { name: 'Health', href: '/health', icon: Activity },
   { name: 'Updates', href: '/updates', icon: Download },
   { name: 'Activity', href: '/activity', icon: History },

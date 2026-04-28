@@ -3,7 +3,7 @@
  * Plugin Name: Peanut Connect
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: Connector plugin for Peanut Hub. Enables centralized site health monitoring and management from your agency dashboard.
- * Version: 3.4.2
+ * Version: 3.5.0
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.4.2');
+define('PEANUT_CONNECT_VERSION', '3.5.0');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -92,6 +92,9 @@ final class Peanut_Connect {
 
         // ML anomaly detection (v3.5.0+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-ml-anomaly.php';
+
+        // Marketing proxy (campaign builder, UTMs, links, analytics) for Hub (v3.5.0+)
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-marketing.php';
 
         // Initialize logging early
         Peanut_Connect_Activity_Log::init();
@@ -312,6 +315,8 @@ final class Peanut_Connect {
     public function register_api_routes(): void {
         $api = new Peanut_Connect_API();
         $api->register_routes();
+
+        Peanut_Connect_Marketing::register_routes();
     }
 
     /**

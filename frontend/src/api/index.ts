@@ -10,3 +10,13 @@ export {
   permissionsApi,
   trackingApi,
 } from './endpoints';
+export { marketingApi } from './marketing';
+export type {
+  Utm,
+  Link,
+  CampaignBuildInput,
+  CampaignResult,
+  JourneyStats,
+  TrackingSetup,
+  Paginated,
+} from './marketing';
