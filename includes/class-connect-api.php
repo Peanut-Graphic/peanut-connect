@@ -1033,12 +1033,19 @@ class Peanut_Connect_API {
         }
 
         // Validate the credentials against Hub before saving them locally.
+        // Some hosts mangle response status codes (e.g. cPanel/ImunifyAV
+        // rewriting 200 → 406 for POSTs / "suspicious" payloads) while
+        // leaving the body intact, so we treat the body's `success` field
+        // as authoritative and only fall back on status when the body is
+        // unparseable.
         $verify_response = wp_remote_post($hub_url . '/api/v1/sites/verify', [
             'timeout' => 15,
             'headers' => [
                 'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
                 'Authorization' => 'Bearer ' . $api_key,
             ],
+            'body' => '{}',
         ]);
 
         if (is_wp_error($verify_response)) {
@@ -1054,6 +1061,19 @@ class Peanut_Connect_API {
 
         $status = (int) wp_remote_retrieve_response_code($verify_response);
         $body   = json_decode((string) wp_remote_retrieve_body($verify_response), true);
+        $body_says_success = is_array($body) && ! empty($body['success']);
+
+        if ($body_says_success) {
+            update_option('peanut_connect_hub_url', $hub_url);
+            update_option('peanut_connect_hub_api_key', $api_key);
+
+            return new WP_REST_Response([
+                'success' => true,
+                'message' => __('Connected to Hub.', 'peanut-connect'),
+                'hub_url' => $hub_url,
+                'site' => $body['site'] ?? null,
+            ], 200);
+        }
 
         if ($status === 401 || $status === 403) {
             return new WP_REST_Response([
@@ -1062,27 +1082,23 @@ class Peanut_Connect_API {
             ], 401);
         }
 
-        if ($status >= 400) {
+        if (is_array($body) && isset($body['error']['message'])) {
             return new WP_REST_Response([
                 'success' => false,
-                'message' => sprintf(
-                    /* translators: %d: HTTP status code */
-                    __('Hub returned %d during verification.', 'peanut-connect'),
-                    $status
-                ),
-                'hub_response' => $body,
+                'message' => (string) $body['error']['message'],
+                'hub_status' => $status,
             ], 502);
         }
 
-        update_option('peanut_connect_hub_url', $hub_url);
-        update_option('peanut_connect_hub_api_key', $api_key);
-
         return new WP_REST_Response([
-            'success' => true,
-            'message' => __('Connected to Hub.', 'peanut-connect'),
-            'hub_url' => $hub_url,
-            'site' => is_array($body) ? ($body['site'] ?? null) : null,
-        ], 200);
+            'success' => false,
+            'message' => sprintf(
+                /* translators: %d: HTTP status code */
+                __('Hub returned %d during verification.', 'peanut-connect'),
+                $status
+            ),
+            'hub_response' => $body,
+        ], 502);
     }
 
     /**

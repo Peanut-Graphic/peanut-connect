@@ -283,6 +283,15 @@ class Peanut_Connect_Marketing {
             $data = ['raw' => $raw];
         }
 
+        // Some hosts (cPanel + ImunifyAV / mod_security) rewrite 2xx responses
+        // to 406 / 405 for "suspicious" payloads while passing the body
+        // through unchanged. If the body explicitly says success, honour it
+        // and return a clean 200 — otherwise the SPA's axios layer rejects
+        // the response purely on status code.
+        if (isset($data['success']) && $data['success'] === true && $status >= 400 && $status < 500) {
+            $status = 200;
+        }
+
         return new WP_REST_Response($data, $status > 0 ? $status : 502);
     }
 
