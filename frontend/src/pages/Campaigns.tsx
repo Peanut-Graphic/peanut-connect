@@ -1,11 +1,36 @@
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, CardHeader, Button, Input, Alert } from '@/components/common';
-import { marketingApi, type CampaignBuildInput, type CampaignResult } from '@/api';
-import { Copy, Check, ExternalLink } from 'lucide-react';
+import {
+  marketingApi,
+  type CampaignBuildInput,
+  type CampaignResult,
+  type TrackingSetup,
+} from '@/api';
+import { Copy, Check, ExternalLink, ArrowLeft, ArrowRight, RotateCcw } from 'lucide-react';
 
-const initialInput: CampaignBuildInput = {
+type WizardStep = 0 | 1 | 2 | 3;
+
+const STEPS: { label: string; description: string }[] = [
+  { label: 'Campaign', description: 'What is it and where does it send people?' },
+  { label: 'Short link', description: 'Memorable slug for your printed / QR / email link.' },
+  { label: 'Tracking', description: 'Snippets to drop into GTM on the landing page.' },
+  { label: 'Done', description: 'Your URLs and next steps.' },
+];
+
+interface WizardState {
+  name: string;
+  base_url: string;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  utm_content: string;
+  utm_term: string;
+  custom_slug: string;
+}
+
+const INITIAL_STATE: WizardState = {
   name: '',
   base_url: '',
   utm_source: '',
@@ -17,180 +42,470 @@ const initialInput: CampaignBuildInput = {
 };
 
 export default function Campaigns() {
-  const [input, setInput] = useState<CampaignBuildInput>(initialInput);
+  const [step, setStep] = useState<WizardStep>(0);
+  const [state, setState] = useState<WizardState>(INITIAL_STATE);
   const [result, setResult] = useState<CampaignResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const buildMutation = useMutation({
+  const { data: tracking } = useQuery({
+    queryKey: ['marketing', 'tracking-setup'],
+    queryFn: () => marketingApi.trackingSetup(),
+  });
+
+  const build = useMutation({
     mutationFn: (payload: CampaignBuildInput) => marketingApi.buildCampaign(payload),
     onSuccess: (campaign) => {
       setResult(campaign);
       setError(null);
+      setStep(3);
       queryClient.invalidateQueries({ queryKey: ['marketing', 'utms'] });
       queryClient.invalidateQueries({ queryKey: ['marketing', 'links'] });
     },
     onError: (err: Error) => {
       setError(err.message || 'Could not build campaign.');
-      setResult(null);
     },
   });
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const payload: CampaignBuildInput = {
-      name: input.name.trim(),
-      base_url: input.base_url.trim(),
-      utm_source: input.utm_source.trim().toLowerCase(),
-      utm_medium: input.utm_medium.trim().toLowerCase(),
-      utm_campaign: input.utm_campaign.trim(),
-    };
-    if (input.utm_content?.trim()) payload.utm_content = input.utm_content.trim();
-    if (input.utm_term?.trim()) payload.utm_term = input.utm_term.trim();
-    if (input.custom_slug?.trim()) payload.custom_slug = input.custom_slug.trim();
+  function update<K extends keyof WizardState>(key: K, value: WizardState[K]) {
+    setState((prev) => ({ ...prev, [key]: value }));
+  }
 
-    buildMutation.mutate(payload);
+  function handleSubmit() {
+    const payload: CampaignBuildInput = {
+      name: state.name.trim(),
+      base_url: state.base_url.trim(),
+      utm_source: state.utm_source.trim().toLowerCase(),
+      utm_medium: state.utm_medium.trim().toLowerCase(),
+      utm_campaign: state.utm_campaign.trim(),
+    };
+    if (state.utm_content.trim()) payload.utm_content = state.utm_content.trim();
+    if (state.utm_term.trim()) payload.utm_term = state.utm_term.trim();
+    if (state.custom_slug.trim()) payload.custom_slug = state.custom_slug.trim();
+
+    build.mutate(payload);
   }
 
   function reset() {
-    setInput(initialInput);
+    setState(INITIAL_STATE);
     setResult(null);
     setError(null);
+    setStep(0);
   }
 
-  function update<K extends keyof CampaignBuildInput>(key: K, value: CampaignBuildInput[K]) {
-    setInput((prev) => ({ ...prev, [key]: value }));
-  }
+  const step0Valid =
+    state.name.trim() !== '' &&
+    state.base_url.trim() !== '' &&
+    state.utm_source.trim() !== '' &&
+    state.utm_medium.trim() !== '' &&
+    state.utm_campaign.trim() !== '';
 
   return (
     <Layout
-      title="Campaigns"
-      description="Build a tracked campaign — UTM, short link, and QR code in one step."
+      title="Build a Campaign"
+      description="UTM, short link, and GTM tracking — in four steps."
+      action={
+        step === 3 ? (
+          <Button variant="ghost" icon={<RotateCcw className="w-4 h-4" />} onClick={reset}>
+            Build another
+          </Button>
+        ) : null
+      }
     >
+      <Stepper current={step} />
+
+      {error && (
+        <Alert variant="error" className="mb-4">
+          {error}
+        </Alert>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3">
-          <Card>
-            <CardHeader
-              title="Build a Campaign"
-              description="Fill in where the link will appear and what you're promoting."
+          {step === 0 && (
+            <BasicsStep
+              state={state}
+              update={update}
+              onNext={() => setStep(1)}
+              valid={step0Valid}
             />
-            <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-              <Input
-                label="Campaign name"
-                placeholder="e.g. PTR Postcard 2024"
-                required
-                value={input.name}
-                onChange={(e) => update('name', e.target.value)}
-                hint="Human-readable label for reports."
-              />
-              <Input
-                label="Destination URL"
-                placeholder="https://example.com/landing"
-                type="url"
-                required
-                value={input.base_url}
-                onChange={(e) => update('base_url', e.target.value)}
-                hint="Where the link should send people."
-              />
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Input
-                  label="Source"
-                  placeholder="mail"
-                  required
-                  value={input.utm_source}
-                  onChange={(e) => update('utm_source', e.target.value)}
-                  hint="Where it appears."
-                />
-                <Input
-                  label="Medium"
-                  placeholder="postcard"
-                  required
-                  value={input.utm_medium}
-                  onChange={(e) => update('utm_medium', e.target.value)}
-                  hint="Channel type."
-                />
-                <Input
-                  label="Campaign"
-                  placeholder="ptr_postcard_2024"
-                  required
-                  value={input.utm_campaign}
-                  onChange={(e) => update('utm_campaign', e.target.value)}
-                  hint="Identifier."
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Input
-                  label="Content (optional)"
-                  placeholder="blue_design"
-                  value={input.utm_content ?? ''}
-                  onChange={(e) => update('utm_content', e.target.value)}
-                  hint="Variant or creative."
-                />
-                <Input
-                  label="Term (optional)"
-                  placeholder="agency tools"
-                  value={input.utm_term ?? ''}
-                  onChange={(e) => update('utm_term', e.target.value)}
-                  hint="Keyword, if any."
-                />
-                <Input
-                  label="Custom slug (optional)"
-                  placeholder="ptr24"
-                  value={input.custom_slug ?? ''}
-                  onChange={(e) => update('custom_slug', e.target.value)}
-                  hint="Memorable short-link path."
-                />
-              </div>
-
-              {error && <Alert variant="error">{error}</Alert>}
-
-              <div className="flex items-center gap-3 pt-2">
-                <Button type="submit" disabled={buildMutation.isPending}>
-                  {buildMutation.isPending ? 'Building…' : 'Create Campaign'}
-                </Button>
-                <Button type="button" variant="ghost" onClick={reset}>
-                  Reset
-                </Button>
-              </div>
-            </form>
-          </Card>
+          )}
+          {step === 1 && (
+            <ShortLinkStep
+              state={state}
+              update={update}
+              onBack={() => setStep(0)}
+              onNext={() => setStep(2)}
+            />
+          )}
+          {step === 2 && (
+            <TrackingStep
+              tracking={tracking}
+              onBack={() => setStep(1)}
+              onSubmit={handleSubmit}
+              submitting={build.isPending}
+            />
+          )}
+          {step === 3 && result && (
+            <DoneStep result={result} tracking={tracking} onReset={reset} />
+          )}
         </div>
 
-        <div className="lg:col-span-2">
-          <ResultPanel result={result} />
-        </div>
+        <aside className="lg:col-span-2">
+          <SummaryCard state={state} step={step} result={result} />
+        </aside>
       </div>
     </Layout>
   );
 }
 
-function ResultPanel({ result }: { result: CampaignResult | null }) {
-  if (!result) {
+function Stepper({ current }: { current: WizardStep }) {
+  return (
+    <ol className="flex items-center gap-2 mb-6 text-sm" role="list">
+      {STEPS.map((s, idx) => {
+        const isCurrent = idx === current;
+        const isDone = idx < current;
+        return (
+          <li key={s.label} className="flex items-center gap-2 flex-1 min-w-0">
+            <span
+              className={
+                isDone
+                  ? 'flex items-center justify-center w-7 h-7 rounded-full bg-primary-600 text-white font-medium flex-shrink-0'
+                  : isCurrent
+                  ? 'flex items-center justify-center w-7 h-7 rounded-full bg-primary-100 text-primary-700 font-medium ring-2 ring-primary-500 flex-shrink-0'
+                  : 'flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-500 font-medium flex-shrink-0'
+              }
+              aria-current={isCurrent ? 'step' : undefined}
+            >
+              {isDone ? <Check className="w-3.5 h-3.5" /> : idx + 1}
+            </span>
+            <span className={isCurrent ? 'font-medium text-slate-900 truncate' : 'text-slate-600 truncate'}>
+              {s.label}
+            </span>
+            {idx < STEPS.length - 1 && (
+              <span className="flex-1 h-px bg-slate-200 mx-1" aria-hidden />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function BasicsStep({
+  state,
+  update,
+  onNext,
+  valid,
+}: {
+  state: WizardState;
+  update: <K extends keyof WizardState>(key: K, value: WizardState[K]) => void;
+  onNext: () => void;
+  valid: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader title="Step 1 — Campaign basics" description={STEPS[0].description} />
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid) onNext();
+        }}
+      >
+        <Input
+          label="Campaign name"
+          placeholder="e.g. PTR Postcard 2024"
+          required
+          value={state.name}
+          onChange={(e) => update('name', e.target.value)}
+          hint="Human-readable label that shows up in reports."
+        />
+        <Input
+          label="Destination URL"
+          placeholder="https://example.com/landing"
+          type="url"
+          required
+          value={state.base_url}
+          onChange={(e) => update('base_url', e.target.value)}
+          hint="Where the link should send people."
+        />
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Input
+            label="Source"
+            placeholder="mail"
+            required
+            value={state.utm_source}
+            onChange={(e) => update('utm_source', e.target.value)}
+            hint="Where it appears."
+          />
+          <Input
+            label="Medium"
+            placeholder="postcard"
+            required
+            value={state.utm_medium}
+            onChange={(e) => update('utm_medium', e.target.value)}
+            hint="Channel type."
+          />
+          <Input
+            label="Campaign"
+            placeholder="ptr_postcard_2024"
+            required
+            value={state.utm_campaign}
+            onChange={(e) => update('utm_campaign', e.target.value)}
+            hint="Identifier."
+          />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Content (optional)"
+            placeholder="blue_design"
+            value={state.utm_content}
+            onChange={(e) => update('utm_content', e.target.value)}
+            hint="Variant or creative."
+          />
+          <Input
+            label="Term (optional)"
+            placeholder="agency tools"
+            value={state.utm_term}
+            onChange={(e) => update('utm_term', e.target.value)}
+            hint="Keyword, if any."
+          />
+        </div>
+        <div className="flex justify-end pt-2">
+          <Button type="submit" disabled={!valid} icon={<ArrowRight className="w-4 h-4" />} iconPosition="right">
+            Continue
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function ShortLinkStep({
+  state,
+  update,
+  onBack,
+  onNext,
+}: {
+  state: WizardState;
+  update: <K extends keyof WizardState>(key: K, value: WizardState[K]) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader title="Step 2 — Short link" description={STEPS[1].description} />
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">
+          The short link is what goes on the postcard, QR code, or email — and it's what generates the per-click{' '}
+          <code>click_id</code> token that stitches a visitor's journey across domains. Recommended for any printed
+          or pasted-into-creative use.
+        </p>
+        <Input
+          label="Custom slug (optional)"
+          placeholder="ptr24"
+          value={state.custom_slug}
+          onChange={(e) => update('custom_slug', e.target.value)}
+          hint="Memorable path. Leave empty to auto-generate a 6-character random slug."
+        />
+        <div className="rounded-md bg-slate-50 border border-slate-200 p-3 text-xs text-slate-600">
+          <strong className="text-slate-800">Tip:</strong> a custom slug like <code>ptr24</code> turns into a link
+          like <code>{`yourdomain.com/ptr24`}</code>. Keep it lowercase and short — it's going on a postcard.
+        </div>
+
+        <div className="flex justify-between pt-2">
+          <Button variant="ghost" onClick={onBack} icon={<ArrowLeft className="w-4 h-4" />}>
+            Back
+          </Button>
+          <Button onClick={onNext} icon={<ArrowRight className="w-4 h-4" />} iconPosition="right">
+            Continue
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function TrackingStep({
+  tracking,
+  onBack,
+  onSubmit,
+  submitting,
+}: {
+  tracking: TrackingSetup | undefined;
+  onBack: () => void;
+  onSubmit: () => void;
+  submitting: boolean;
+}) {
+  const trackerSnippet = useMemo(() => {
+    const hub = tracking?.hub_url || 'https://hub.peanutgraphic.com';
+    return [
+      '<script>',
+      "(function(w,d,s,k,h){w.pnut=w.pnut||function(){(w.pnut.q=w.pnut.q||[]).push(arguments)};",
+      "w.pnut.k=k;w.pnut.h=h;var f=d.getElementsByTagName(s)[0],j=d.createElement(s);",
+      "j.async=true;j.src=h+'/js/tracker.min.js';f.parentNode.insertBefore(j,f);",
+      `})(window,document,'script','<<paste your Site Key from Hub>>','${hub}');`,
+      "pnut('pageview');",
+      '</script>',
+    ].join('\n');
+  }, [tracking]);
+
+  const conversionSnippet = [
+    '<script>',
+    '(function checkPnut() {',
+    "  if (typeof pnut === 'function') {",
+    "    pnut('conversion', 'enrollment', 0);",
+    '  } else { setTimeout(checkPnut, 100); }',
+    '})();',
+    '</script>',
+  ].join('\n');
+
+  return (
+    <Card>
+      <CardHeader title="Step 3 — Tracking" description={STEPS[2].description} />
+      <div className="space-y-5">
+        {tracking && !tracking.connected && (
+          <Alert variant="warning">
+            This site isn't connected to a Hub install yet. The campaign will still be created, but the tracker
+            snippets below need a real Site Key — configure one in Settings before going live.
+          </Alert>
+        )}
+
+        <div>
+          <div className="text-sm font-medium text-slate-700 mb-2">
+            Tag 1 — Tracker loader (every page, priority 100)
+          </div>
+          <Snippet code={trackerSnippet} />
+        </div>
+
+        <div>
+          <div className="text-sm font-medium text-slate-700 mb-2">
+            Tag 2 — Conversion fire (on the thank-you page or form submit)
+          </div>
+          <Snippet code={conversionSnippet} />
+        </div>
+
+        <p className="text-xs text-slate-500">
+          Already have these in GTM from a previous campaign on this site? You're done — they keep working for new
+          campaigns automatically. The snippets only need to be installed once per landing-page domain.
+        </p>
+
+        <div className="flex justify-between pt-2">
+          <Button variant="ghost" onClick={onBack} icon={<ArrowLeft className="w-4 h-4" />}>
+            Back
+          </Button>
+          <Button onClick={onSubmit} disabled={submitting}>
+            {submitting ? 'Building…' : 'Create campaign'}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function DoneStep({
+  result,
+  tracking,
+  onReset,
+}: {
+  result: CampaignResult;
+  tracking: TrackingSetup | undefined;
+  onReset: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader
+        title={`✓  ${result.name}`}
+        description="Campaign created. Here's everything you need."
+      />
+      <div className="space-y-5">
+        <CopyableField label="Short link (use this on print / QR / email)" value={result.short_url} openInNewTab />
+        <CopyableField label="Full UTM URL (raw, in case you need it)" value={result.full_url} openInNewTab />
+
+        <div className="rounded-md bg-slate-50 border border-slate-200 p-4 text-sm text-slate-700">
+          <div className="font-medium text-slate-900 mb-2">Next steps</div>
+          <ol className="list-decimal pl-5 space-y-1.5">
+            <li>
+              Click the short link in an incognito window — should redirect through to the destination with UTMs
+              intact.
+            </li>
+            <li>
+              Confirm the GTM tags from Step 3 are installed on the landing page
+              {tracking?.hub_url ? ` (and reporting to ${new URL(tracking.hub_url).host})` : ''}.
+            </li>
+            <li>
+              Watch for the journey to appear under <strong>Analytics</strong> within ~1 minute of the test click.
+            </li>
+            <li>Use the short link on the postcard / email / QR.</li>
+          </ol>
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <Button variant="ghost" onClick={onReset} icon={<RotateCcw className="w-4 h-4" />}>
+            Build another
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function SummaryCard({
+  state,
+  step,
+  result,
+}: {
+  state: WizardState;
+  step: WizardStep;
+  result: CampaignResult | null;
+}) {
+  if (step === 3 && result) {
     return (
       <Card>
-        <CardHeader
-          title="Result"
-          description="Your short link, full UTM URL, and QR will appear here after you create the campaign."
-        />
-        <p className="text-sm text-slate-500 mt-2">
-          Use consistent lowercase names with underscores (e.g. <code>ptr_email_spring</code>) so reports filter cleanly.
-        </p>
+        <CardHeader title="Campaign summary" />
+        <dl className="text-sm space-y-2">
+          <SummaryRow label="Name" value={result.name} />
+          <SummaryRow label="Source" value={result.utm.utm_source} mono />
+          <SummaryRow label="Medium" value={result.utm.utm_medium} mono />
+          <SummaryRow label="Campaign" value={result.utm.utm_campaign} mono />
+          {result.utm.utm_content && <SummaryRow label="Content" value={result.utm.utm_content} mono />}
+          <SummaryRow label="Slug" value={`/${result.link.slug}`} mono />
+        </dl>
       </Card>
     );
   }
 
+  const filled = state.name || state.base_url || state.utm_source;
   return (
     <Card>
-      <CardHeader title={result.name} description="Campaign created." />
-      <div className="space-y-4 mt-2">
-        <CopyableField label="Short link" value={result.short_url} openInNewTab />
-        <CopyableField label="Full UTM URL" value={result.full_url} openInNewTab />
-        <p className="text-xs text-slate-500">
-          Slug <code>{result.link.slug}</code> · Source <code>{result.utm.utm_source}</code> · Medium{' '}
-          <code>{result.utm.utm_medium}</code>
+      <CardHeader title="Preview" description="Updates as you fill in Step 1." />
+      {filled ? (
+        <dl className="text-sm space-y-2">
+          {state.name && <SummaryRow label="Name" value={state.name} />}
+          {state.base_url && <SummaryRow label="Destination" value={state.base_url} mono />}
+          {state.utm_source && <SummaryRow label="Source" value={state.utm_source} mono />}
+          {state.utm_medium && <SummaryRow label="Medium" value={state.utm_medium} mono />}
+          {state.utm_campaign && <SummaryRow label="Campaign" value={state.utm_campaign} mono />}
+          {state.utm_content && <SummaryRow label="Content" value={state.utm_content} mono />}
+          {state.utm_term && <SummaryRow label="Term" value={state.utm_term} mono />}
+          {state.custom_slug && <SummaryRow label="Slug" value={`/${state.custom_slug}`} mono />}
+        </dl>
+      ) : (
+        <p className="text-sm text-slate-500">
+          Tip: keep names lowercase with underscores (<code>ptr_postcard_2024</code>) so reports filter cleanly.
         </p>
-      </div>
+      )}
     </Card>
+  );
+}
+
+function SummaryRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <dt className="text-xs uppercase tracking-wide text-slate-500 w-24 flex-shrink-0">{label}</dt>
+      <dd className={mono ? 'text-slate-900 font-mono break-all' : 'text-slate-900 break-words'}>{value}</dd>
+    </div>
   );
 }
 
@@ -205,11 +520,16 @@ function CopyableField({
 }) {
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+
   async function copy() {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
     } catch {
       // Clipboard write blocked; user can select manually.
     }
@@ -246,6 +566,42 @@ function CopyableField({
           </a>
         )}
       </div>
+    </div>
+  );
+}
+
+function Snippet({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+    } catch {
+      // Clipboard write blocked.
+    }
+  }
+
+  return (
+    <div className="relative">
+      <pre className="rounded-lg bg-slate-900 text-slate-100 p-4 text-xs overflow-x-auto">
+        <code>{code}</code>
+      </pre>
+      <button
+        type="button"
+        onClick={copy}
+        className="absolute top-2 right-2 inline-flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-100 px-2 py-1 text-xs"
+        aria-label="Copy snippet"
+      >
+        {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+        {copied ? 'Copied' : 'Copy'}
+      </button>
     </div>
   );
 }
