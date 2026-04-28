@@ -523,6 +523,14 @@ class Peanut_Connect_API {
             'permission_callback' => [Peanut_Connect_Auth::class, 'hub_permission_callback'],
         ]);
 
+        // Force a fresh update check (clears WP transients + Connect's own cache).
+        // Hub-authenticated mirror of /admin/check-updates.
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/hub/check-updates', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'force_check_updates'],
+            'permission_callback' => [Peanut_Connect_Auth::class, 'hub_permission_callback'],
+        ]);
+
         // API Proxy for Hub (v3.3.0+)
         register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/hub/api-proxy', [
             'methods' => WP_REST_Server::CREATABLE,

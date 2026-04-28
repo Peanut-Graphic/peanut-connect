@@ -272,19 +272,35 @@ class Peanut_Connect_Updates {
         }
 
         $all_plugins = get_plugins();
+        $slug_lower = strtolower($slug);
 
-        // Try direct match first
+        // Try direct match first (case-insensitive on dirname/file).
+        // Tolerates installs where the plugin folder is upper-cased
+        // (e.g. PEANUT-CONNECT/peanut-connect.php) or version-suffixed
+        // (e.g. peanut-connect-3.3.9/peanut-connect.php).
         foreach ($all_plugins as $plugin_file => $plugin_data) {
-            if ($slug === $plugin_file || $slug === dirname($plugin_file)) {
+            $dir = dirname($plugin_file);
+            $base = basename($plugin_file, '.php');
+
+            if (
+                strcasecmp($slug, $plugin_file) === 0
+                || strcasecmp($slug, $dir) === 0
+                || strcasecmp($slug, $base) === 0
+            ) {
+                return $plugin_file;
+            }
+
+            // Versioned folder fallback: dirname starts with "<slug>-"
+            if (stripos($dir.'-', $slug_lower.'-') === 0) {
                 return $plugin_file;
             }
         }
 
-        // Try matching by slug from update data
+        // Try matching by slug from update data (also case-insensitive)
         $update_plugins = get_site_transient('update_plugins');
         if ($update_plugins && !empty($update_plugins->response)) {
             foreach ($update_plugins->response as $plugin_file => $plugin_data) {
-                if (isset($plugin_data->slug) && $plugin_data->slug === $slug) {
+                if (isset($plugin_data->slug) && strcasecmp($plugin_data->slug, $slug) === 0) {
                     return $plugin_file;
                 }
             }

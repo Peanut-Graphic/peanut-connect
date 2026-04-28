@@ -5,6 +5,24 @@ All notable changes to Peanut Connect will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.4] - 2026-04-28
+
+### Fixed
+- `find_plugin_file` lookups failed when the plugin folder was upper-cased (e.g. `PEANUT-CONNECT/`) or version-suffixed (e.g. `peanut-connect-3.3.9/`), making Hub-driven self-updates return "Plugin not found" on those installs. Lookup is now case-insensitive across plugin file, dirname, and basename, with a versioned-folder fallback that tolerates a trailing `-<version>` suffix.
+
+### Added
+- `/hub/check-updates` endpoint — Hub-authenticated mirror of the existing admin-only `/admin/check-updates`. Lets Hub force a fresh `update_plugins` / `update_themes` transient on a remote site before triggering an update, so updates pick up versions newer than the last cron-driven check rather than whatever the stale transient knew about.
+
+## [3.7.3] - 2026-04-28
+
+### Fixed
+- Tracking Setup page rendered "This site isn't connected to a Hub install yet" with empty Hub URL / Site Key / Tracker Script even on connected sites. The `/marketing/tracking-setup` endpoint returned a flat `{success, connected, hub_url, ...}` envelope, but the SPA's axios interceptor expects `{success, data: {...}}` and spreads `data.data` into the response — flat shape meant every field was dropped. Re-shaped the response to nest its payload under `data` so the interceptor unwraps it correctly.
+
+## [3.7.2] - 2026-04-28
+
+### Fixed
+- UTMs and Links tabs displayed "No active UTMs / links" even when the Hub proxy returned data. The axios response interceptor in `client.ts` already spreads `data.data` into `response.data` (so `res.data` is the Paginated object directly), but `marketing.ts`'s `listUtms` / `listLinks` were doing `res.data.data` — unwrapping a second time and dropping the pagination wrapper. The page components then read `data?.data` from what they thought was Paginated, got `undefined`, and rendered the empty state. Fixed by removing the redundant `.data` access in both list functions.
+
 ## [3.7.1] - 2026-04-28
 
 ### Fixed

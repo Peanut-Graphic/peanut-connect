@@ -216,11 +216,13 @@ class Peanut_Connect_Marketing {
         $has_key = (bool) get_option('peanut_connect_hub_api_key', '');
 
         return new WP_REST_Response([
-            'success'    => true,
-            'connected'  => $hub_url !== '' && $has_key,
-            'hub_url'    => $hub_url,
-            'tracker_js' => $hub_url !== '' ? trailingslashit($hub_url) . 'js/tracker.min.js' : '',
-            'site_key'   => self::masked_key(),
+            'success' => true,
+            'data'    => [
+                'connected'  => $hub_url !== '' && $has_key,
+                'hub_url'    => $hub_url,
+                'tracker_js' => $hub_url !== '' ? trailingslashit($hub_url) . 'js/tracker.min.js' : '',
+                'site_key'   => self::masked_key(),
+            ],
         ], 200);
     }
 

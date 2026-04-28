@@ -97,7 +97,7 @@ export const marketingApi = {
 
   listUtms: async (params: { archived?: boolean; per_page?: number; page?: number } = {}): Promise<Paginated<Utm>> => {
     const res = await api.get('/marketing/utms', { params });
-    return res.data.data as Paginated<Utm>;
+    return res.data as Paginated<Utm>;
   },
 
   archiveUtm: async (id: number): Promise<Utm> => {
@@ -116,7 +116,7 @@ export const marketingApi = {
 
   listLinks: async (params: { active?: boolean; per_page?: number; page?: number } = {}): Promise<Paginated<Link>> => {
     const res = await api.get('/marketing/links', { params });
-    return res.data.data as Paginated<Link>;
+    return res.data as Paginated<Link>;
   },
 
   toggleLink: async (id: number): Promise<Link> => {
