@@ -137,12 +137,18 @@ class Peanut_Connect_Health {
         $parsed = wp_parse_url($site_url);
         $host = $parsed['host'] ?? '';
 
+        $wp_url_is_https = strpos($site_url, 'https://') === 0;
+
         $data = [
-            'enabled' => false,
-            'valid' => false,
+            // Treat the site URL being https as authoritative for "SSL is enabled".
+            // The outbound socket probe below is best-effort cert introspection —
+            // many managed hosts block outbound :443 and would otherwise produce
+            // a false negative on a clearly HTTPS site.
+            'enabled' => $wp_url_is_https,
+            'valid' => $wp_url_is_https,
             'days_until_expiry' => null,
             'issuer' => null,
-            'wp_url_is_https' => strpos($site_url, 'https://') === 0,
+            'wp_url_is_https' => $wp_url_is_https,
         ];
 
         if (!$host) {
@@ -180,7 +186,6 @@ class Peanut_Connect_Health {
                     $valid_to = $cert['validTo_time_t'] ?? 0;
                     $days_remaining = ($valid_to - time()) / DAY_IN_SECONDS;
 
-                    // SSL is enabled if we can connect and get a certificate
                     $data['enabled'] = true;
                     $data['days_until_expiry'] = (int) $days_remaining;
                     $data['valid'] = $days_remaining > 0;
