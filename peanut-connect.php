@@ -3,7 +3,7 @@
  * Plugin Name: Peanut Connect
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: Connector plugin for Peanut Hub. Enables centralized site health monitoring and management from your agency dashboard.
- * Version: 3.5.0
+ * Version: 3.5.1
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.5.0');
+define('PEANUT_CONNECT_VERSION', '3.5.1');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -90,10 +90,10 @@ final class Peanut_Connect {
         // Forms integration for Hub (v3.3.0+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-forms.php';
 
-        // ML anomaly detection (v3.5.0+)
+        // ML anomaly detection (v3.5.1+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-ml-anomaly.php';
 
-        // Marketing proxy (campaign builder, UTMs, links, analytics) for Hub (v3.5.0+)
+        // Marketing proxy (campaign builder, UTMs, links, analytics) for Hub (v3.5.1+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-marketing.php';
 
         // Initialize logging early
@@ -152,7 +152,7 @@ final class Peanut_Connect {
             wp_schedule_event(time(), 'daily', 'peanut_connect_cleanup');
         }
 
-        // Schedule weekly ML model retraining (v3.5.0+)
+        // Schedule weekly ML model retraining (v3.5.1+)
         add_action('peanut_ml_connect_train', [$this, 'run_ml_training']);
         if (!wp_next_scheduled('peanut_ml_connect_train')) {
             wp_schedule_event(time(), 'weekly', 'peanut_ml_connect_train');
@@ -614,7 +614,7 @@ final class Peanut_Connect {
      * Executed weekly via cron job. Trains the ML anomaly detection model
      * with current health metrics.
      *
-     * @since 3.5.0
+     * @since 3.5.1
      */
     public function run_ml_training(): void {
         if (!class_exists('Peanut_Connect_ML_Anomaly')) {
@@ -683,6 +683,6 @@ register_deactivation_hook(__FILE__, function() {
     wp_clear_scheduled_hook('peanut_connect_hub_heartbeat');
     wp_clear_scheduled_hook('peanut_connect_cleanup');
 
-    // Clear ML training cron job (v3.5.0+)
+    // Clear ML training cron job (v3.5.1+)
     wp_clear_scheduled_hook('peanut_ml_connect_train');
 });
