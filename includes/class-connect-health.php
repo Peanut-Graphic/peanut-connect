@@ -222,14 +222,24 @@ class Peanut_Connect_Health {
 
         if ($update_plugins && !empty($update_plugins->response)) {
             foreach ($update_plugins->response as $plugin_file => $plugin_data) {
+                // Defend against stale transient entries — WP doesn't always
+                // clear an "update available" row after a manual zip install,
+                // so we only trust it when new_version is actually higher
+                // than what's installed right now.
+                $installed = $all_plugins[$plugin_file]['Version'] ?? null;
+                $new_version = $plugin_data->new_version ?? null;
+                if (! $installed || ! $new_version || version_compare((string) $new_version, (string) $installed, '<=')) {
+                    continue;
+                }
+
                 $updates_available++;
-                $update_lookup[$plugin_file] = $plugin_data->new_version;
+                $update_lookup[$plugin_file] = $new_version;
                 $plugins_needing_update[] = [
                     'slug' => dirname($plugin_file),
                     'file' => $plugin_file,
                     'name' => $all_plugins[$plugin_file]['Name'] ?? $plugin_file,
-                    'version' => $all_plugins[$plugin_file]['Version'] ?? 'unknown',
-                    'new_version' => $plugin_data->new_version,
+                    'version' => $installed,
+                    'new_version' => $new_version,
                 ];
             }
         }
@@ -286,14 +296,20 @@ class Peanut_Connect_Health {
 
         if ($update_themes && !empty($update_themes->response)) {
             foreach ($update_themes->response as $stylesheet => $theme_data) {
-                $updates_available++;
-                $update_lookup[$stylesheet] = $theme_data['new_version'];
                 $theme = wp_get_theme($stylesheet);
+                $installed = $theme->get('Version');
+                $new_version = $theme_data['new_version'] ?? null;
+                if (! $installed || ! $new_version || version_compare((string) $new_version, (string) $installed, '<=')) {
+                    continue;
+                }
+
+                $updates_available++;
+                $update_lookup[$stylesheet] = $new_version;
                 $themes_needing_update[] = [
                     'slug' => $stylesheet,
                     'name' => $theme->get('Name'),
-                    'version' => $theme->get('Version'),
-                    'new_version' => $theme_data['new_version'],
+                    'version' => $installed,
+                    'new_version' => $new_version,
                 ];
             }
         }
