@@ -93,6 +93,9 @@ final class Peanut_Connect {
         // ML anomaly detection (v3.5.0+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-ml-anomaly.php';
 
+        // Marketing proxy (campaign builder, UTMs, links, analytics) for Hub (v3.5.0+)
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-marketing.php';
+
         // Initialize logging early
         Peanut_Connect_Activity_Log::init();
         Peanut_Connect_Error_Log::init();
@@ -312,6 +315,8 @@ final class Peanut_Connect {
     public function register_api_routes(): void {
         $api = new Peanut_Connect_API();
         $api->register_routes();
+
+        Peanut_Connect_Marketing::register_routes();
     }
 
     /**
