@@ -5,6 +5,11 @@ import Health from './pages/Health';
 import Updates from './pages/Updates';
 import Activity from './pages/Activity';
 import ErrorLog from './pages/ErrorLog';
+import Campaigns from './pages/Campaigns';
+import Utms from './pages/Utms';
+import Links from './pages/Links';
+import Analytics from './pages/Analytics';
+import Tracking from './pages/Tracking';
 import { ToastProvider, ErrorBoundary } from './components/common';
 import { ThemeProvider } from './contexts';
 
@@ -33,6 +38,11 @@ export default function App() {
             <Route path="/updates" element={<Updates />} />
             <Route path="/activity" element={<Activity />} />
             <Route path="/errors" element={<ErrorLog />} />
+            <Route path="/campaigns" element={<Campaigns />} />
+            <Route path="/utms" element={<Utms />} />
+            <Route path="/links" element={<Links />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/tracking" element={<Tracking />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </ErrorBoundary>
