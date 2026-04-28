@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import QRCode from 'qrcode';
 import { Layout } from '@/components/layout';
 import { Card, CardHeader, Button, Input, Alert } from '@/components/common';
 import {
@@ -8,7 +9,7 @@ import {
   type CampaignResult,
   type TrackingSetup,
 } from '@/api';
-import { Copy, Check, ExternalLink, ArrowLeft, ArrowRight, RotateCcw } from 'lucide-react';
+import { Copy, Check, ExternalLink, ArrowLeft, ArrowRight, RotateCcw, Download } from 'lucide-react';
 
 type WizardStep = 0 | 1 | 2 | 3;
 
@@ -423,6 +424,8 @@ function DoneStep({
         <CopyableField label="Short link (use this on print / QR / email)" value={result.short_url} openInNewTab />
         <CopyableField label="Full UTM URL (raw, in case you need it)" value={result.full_url} openInNewTab />
 
+        <QrPanel url={result.short_url} filenameBase={result.link.slug} />
+
         <div className="rounded-md bg-slate-50 border border-slate-200 p-4 text-sm text-slate-700">
           <div className="font-medium text-slate-900 mb-2">Next steps</div>
           <ol className="list-decimal pl-5 space-y-1.5">
@@ -449,6 +452,111 @@ function DoneStep({
       </div>
     </Card>
   );
+}
+
+function QrPanel({ url, filenameBase }: { url: string; filenameBase: string }) {
+  const [svg, setSvg] = useState<string | null>(null);
+  const [pngDataUrl, setPngDataUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const opts = { errorCorrectionLevel: 'M' as const, margin: 1, width: 480 };
+
+    Promise.all([
+      QRCode.toString(url, { ...opts, type: 'svg' as const }),
+      QRCode.toDataURL(url, { ...opts, type: 'image/png' as const }),
+    ])
+      .then(([svgString, dataUrl]) => {
+        if (cancelled) return;
+        setSvg(svgString);
+        setPngDataUrl(dataUrl);
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        setError(err.message || 'Could not render QR code.');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  function downloadSvg() {
+    if (!svg) return;
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    triggerDownload(URL.createObjectURL(blob), `${filenameBase}.svg`);
+  }
+
+  function downloadPng() {
+    if (!pngDataUrl) return;
+    triggerDownload(pngDataUrl, `${filenameBase}.png`);
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        QR generation failed: {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-4">
+      <div className="text-xs font-medium text-slate-500 mb-3 uppercase tracking-wide">QR code</div>
+      <div className="flex flex-col sm:flex-row items-start gap-4">
+        <div
+          className="w-40 h-40 flex items-center justify-center border border-slate-200 rounded"
+          aria-label={`QR code linking to ${url}`}
+        >
+          {svg ? (
+            <span dangerouslySetInnerHTML={{ __html: svg }} className="block w-full h-full [&>svg]:w-full [&>svg]:h-full" />
+          ) : (
+            <span className="text-xs text-slate-400">Rendering…</span>
+          )}
+        </div>
+        <div className="flex-1 space-y-2">
+          <p className="text-sm text-slate-700">
+            Encodes the short link. Print, paste into a postcard, or drop in a deck — readers scan and land on
+            the tracked destination.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={downloadSvg}
+              disabled={!svg}
+              icon={<Download className="w-4 h-4" />}
+            >
+              Download SVG
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={downloadPng}
+              disabled={!pngDataUrl}
+              icon={<Download className="w-4 h-4" />}
+            >
+              Download PNG
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">SVG scales cleanly on print. PNG is friendlier for slide decks and email.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function triggerDownload(href: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  if (href.startsWith('blob:')) {
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
+  }
 }
 
 function SummaryCard({

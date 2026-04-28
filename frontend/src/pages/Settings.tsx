@@ -50,6 +50,8 @@ export default function Settings() {
 
   // Hub settings state
   const [hubUrl, setHubUrl] = useState('https://hub.peanutgraphic.com');
+  const [hubApiKey, setHubApiKey] = useState('');
+  const [hubConnectMode, setHubConnectMode] = useState<'auto' | 'manual'>('auto');
   const [showHubDisconnectModal, setShowHubDisconnectModal] = useState(false);
 
   const { data: settings, isLoading, error, refetch } = useQuery({
@@ -67,6 +69,18 @@ export default function Settings() {
     onError: (err: Error & { code?: string }) => {
       const errorMessage = err.message || 'Failed to connect to Hub';
       toast.error(errorMessage);
+    },
+  });
+
+  const manualConnectHubMutation = useMutation({
+    mutationFn: () => settingsApi.manualConnectToHub(hubUrl, hubApiKey),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Successfully connected to Hub!');
+      setHubApiKey('');
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Could not connect with that API key.');
     },
   });
 
@@ -575,34 +589,106 @@ export default function Settings() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">2</span>
-                  <span>Enter your Hub URL below and click "Connect to Hub"</span>
+                  <span>
+                    <strong>Auto-connect</strong> — enter your Hub URL and Connect generates a fresh API key
+                    automatically. Use this for sites that have never been connected before.
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">3</span>
-                  <span>The connection will be established automatically - no API key needed!</span>
+                  <span>
+                    <strong>Use existing API key</strong> — paste both the Hub URL and the API key from{' '}
+                    Hub → Sites → your site. Use this for sites that already have an active connection in Hub
+                    (auto-connect refuses to overwrite an active key).
+                  </span>
                 </li>
               </ol>
             </InfoPanel>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Hub URL</label>
-                <input
-                  type="url"
-                  value={hubUrl}
-                  onChange={(e) => setHubUrl(e.target.value)}
-                  placeholder="https://hub.peanutgraphic.com"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <Button
-                onClick={() => autoConnectHubMutation.mutate()}
-                loading={autoConnectHubMutation.isPending}
-                disabled={!hubUrl}
-                icon={<Link2 className="w-4 h-4" />}
+
+            <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1 mb-2">
+              <button
+                type="button"
+                onClick={() => setHubConnectMode('auto')}
+                className={
+                  hubConnectMode === 'auto'
+                    ? 'px-3 py-1.5 text-sm font-medium rounded bg-white text-slate-900 shadow-sm'
+                    : 'px-3 py-1.5 text-sm font-medium rounded text-slate-600 hover:text-slate-900'
+                }
               >
-                Connect to Hub
-              </Button>
+                Auto-connect
+              </button>
+              <button
+                type="button"
+                onClick={() => setHubConnectMode('manual')}
+                className={
+                  hubConnectMode === 'manual'
+                    ? 'px-3 py-1.5 text-sm font-medium rounded bg-white text-slate-900 shadow-sm'
+                    : 'px-3 py-1.5 text-sm font-medium rounded text-slate-600 hover:text-slate-900'
+                }
+              >
+                Use existing API key
+              </button>
             </div>
+
+            {hubConnectMode === 'auto' ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Hub URL</label>
+                  <input
+                    type="url"
+                    value={hubUrl}
+                    onChange={(e) => setHubUrl(e.target.value)}
+                    placeholder="https://hub.peanutgraphic.com"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <Button
+                  onClick={() => autoConnectHubMutation.mutate()}
+                  loading={autoConnectHubMutation.isPending}
+                  disabled={!hubUrl}
+                  icon={<Link2 className="w-4 h-4" />}
+                >
+                  Connect to Hub
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Hub URL</label>
+                  <input
+                    type="url"
+                    value={hubUrl}
+                    onChange={(e) => setHubUrl(e.target.value)}
+                    placeholder="https://hub.peanutgraphic.com"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">API key</label>
+                  <input
+                    type="text"
+                    value={hubApiKey}
+                    onChange={(e) => setHubApiKey(e.target.value)}
+                    placeholder="64-character key from Hub → Sites → your site"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    The key is verified against Hub before saving. Stored as a WordPress option, never sent to
+                    the React app on subsequent loads.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => manualConnectHubMutation.mutate()}
+                  loading={manualConnectHubMutation.isPending}
+                  disabled={!hubUrl || !hubApiKey}
+                  icon={<Link2 className="w-4 h-4" />}
+                >
+                  Verify & Connect
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </Card>

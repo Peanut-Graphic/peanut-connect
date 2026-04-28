@@ -34,6 +34,20 @@ export const settingsApi = {
     return response.data;
   },
 
+  // Hub settings - manual-connect (paste an existing API key from Hub)
+  manualConnectToHub: async (hubUrl: string, apiKey: string): Promise<{
+    success: boolean;
+    message: string;
+    hub_url?: string;
+    site?: Record<string, unknown> | null;
+  }> => {
+    const response = await api.post('/settings/hub/manual-connect', {
+      hub_url: hubUrl,
+      api_key: apiKey,
+    });
+    return response.data;
+  },
+
   // Hub settings - test connection
   testHubConnection: async (): Promise<{
     success: boolean;

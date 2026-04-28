@@ -40,6 +40,25 @@ class Peanut_Connect_API {
             ],
         ]);
 
+        // Hub settings - manual-connect (paste an existing API key from Hub)
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/settings/hub/manual-connect', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'manual_connect_to_hub'],
+            'permission_callback' => [$this, 'admin_permission_check'],
+            'args' => [
+                'hub_url' => [
+                    'required' => true,
+                    'type' => 'string',
+                    'sanitize_callback' => 'esc_url_raw',
+                ],
+                'api_key' => [
+                    'required' => true,
+                    'type' => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+            ],
+        ]);
+
         // Hub settings - test connection
         register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/settings/hub/test', [
             'methods' => WP_REST_Server::CREATABLE,
@@ -991,6 +1010,79 @@ class Peanut_Connect_API {
             'success' => false,
             'message' => $body['message'] ?? __('Failed to connect to Hub.', 'peanut-connect'),
         ], $status_code ?: 400);
+    }
+
+    /**
+     * Manually connect to Hub using an existing API key.
+     *
+     * Use this when the site is already registered in Hub and has an active
+     * api_key — the auto-connect flow refuses to overwrite an active key, so
+     * you'd otherwise have to disconnect from Hub admin first. This route
+     * verifies the supplied key against Hub's /sites/verify endpoint and,
+     * on success, stores both values locally.
+     */
+    public function manual_connect_to_hub(WP_REST_Request $request): WP_REST_Response {
+        $hub_url = rtrim((string) $request->get_param('hub_url'), '/');
+        $api_key = trim((string) $request->get_param('api_key'));
+
+        if ($hub_url === '' || $api_key === '') {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => __('Hub URL and API key are both required.', 'peanut-connect'),
+            ], 400);
+        }
+
+        // Validate the credentials against Hub before saving them locally.
+        $verify_response = wp_remote_post($hub_url . '/api/v1/sites/verify', [
+            'timeout' => 15,
+            'headers' => [
+                'Accept' => 'application/json',
+                'Authorization' => 'Bearer ' . $api_key,
+            ],
+        ]);
+
+        if (is_wp_error($verify_response)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => sprintf(
+                    /* translators: %s: error message */
+                    __('Could not reach Hub: %s', 'peanut-connect'),
+                    $verify_response->get_error_message()
+                ),
+            ], 502);
+        }
+
+        $status = (int) wp_remote_retrieve_response_code($verify_response);
+        $body   = json_decode((string) wp_remote_retrieve_body($verify_response), true);
+
+        if ($status === 401 || $status === 403) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => __('Hub rejected the API key. Double-check it was copied correctly.', 'peanut-connect'),
+            ], 401);
+        }
+
+        if ($status >= 400) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => sprintf(
+                    /* translators: %d: HTTP status code */
+                    __('Hub returned %d during verification.', 'peanut-connect'),
+                    $status
+                ),
+                'hub_response' => $body,
+            ], 502);
+        }
+
+        update_option('peanut_connect_hub_url', $hub_url);
+        update_option('peanut_connect_hub_api_key', $api_key);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => __('Connected to Hub.', 'peanut-connect'),
+            'hub_url' => $hub_url,
+            'site' => is_array($body) ? ($body['site'] ?? null) : null,
+        ], 200);
     }
 
     /**
