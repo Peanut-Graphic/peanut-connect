@@ -5,10 +5,23 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.7.10] - 2026-05-04
 
 ### Changed
-- **Rebranded to "Peanut End to End."** Plugin Name in the WordPress header, README.md, and readme.txt now describe the project as an end-to-end campaign + site platform — reflecting what it actually shipped over 3.5–3.7 (campaign wizard, UTMs, popups, forms, tracker, in-plugin analytics) alongside the original health/updates/backup connector surface. Slug, REST namespace, option keys, mu-plugin, and license-server endpoints all remain `peanut-connect` for backwards compatibility with existing installs and the auto-update flow. README's stale 1.x changelog block was retired in favor of this file. WordPress.org `Stable tag` corrected from `3.3.3` to `3.7.9`.
+- **Rebranded to "Peanut End to End."** Plugin Name in the WordPress header, admin menu, sidebar version footer, dashboard, settings tooltips, exported reports, self-updater plugin info, and remote-deactivate/delete error messages now read "Peanut End to End." Slug, REST namespace, option keys, mu-plugin, and license-server endpoints all remain `peanut-connect` for backwards compatibility with existing installs and the auto-update flow. README's stale 1.x changelog block was retired in favor of this file. WordPress.org `Stable tag` corrected from `3.3.3` to `3.7.10` (had drifted ~6 minor releases). License-server mu-plugin updated so update notifications display the new product name.
+
+### Fixed
+- **Phantom-version recovery.** Versions 3.7.5–3.7.9 had been bumped, packaged into `dist/`, and documented in CHANGELOG locally, but the source for them was never committed and the GitHub release flow was never invoked, so customers stayed on 3.7.4. This release is the honest catchup — all 3.7.5–3.7.9 source (campaigns wizard, UTMs, Tracking, Analytics, Sankey/Funnel/Donut/TimeSeries charts, marketing PHP proxy WAF fixes) is now in git and reaches customers via the standard auto-update flow.
+
+### Build pipeline
+- **Divergence guards** added so this can't recur:
+  - `package.sh` refuses to run on a dirty working tree or when the version constant doesn't match `HEAD`'s committed version. `PEANUT_PACKAGE_FORCE=1` overrides for genuine archival cases.
+  - `bump-version.sh` warns loudly when bumping a dirty tree and points the operator at `release.sh` for the end-to-end flow.
+  - `release.sh` now runs `npm run build` automatically before the version-bump commit, so the SPA bundle and source ship in the same commit (no force-push amend pattern).
+  - Commit-message format aligned with the Conventional Commits hook so `release.sh` runs end-to-end without manual intervention.
+
+### Repo hygiene
+- **`composer.phar` (3.3 MB) and `composer-setup.php`** removed from version control; added to `.gitignore`.
 
 ## [3.7.9] - 2026-04-29
 
