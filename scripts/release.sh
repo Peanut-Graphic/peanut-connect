@@ -27,14 +27,20 @@ bash "$SCRIPT_DIR/bump-version.sh" "$BUMP_TYPE"
 # Get new version
 VERSION=$(grep -m1 "Version:" "$ROOT_DIR/peanut-connect.php" | sed 's/.*Version: *\([0-9.]*\).*/\1/')
 
-# Commit version bump
-echo "📝 Committing version bump..."
+# Build SPA assets BEFORE the commit so the bundle in the zip matches the
+# source the commit captures. Doing this AFTER the commit would require a
+# force-push to amend, which is dangerous on main.
+echo "🛠  Building SPA assets..."
+npm run build
+
+# Commit version bump + rebuilt bundle together.
+echo "📝 Committing version bump + assets..."
 git add -A
 git commit -m "Bump version to $VERSION
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 # Push to remote
 echo "🚀 Pushing to remote..."

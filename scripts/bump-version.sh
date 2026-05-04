@@ -8,6 +8,20 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
+cd "$ROOT_DIR"
+
+# Warn if working tree has uncommitted changes — bumping version on a dirty
+# tree is how 3.7.5–3.7.9 became phantom versions (source uncommitted, version
+# stamp + zip + CHANGELOG ahead of git). Use scripts/release.sh for the
+# end-to-end flow; bumping in isolation is for unusual cases.
+if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
+    echo "⚠️  Warning: Working tree has uncommitted changes."
+    echo "   Bumping the version constant without committing source means"
+    echo "   the next 'package.sh' will refuse to run (version-vs-commit mismatch)."
+    echo "   Prefer scripts/release.sh which enforces the full flow."
+    echo ""
+fi
+
 # Get current version from main plugin file
 CURRENT_VERSION=$(grep -m1 "Version:" "$ROOT_DIR/peanut-connect.php" | sed 's/.*Version: *\([0-9.]*\).*/\1/')
 

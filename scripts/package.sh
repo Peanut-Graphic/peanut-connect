@@ -8,8 +8,50 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 PLUGIN_NAME="peanut-connect"
+
+cd "$ROOT_DIR"
+
 # Get version from main plugin file
 VERSION=$(grep -m1 "Version:" "$ROOT_DIR/peanut-connect.php" | sed 's/.*Version: *\([0-9.]*\).*/\1/')
+
+# Guardrail: refuse to package a version whose source isn't fully committed.
+# This is the check that would have caught 3.7.5–3.7.9 — those versions had
+# their version constant bumped, were packaged into dist/, and were documented
+# in CHANGELOG, but the source for them was never committed. Customers stayed
+# on 3.7.4 forever while local "releases" piled up uncommittedly.
+#
+# Override only with PEANUT_PACKAGE_FORCE=1 (real reason: e.g., packaging an
+# old release for archival from a worktree).
+if [[ -n $(git status --porcelain 2>/dev/null) ]] && [[ -z "$PEANUT_PACKAGE_FORCE" ]]; then
+    echo "❌ package.sh refuses to run with a dirty working tree."
+    echo ""
+    echo "   Uncommitted changes mean the zip you're about to build won't match"
+    echo "   any real commit, and there's no way to recover the exact source."
+    echo "   This is the failure mode that produced phantom versions 3.7.5–3.7.9."
+    echo ""
+    echo "   Either:"
+    echo "     • Commit your changes and re-run, or"
+    echo "     • Use scripts/release.sh which handles commit + build + package + release"
+    echo "     • Set PEANUT_PACKAGE_FORCE=1 if you genuinely need to override"
+    echo ""
+    git status --short
+    exit 1
+fi
+
+# Sanity check: the version constant should match what HEAD claims to be.
+# If someone hand-edits the version without going through release.sh, this
+# catches the divergence before a zip ships under a fake version stamp.
+HEAD_VERSION=$(git show HEAD:peanut-connect.php 2>/dev/null | grep -m1 "Version:" | sed 's/.*Version: *\([0-9.]*\).*/\1/')
+if [[ -n "$HEAD_VERSION" ]] && [[ "$HEAD_VERSION" != "$VERSION" ]] && [[ -z "$PEANUT_PACKAGE_FORCE" ]]; then
+    echo "❌ package.sh: version mismatch."
+    echo "   Working tree version constant: $VERSION"
+    echo "   HEAD's committed version:      $HEAD_VERSION"
+    echo ""
+    echo "   The version was bumped without a commit. Use scripts/release.sh"
+    echo "   for the end-to-end flow, or commit the bump first."
+    echo "   (Override with PEANUT_PACKAGE_FORCE=1 if you really mean it.)"
+    exit 1
+fi
 
 echo ""
 echo "📦 Packaging $PLUGIN_NAME v$VERSION..."
