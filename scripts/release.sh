@@ -36,7 +36,7 @@ npm run build
 # Commit version bump + rebuilt bundle together.
 echo "📝 Committing version bump + assets..."
 git add -A
-git commit -m "Bump version to $VERSION
+git commit -m "chore(release): bump version to $VERSION
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 

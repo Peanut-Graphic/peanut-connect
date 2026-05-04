@@ -1,6 +1,6 @@
 {
   "name": "peanut-connect-frontend",
-  "version": "3.4.1",
+  "version": "3.7.10",
   "private": true,
   "type": "module",
   "scripts": {
