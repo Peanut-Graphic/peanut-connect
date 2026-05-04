@@ -100,7 +100,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Version */}
       {!collapsed && (
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
-          <span className="text-xs text-slate-400">Peanut Connect v{getVersion()}</span>
+          <span className="text-xs text-slate-400">Peanut End to End v{getVersion()}</span>
         </div>
       )}
     </aside>

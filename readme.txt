@@ -1,43 +1,57 @@
-=== Peanut Connect ===
+=== Peanut End to End ===
 Contributors: peanutgraphic
-Tags: monitor, management, multisite, updates, health
+Tags: campaigns, marketing, utm, popups, monitoring, updates, analytics, forms, tracker
 Requires at least: 6.0
 Tested up to: 6.4
 Requires PHP: 8.0
-Stable tag: 3.3.3
+Stable tag: 3.7.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Lightweight connector plugin for Peanut Monitor. Allows centralized site management from your manager site.
+End-to-end campaign and site platform for WordPress — campaigns, UTM links, popups, forms, tracker, plus health, updates, and backups. Wired to a Peanut Hub.
 
 == Description ==
 
-Peanut Connect is a lightweight plugin that connects your WordPress site to a Peanut Monitor dashboard. Once connected, your manager site can:
+Peanut End to End runs marketing campaigns and on-site experiences directly from your WordPress install — and pairs that with the site health, update, and backup tooling that used to live in the older "Hub Connect" connector. The plugin slug remains `peanut-connect` for backwards compatibility with existing installs and update flows.
 
-* Monitor site health (WordPress version, PHP version, SSL status)
-* View available plugin and theme updates
-* Remotely update plugins and themes (optional)
-* Sync Peanut Suite analytics if installed (optional)
+**Campaigns and on-site marketing:**
 
-**Features:**
+* Campaign wizard with auto-saved drafts and clickable step navigation
+* UTM-tagged short links and QR codes
+* Popups (modal, slide-in, bar, toast, fullscreen) and event banners — server-rendered so they survive ad-blockers
+* First-party tracker (pageviews, scroll, conversions, form submissions)
+* Form capture with proxy to Peanut Hub
+* In-plugin analytics: campaigns, journeys, funnels, Sankey flows, devices, regions, time-series
+* Demo seeder for onboarding with realistic sample data
 
-* **Minimal Footprint**: Lightweight plugin with no impact on site performance
-* **Secure**: All communication is authenticated with unique site keys
-* **Privacy Controls**: Choose what the manager can access
-* **Peanut Suite Integration**: Automatically syncs analytics if Peanut Suite is installed
+**Site health and management:**
+
+* Site health monitoring (WordPress / PHP / MySQL versions, SSL, disk, memory)
+* Plugin / theme / core update visibility and remote-trigger
+* Backup integration
+* ML-flavored anomaly detection on health metrics
+* Security hardening (disable XML-RPC, hide WP version, custom login URL, disable comments)
+* Local error log and activity log
+
+**Hub link:**
+
+* Marketing API proxy to Peanut Hub (campaigns and analytics live in Hub)
+* Site-key authentication (SHA-256 hashed)
+* Hub Mode (standard / hide-Suite / disable-Suite) for coexistence with Peanut Suite
+* Manual Hub-key onboarding fallback
 
 **How It Works:**
 
-1. Install Peanut Connect on your site
-2. Generate a site key from Settings > Peanut Connect
-3. Add your site to Peanut Monitor using the site key
-4. Manage your site remotely from the Monitor dashboard
+1. Install Peanut End to End on your site
+2. Generate a site key from Settings > Peanut End to End
+3. Pair the site to your Peanut Hub using the site key
+4. Build campaigns, monitor health, and manage updates from the Hub dashboard
 
 == Installation ==
 
 1. Upload the `peanut-connect` folder to `/wp-content/plugins/`
 2. Activate the plugin through the 'Plugins' menu in WordPress
-3. Go to Settings > Peanut Connect
+3. Go to Settings > Hub Connect
 4. Generate your site key
 5. Copy the key and add this site to your Peanut Monitor dashboard
 
@@ -57,11 +71,11 @@ Yes. You can enable or disable specific permissions:
 
 = Does this work without Peanut Suite? =
 
-Yes. Peanut Connect works on any WordPress site. If Peanut Suite is also installed, additional analytics data will be synced.
+Yes. Peanut End to End works on any WordPress site. If Peanut Suite is also installed, the Hub Mode setting controls how the two coexist (standard, hide-Suite, or disable-Suite).
 
 = Will this slow down my site? =
 
-No. Peanut Connect only responds to authenticated API requests from your manager site. It adds no overhead to normal site operations.
+No. The plugin only loads what each page needs — the tracker is a small first-party script, popups and banners are conditional, and admin endpoints only respond to authenticated API requests from your paired Hub.
 
 == Changelog ==
 
@@ -136,4 +150,4 @@ No. Peanut Connect only responds to authenticated API requests from your manager
 Major update: Connect to Peanut Hub for centralized agency management with visitor tracking, attribution, and hub-managed popups.
 
 = 1.0.0 =
-Initial release of Peanut Connect.
+Initial release of Hub Connect.

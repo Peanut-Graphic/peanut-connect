@@ -1,21 +1,42 @@
-# Peanut Connect
+# Peanut End to End
 
-A lightweight WordPress plugin that connects child sites to a Peanut Suite manager installation. Enables remote health monitoring, update management, and analytics syncing.
+> Plugin slug: `peanut-connect` · REST namespace: `peanut-connect/v1` · Brand: **Peanut End to End**
+>
+> The slug, namespace, and option keys remain `peanut-connect` for backwards compatibility with existing installs and the Peanut License Server / mu-plugin update flow. The product name is "Peanut End to End."
 
-## Overview
+End-to-end campaign and site platform for WordPress. Installed on a client (or your own) WordPress site, it runs marketing campaigns and on-site experiences — UTM links, popups, event banners, form capture, first-party tracker, conversion funnels — and pairs that with site health monitoring, plugin/theme updates, and backups, all coordinated through a central Peanut Hub.
 
-Peanut Connect is designed to be installed on sites you want to monitor from a central Peanut Suite dashboard. It exposes secure REST API endpoints that allow authorized manager sites to:
+## What it actually does
 
-- Check site health (WordPress version, PHP version, SSL status, disk space)
-- View available plugin and theme updates
-- Trigger remote updates
-- Sync analytics data
+**Campaign side (the marketing surface):**
+- Campaign wizard with draft auto-save (localStorage) and step-by-step navigation
+- UTM-tagged short links and QR codes
+- Popups (modal / slide-in / bar / toast / fullscreen) and event banners, served server-side from the on-site agent so they survive ad-blockers
+- First-party `tracker.js` (`phub` global) — pageviews, scroll, form submissions, conversion events
+- Form capture with marketing-API proxy to Hub
+- Analytics in-plugin — campaigns, journeys, conversion funnels, Sankey flows, devices, regions, time-series
+- Demo seeder for populating realistic data during onboarding
+
+**Site side (the original "connector" surface, still fully supported):**
+- Site health (WordPress / PHP / MySQL versions, SSL, disk, memory)
+- Plugin / theme / core update visibility and remote-trigger
+- Backup integration
+- ML-flavored anomaly detection on health metrics
+- Security hardening: disable XML-RPC, hide WP version, custom login URL, disable comments
+- Hide-login support
+- Local error log + activity log
+
+**Hub link (the connective tissue):**
+- Marketing API proxy to Hub (campaigns, journeys, analytics live in Hub; Connect is the on-site executor)
+- Site key auth (SHA-256 hashed, never plain-text)
+- Hub Mode toggle: standard, hide-Suite, disable-Suite (controls how it coexists with Peanut Suite)
+- Manual Hub-key onboarding flow as fallback when auto-pairing isn't available
 
 ## Requirements
 
 - WordPress 6.0+
 - PHP 8.0+
-- Peanut Suite (Agency tier) on the manager site
+- A Peanut Hub installation to pair with (campaign authoring + cross-site rollups live there)
 
 ## Installation
 
@@ -29,12 +50,12 @@ Peanut Connect is designed to be installed on sites you want to monitor from a c
 
 ### Configuration
 
-After activation, configure the plugin at **Settings > Peanut Connect**:
+After activation, configure the plugin at **Settings > Peanut End to End** (menu may still read "Peanut Connect" until the SPA strings are migrated):
 
 | Setting | Description |
 |---------|-------------|
-| **Site Key** | Unique key provided by your Peanut Suite manager |
-| **Manager URL** | URL of your Peanut Suite installation |
+| **Site Key** | Unique key provided by your Peanut Hub |
+| **Hub URL** | URL of your Peanut Hub installation |
 
 ## How It Works
 
@@ -322,30 +343,7 @@ For support, please contact your Peanut Suite administrator or visit the main Pe
 
 ## Changelog
 
-### 1.1.0 (2025-12-26)
-- **New**: React-based admin dashboard with modern UI
-- **New**: Skeleton loading states for better UX
-- **New**: Tooltips and contextual help throughout
-- **New**: Info panels with collapsible explanations
-- **New**: Security alerts and danger zone confirmations
-- **New**: Health score calculation (0-100)
-- **New**: Export health reports (JSON, text, HTML, PDF)
-- **New**: Dark mode support (light/dark/system)
-- **New**: Activity log page tracking events locally
-- **New**: Activity page for viewing recent events
-- **Improved**: Better visual design with Tailwind CSS
-- **Improved**: Enhanced mobile responsiveness
-
-### 1.0.1
-- Bug fixes and stability improvements
-- Updated dependencies
-
-### 1.0.0
-- Initial release
-- Health check endpoint
-- Update management
-- Site key authentication
-- Settings page
+See [CHANGELOG.md](./CHANGELOG.md) for the full history. The plugin is currently at **3.7.9** (April 2026); the changelog above had been left at 1.x and was retired during the **Peanut End to End** rebrand.
 
 ## License
 

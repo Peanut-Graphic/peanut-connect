@@ -470,7 +470,7 @@ class Peanut_Connect_Updates {
 
         // Prevent deactivating Peanut Connect itself
         if (strpos($plugin_file, 'peanut-connect') !== false) {
-            return new WP_Error('cannot_deactivate', __('Cannot deactivate Peanut Connect remotely.', 'peanut-connect'));
+            return new WP_Error('cannot_deactivate', __('Cannot deactivate Peanut End to End remotely.', 'peanut-connect'));
         }
 
         // Deactivate
@@ -501,7 +501,7 @@ class Peanut_Connect_Updates {
 
         // Prevent deleting Peanut Connect itself
         if (strpos($plugin_file, 'peanut-connect') !== false) {
-            return new WP_Error('cannot_delete', __('Cannot delete Peanut Connect remotely.', 'peanut-connect'));
+            return new WP_Error('cannot_delete', __('Cannot delete Peanut End to End remotely.', 'peanut-connect'));
         }
 
         // Ensure plugin is deactivated first

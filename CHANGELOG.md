@@ -1,9 +1,60 @@
 # Changelog
 
-All notable changes to Peanut Connect will be documented in this file.
+All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Changed
+- **Rebranded to "Peanut End to End."** Plugin Name in the WordPress header, README.md, and readme.txt now describe the project as an end-to-end campaign + site platform — reflecting what it actually shipped over 3.5–3.7 (campaign wizard, UTMs, popups, forms, tracker, in-plugin analytics) alongside the original health/updates/backup connector surface. Slug, REST namespace, option keys, mu-plugin, and license-server endpoints all remain `peanut-connect` for backwards compatibility with existing installs and the auto-update flow. README's stale 1.x changelog block was retired in favor of this file. WordPress.org `Stable tag` corrected from `3.3.3` to `3.7.9`.
+
+## [3.7.9] - 2026-04-29
+
+### Fixed
+- **503 when filtering Analytics by a single campaign.** The host's mod_security WAF was rewriting `?campaign=...` GETs from Hub to 406, which then surfaced as 503 to the SPA. Marketing proxy now sends `journey_stats` filters as a POST body instead of a query string, bypassing the WAF entirely. Hub's `/journeys/stats` route now matches both GET and POST. WAF status normalization in `forward()` widened from 4xx to all 4xx/5xx so any future host quirk is also recovered.
+- **Sankey overflow.** The chart was clipping the bottom row when many small campaigns shared a column. Inner height now subtracts gap-space before sizing bars, and the SVG height auto-grows with the largest column so all nodes are visible.
+- **Sankey channel labels readability.** Middle-column labels ("email", "cpc", "referral") moved above their bars and given a white text-stroke so they no longer get lost behind incoming ribbons.
+
+## [3.7.8] - 2026-04-29
+
+### Added
+- **Volume-over-time chart** on the Analytics page — daily journeys (filled indigo area) + conversions (emerald line) across the selected date window. Tells the campaign-launch-spike story.
+- **Devices card** — donut showing desktop / mobile / tablet split.
+- **Top regions card** — horizontal bars by country/region, derived from journey events.
+- **Sankey diagram** — three-column flow (Campaign → Channel → Outcome). Outcome ribbons colored by status: emerald for converted, amber for in-progress, red for abandoned.
+- Hub `/journeys/stats` now returns `time_series`, `devices`, `regions`, and `sankey` (nodes/links) alongside the existing aggregates.
+
+### Polish
+- **Wizard steps are clickable** — every step in the top bar is a button. Forward navigation is gated on prerequisites; reachable steps highlight on hover, unreachable steps grey out with a tooltip.
+- **Save & return later** — wizard auto-saves drafts to localStorage; a "Draft saved Xs ago" indicator and explicit "Save & exit" button live next to the page header. Reopening Campaigns picks up exactly where you left off, with a "Start fresh" link to discard.
+- Demo seeder now stamps Virginia / North Carolina / Maryland on journeys so the regions card has Dominion-realistic data.
+
+## [3.7.7] - 2026-04-29
+
+### Added
+- **Trapezoidal funnel chart** — replaces the horizontal-bar funnel on the Analytics page with a real narrowing-trapezoid SVG. Each stage's width is proportional to count, so the visual itself communicates drop-off.
+- **Campaign filter + compare mode.** Multi-select dropdown at the top of Analytics. Pick one to filter the whole page to that campaign; pick two or more to flip into a compare view that renders side-by-side mini-funnels at the same scale plus per-campaign Journeys / Enrollments / Conv. rate.
+- Hub `/journeys/stats` now accepts a `campaigns[]` array param in addition to the existing single `campaign` filter.
+
+## [3.7.6] - 2026-04-29
+
+### Added
+- **Reach + Cost on the campaign wizard.** New optional fields in Step 1 — "Reach (sent / impressions)" and "Cost (USD)" — so the funnel and cost-per-acquisition KPIs populate from real numbers when a campaign is built, not just from the seeded demo data.
+- **Pencil-edit button on the UTMs page.** Inline modal with: Reach, Cost, Notes (safe-to-edit), plus a collapsed "advanced" section for Source / Medium / Campaign / Destination URL with a warning when the campaign already has clicks (changing those breaks attribution for clicks already in the system).
+
+## [3.7.5] - 2026-04-29
+
+### Added
+- **Conversion funnel chart on Analytics page.** Stages: Sent → Clicked → Landed → Clicked Enroll → Enrolled, each rendered as a horizontal bar proportional to the top stage with drop-off % between stages. Plus three new KPI cards: Cost / Acquisition, Click-Through Rate, total cost.
+- Hub's `/journeys/stats` now returns a `funnel` array, `cost_total`, `cost_per_acquisition`, and `click_through_rate` derived from `Utm.send_count` / `campaign_cost`, `LinkClick` counts, the `click_to_portal` custom event, and converted journeys.
+
+### Changed
+- Tracker bootstrap snippets in the Campaigns wizard and Tracking page now reference `phub` instead of `pnut`, matching the renamed global in `tracker.min.js` (3.7.x). Backward-compat alias preserved.
+
+### Fixed
+- Conversion-rate KPI on the Analytics page displayed `1316.0%` instead of `13.2%` because it was multiplying an already-percent value by 100 again.
 
 ## [3.7.4] - 2026-04-28
 

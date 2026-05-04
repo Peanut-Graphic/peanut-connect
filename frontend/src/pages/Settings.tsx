@@ -1183,7 +1183,7 @@ export default function Settings() {
             <span className="flex items-center gap-2">
               <Download className="w-5 h-5" />
               Plugin Updates
-              <HelpTooltip content="Force check for Peanut Connect updates. This clears the update cache and checks the server for new versions." />
+              <HelpTooltip content="Force check for Peanut End to End updates. This clears the update cache and checks the server for new versions." />
             </span>
           }
         />

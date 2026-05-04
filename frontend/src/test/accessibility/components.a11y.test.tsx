@@ -5,7 +5,7 @@ import { axe, toHaveNoViolations } from 'jest-axe';
 
 expect.extend(toHaveNoViolations);
 
-describe('Accessibility - Peanut Connect Components', () => {
+describe('Accessibility - Peanut End to End Components', () => {
   // Button Component - Keyboard Navigation
   it('should have accessible button with proper ARIA attributes', async () => {
     const { container } = render(

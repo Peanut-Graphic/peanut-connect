@@ -110,7 +110,7 @@ export default function Dashboard() {
       {showWelcome && (
         <InfoPanel
           variant="guide"
-          title="Welcome to Peanut Connect!"
+          title="Welcome to Peanut End to End!"
           className="mb-6"
         >
           <p className="mb-3">
@@ -524,7 +524,7 @@ export default function Dashboard() {
       {/* Quick Feature Overview - Only show for disconnected users */}
       {!isConnected && (
         <div className="mt-8">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">What Peanut Connect Can Do</h2>
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">What Peanut End to End Can Do</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <FeatureCard
               icon={<Eye className="w-5 h-5" />}

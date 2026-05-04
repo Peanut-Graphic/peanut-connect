@@ -106,7 +106,7 @@ class Peanut_Connect_Self_Updater {
         }
 
         return (object) [
-            'name' => $remote->name ?? 'Peanut Connect',
+            'name' => $remote->name ?? 'Peanut End to End',
             'slug' => self::PLUGIN_SLUG,
             'version' => $remote->version ?? '1.0.0',
             'author' => $remote->author ?? '<a href="https://peanutgraphic.com">Peanut Graphic</a>',
@@ -118,7 +118,7 @@ class Peanut_Connect_Self_Updater {
             'tested' => $remote->tested ?? '',
             'requires_php' => $remote->requires_php ?? '8.0',
             'sections' => [
-                'description' => '<p>Peanut Connect is a remote site monitoring and management connector that works with Peanut Suite Agency to monitor site health, updates, and performance.</p>',
+                'description' => '<p>Peanut End to End is a campaign + site platform for WordPress — runs marketing campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all paired to a Peanut Hub.</p>',
                 'installation' => '<ol><li>Upload the plugin to your /wp-content/plugins/ directory</li><li>Activate the plugin</li><li>Configure your connection token in Settings</li></ol>',
                 'changelog' => '<h4>' . ($remote->version ?? '2.1.1') . '</h4><ul><li>Latest stable release</li></ul>',
             ],

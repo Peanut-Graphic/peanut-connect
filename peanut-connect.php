@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Peanut Connect
+ * Plugin Name: Peanut End to End
  * Plugin URI: https://peanutgraphic.com/peanut-connect
- * Description: Connector plugin for Peanut Hub. Enables centralized site health monitoring and management from your agency dashboard.
- * Version: 3.7.4
+ * Description: End-to-end campaign and site platform for WordPress — runs campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all wired to a central Peanut Hub.
+ * Version: 3.7.9
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.7.4');
+define('PEANUT_CONNECT_VERSION', '3.7.9');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -325,8 +325,8 @@ final class Peanut_Connect {
     public function add_admin_menu(): void {
         // Add top-level menu for React SPA
         add_menu_page(
-            __('Peanut Connect', 'peanut-connect'),
-            __('Connect', 'peanut-connect'),
+            __('Peanut End to End', 'peanut-connect'),
+            __('Peanut End to End', 'peanut-connect'),
             'manage_options',
             'peanut-connect-app',
             [$this, 'render_react_app'],
@@ -336,8 +336,8 @@ final class Peanut_Connect {
 
         // Keep legacy settings page as a fallback
         add_options_page(
-            __('Peanut Connect (Legacy)', 'peanut-connect'),
-            __('Peanut Connect', 'peanut-connect'),
+            __('Peanut End to End (Legacy)', 'peanut-connect'),
+            __('Peanut End to End', 'peanut-connect'),
             'manage_options',
             'peanut-connect',
             [$this, 'render_settings_page']
@@ -427,7 +427,7 @@ final class Peanut_Connect {
         $last_sync = get_option('peanut_connect_last_sync');
         ?>
         <div class="wrap">
-            <h1><?php echo esc_html__('Peanut Connect', 'peanut-connect'); ?></h1>
+            <h1><?php echo esc_html__('Peanut End to End', 'peanut-connect'); ?></h1>
 
             <div class="card">
                 <h2><?php echo esc_html__('Connection Status', 'peanut-connect'); ?></h2>
