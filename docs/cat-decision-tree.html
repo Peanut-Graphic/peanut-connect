@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CAT decision tree — Peanut End to End</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161922;
+    --panel-2: #1d2230;
+    --border: #2a3142;
+    --text: #e6e8ec;
+    --muted: #8a93a6;
+    --accent: #ffb84a;
+    --accent-2: #6cd3a5;
+    --danger: #ff7a7a;
+    --selected: #2b3447;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; line-height: 1.5; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 32px 24px 80px; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 28px; }
+  h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.01em; }
+  h1 .cat { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 14px; }
+  .progress { display: flex; gap: 6px; margin-top: 18px; }
+  .pip { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .pip.done { background: var(--accent-2); }
+  .pip.current { background: var(--accent); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .section-tag { display: inline-block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .q-title { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
+  .q-context { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  .options { display: flex; flex-direction: column; gap: 10px; }
+  .option { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; cursor: pointer; transition: border-color 0.12s, background 0.12s; display: flex; gap: 12px; align-items: flex-start; }
+  .option:hover { border-color: var(--accent); }
+  .option.selected { border-color: var(--accent); background: var(--selected); }
+  .option input { margin-top: 3px; flex-shrink: 0; accent-color: var(--accent); }
+  .option-body { flex: 1; }
+  .option-title { font-weight: 600; font-size: 15px; }
+  .option-desc { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+  .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; flex-wrap: wrap; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; padding: 10px 18px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); transition: background 0.12s, border-color 0.12s; }
+  button:hover:not(:disabled) { background: var(--selected); }
+  button.primary { background: var(--accent); color: #1a1a1a; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: #ffc66f; }
+  button.ghost { background: transparent; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .challenge { border-left: 3px solid var(--accent); padding-left: 18px; }
+  .challenge .meaning { font-size: 16px; font-weight: 500; margin-bottom: 16px; }
+  .challenge h4 { margin: 14px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .challenge ul { margin: 0; padding-left: 20px; }
+  .challenge li { margin-bottom: 4px; font-size: 14px; }
+  .challenge .counter { background: var(--panel-2); border: 1px dashed var(--accent); border-radius: 8px; padding: 14px 16px; margin: 18px 0 8px; font-style: italic; }
+  .challenge .counter::before { content: "🐈 "; font-style: normal; }
+  .pros li::marker { color: var(--accent-2); }
+  .cons li::marker { color: var(--danger); }
+  textarea { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font: inherit; font-size: 14px; resize: vertical; min-height: 70px; margin-top: 14px; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .picked-list { background: var(--panel-2); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  .picked-list .pick { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .picked-list .pick:last-child { border-bottom: none; }
+  .picked-list .pick-title { font-weight: 600; font-size: 14px; }
+  .picked-list .pick-meaning { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  pre { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; }
+  .conflicts { background: rgba(255, 122, 122, 0.08); border: 1px solid var(--danger); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
+  .conflicts h3 { margin: 0 0 8px; font-size: 14px; color: var(--danger); }
+  .conflicts ul { margin: 0; padding-left: 20px; }
+  .conflicts li { margin-bottom: 6px; font-size: 14px; }
+  .copybtn { float: right; }
+  .small { font-size: 12px; color: var(--muted); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+  .summary-section { margin-bottom: 22px; }
+  .summary-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="cat">🐈 CAT</span> · Peanut End to End — strategic decisions</h1>
+    <div class="sub">Six questions. Each one CAT will push back on. Stand your ground or change your mind. The end gives you a Markdown block to paste back to Claude.</div>
+    <div class="progress" id="progress"></div>
+  </header>
+  <main id="root"></main>
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    id: 'identity',
+    section: 'Strategic',
+    title: 'What is Peanut End to End trying to be 12 months from now?',
+    context: "The README said 'monitoring connector.' The git log says 'campaign platform.' The plugin file says 'Hub Connect.' Pick a north star — the rest of these questions depend on it.",
+    options: [
+      {
+        value: 'satellite',
+        title: 'A — Satellite of Hub',
+        desc: 'Hub is the brain. End to End is the on-site agent that executes what Hub tells it.',
+        meaning: 'Picking this means End to End never gets sold without a Hub. Every campaign feature you ship requires Hub-side work first. Hub is the product; End to End is its limb.',
+        pros: [
+          'Matches the current code split — most marketing logic already proxies to Hub.',
+          'Simplifies licensing and onboarding — one Hub key, one connection model.',
+          'Lets Hub be the place you charge real money; End to End stays a thin runtime.',
+        ],
+        cons: [
+          "Caps End to End's reach to whoever has bought a Hub. The single-site WP user is locked out.",
+          'Every plugin update has to coordinate with Hub releases. Coupling tax forever.',
+          "Throws away the most interesting wedge — that you have code privileges on the client's site.",
+        ],
+        challenge: "If End to End is just a limb, why is the plugin currently shipping its own analytics, funnel charts, and Sankey diagrams that already work without Hub? You're describing a future the code is actively walking away from.",
+      },
+      {
+        value: 'os',
+        title: 'B — On-site marketing OS (sellable standalone)',
+        desc: "End to End is its own product. Hub is optional — adds cross-site rollups, but isn't required.",
+        meaning: 'Picking this means a single-site WP user can buy End to End, install it, and run real campaigns without ever touching Hub. Hub becomes a power-user upsell, not a dependency.',
+        pros: [
+          'Doubles the addressable market overnight — agencies AND standalone WP sites.',
+          'Forces the plugin to stand on its own merit, which usually makes products better.',
+          "Plays to the unique strength: you're the only one with code privileges on the client site.",
+        ],
+        cons: [
+          'Requires real product-isolation work — auth, settings, onboarding all need a no-Hub path.',
+          'Cannibalizes Hub-as-product if the standalone offering is too good.',
+          'You now maintain two worldviews: pair-with-Hub and pair-with-nothing.',
+        ],
+        challenge: "Standalone is a bigger market — but is it a market YOU can reach? Hub gives you a captive audience. Where does the first standalone customer come from, and how do they hear about you?",
+      },
+      {
+        value: 'trenchcoat',
+        title: 'C — Two products in a trench coat',
+        desc: 'Keep monitoring + campaigns coupled. The combination is the moat.',
+        meaning: 'Picking this means you stop apologizing for the duality. The pitch becomes "one plugin that runs your campaigns AND keeps the site healthy" — and you lean into that as a differentiator.',
+        pros: [
+          'No painful refactor. The code already does both.',
+          'Differentiates against pure-marketing tools (Mailchimp) and pure-monitoring tools (ManageWP) simultaneously.',
+          "It's honest about what shipped.",
+        ],
+        cons: [
+          "Hard to position. 'It does both' is a feature list, not a pitch.",
+          "Risk of being mediocre at two things instead of great at one. Marketing platforms don't usually monitor plugin updates.",
+          'The 2,819-line API file is the smell of this strategy without rigor — it WILL get worse before it gets better.',
+        ],
+        challenge: "Name one buyer who actively wants both monitoring AND campaigns from the same vendor. If you can't name them in 10 seconds, this answer is comfort, not strategy.",
+      },
+      {
+        value: 'campaign-pure',
+        title: 'D — Pure campaign tool',
+        desc: 'Spin off monitoring as a separate, leaner product. End to End is just the marketing/campaign plugin.',
+        meaning: 'Picking this means health/updates/backups extract into their own plugin (or get sunset). End to End focuses 100% on campaigns, UTMs, popups, forms, tracker, analytics.',
+        pros: [
+          'Sharpest possible positioning. Everyone understands what it is in 5 seconds.',
+          'Easier marketing, easier docs, easier onboarding.',
+          'Frees up surface area to actually compete on campaign features.',
+        ],
+        cons: [
+          'Major refactor. Monitoring code is fully entangled with campaign code today.',
+          'You lose the "we already help with your site" wedge that opened the door for monitoring customers.',
+          'A second plugin to maintain forever (or a hard sunset of monitoring users).',
+        ],
+        challenge: "Walking away from monitoring means walking away from why agencies installed Connect in the first place. Where does the customer base for the pure-campaign tool actually come from?",
+      },
+    ],
+  },
+  {
+    id: 'buyer',
+    section: 'Strategic',
+    title: 'Who is the primary buyer?',
+    context: 'License tiers (Free/Pro/Agency) currently imply agencies. But the campaign features look more like a single-site product. Decide who you are actually selling to.',
+    options: [
+      {
+        value: 'agency',
+        title: 'A — Agencies running on multiple client sites',
+        desc: 'The current implicit model. Free / Pro / Agency tiers track activation count.',
+        meaning: 'Picking this means every feature gets evaluated through "does this help an agency manage many client sites?" Multi-site rollups, white-label, bulk operations matter most.',
+        pros: [
+          'Matches the existing license tier structure and Hub-as-aggregator pattern.',
+          "Higher LTV per customer — agencies don't churn the way individual sites do.",
+          "Aligns with Peanut's existing brand and customer base.",
+        ],
+        cons: [
+          "Smaller TAM than individual WP sites. There aren't that many agencies.",
+          'Sales cycle is longer; agencies want demos, references, slack channels.',
+          'Single-site features get neglected and the product becomes hard to demo to a non-agency.',
+        ],
+        challenge: "Agencies are great LTV, but they're also brutal evaluators — they compare you to ManageWP, MainWP, GoDaddy Pro, and they want every feature. Are you ready for that comparison set today?",
+      },
+      {
+        value: 'end-client',
+        title: 'B — End-clients on their own single site',
+        desc: 'The person who owns one WordPress site and wants better campaigns + a tidier site.',
+        meaning: 'Picking this means the agency framing is wrong and the license tiers need to flip. Free is the funnel, paid is for individual site owners who want real campaigns.',
+        pros: [
+          "Massive TAM — 40%+ of the web. Even 0.01% adoption is huge.",
+          'Self-serve sales cycle, no demos required.',
+          'Forces the product to be obvious — onboarding, defaults, polish all matter more.',
+        ],
+        cons: [
+          'Brutally price-sensitive. Free WP plugins set the expectation.',
+          'High churn — single-site owners disappear all the time.',
+          "You're competing with Mailchimp, MailerLite, and a thousand free WP form plugins.",
+        ],
+        challenge: "Single-site owners don't need a Hub. If End to End is for them, doesn't that force the answer to Q1 to be 'standalone'? You can't pick this without committing to that.",
+      },
+      {
+        value: 'both',
+        title: 'C — Both, with different SKUs / packaging',
+        desc: 'Two clear product lines: agency package (multi-site, Hub-paired) and individual package (single-site).',
+        meaning: 'Picking this means twice the marketing surface, twice the pricing pages, twice the onboarding paths. But you fish in two ponds.',
+        pros: [
+          'Doubles addressable market without picking a side.',
+          'Different feature roadmaps can serve different segments without conflict.',
+          'Lets Hub-pair and standalone modes coexist as first-class.',
+        ],
+        cons: [
+          "Twice the complexity, every time. Onboarding flows, pricing pages, support docs, the works.",
+          'Risk of falling between two stools — neither audience feels primary.',
+          "Small team can't afford to maintain two product narratives well.",
+        ],
+        challenge: "'Both' is what you say when you can't decide. Which one ships FIRST and gets your full attention for 6 months — the other waits. If you can't pick first, you've picked neither.",
+      },
+      {
+        value: 'unknown',
+        title: "D — Don't know yet — talk to 5 prospects first",
+        desc: "Defer the answer. Get on calls with 5 potential buyers (mix of agency / single-site) before committing.",
+        meaning: 'Picking this means strategic decisions stay paused for ~2 weeks while you do real customer discovery. Implementation work continues on what is unambiguous (cleanup, security, transport).',
+        pros: [
+          "Avoids committing to the wrong audience based on internal assumptions.",
+          'Customer interviews almost always reveal something the code-only view misses.',
+          "Cheap — 5 calls is a week of effort, not a quarter.",
+        ],
+        cons: [
+          'Stalls every other strategic question that depends on this one.',
+          "Risk of analysis paralysis — 'one more interview' becomes 6 months of inaction.",
+          "If your customer list is biased toward one segment, your interviews will be too.",
+        ],
+        challenge: "Customer discovery is wise — but only if you actually do it. What's the deadline for the 5 calls, and who are the 5 specific people? If those aren't on the calendar by Friday, this answer is procrastination wearing a productivity costume.",
+      },
+    ],
+  },
+  {
+    id: 'suite',
+    section: 'Strategic',
+    title: 'What happens to PEANUT-SUITE?',
+    context: 'End to End already has a "disable_suite" hub mode and filters peanut_suite_disabled. The relationship is unstable. Pick a direction.',
+    options: [
+      {
+        value: 'absorb',
+        title: 'A — Absorb Suite into End to End',
+        desc: "Suite's marketing modules always wanted to live closer to the site anyway. Pull them in.",
+        meaning: 'Picking this means Suite becomes a subset of End to End. Existing Suite installs get a migration path. Suite repo eventually goes archive-only.',
+        pros: [
+          "Consolidates the marketing surface in one place — easier to reason about, easier to sell.",
+          'Removes the Suite/End to End boundary that keeps causing weird filter checks.',
+          'One product to maintain instead of two.',
+        ],
+        cons: [
+          'Existing Suite-only customers may not want the rest of End to End.',
+          'Migration is real engineering work — tables, settings, license checks.',
+          "If Suite was someone's love-child, this is politically expensive.",
+        ],
+        challenge: "Absorbing Suite means End to End gets bigger and more sprawling. You just rebranded around 'end to end' — but now you're committing to growing the surface area further. Are you sure you don't want to specialize more, not less?",
+      },
+      {
+        value: 'deprecate',
+        title: 'B — Deprecate Suite outright',
+        desc: 'End to End replaces Suite. Existing Suite users get a sunset notice and a migration to End to End.',
+        meaning: "Picking this means Suite is dead in the next 3-6 months. New installs of Suite get blocked. Customers either move to End to End or churn.",
+        pros: [
+          "Cleanest possible message: 'Suite was an experiment, this is the real product.'",
+          'Forces honest accounting — what does Suite have that End to End doesn\'t?',
+          "Frees up the Peanut roadmap from carrying two marketing products.",
+        ],
+        cons: [
+          'Customer trust hit. Sunsetting products always burns goodwill.',
+          'Anything Suite-only that customers depend on becomes a forced migration crisis.',
+          'License revenue from Suite goes away during the transition.',
+        ],
+        challenge: "Deprecating a product without a clear migration path is malpractice. Have you actually mapped every Suite feature to its End to End equivalent? If even one is missing, this is a customer-facing disaster.",
+      },
+      {
+        value: 'split',
+        title: 'C — Keep Suite as the dashboard / aggregator',
+        desc: "Clean split: End to End is on-site agent, Suite is the cross-site dashboard / aggregator product.",
+        meaning: 'Picking this means Suite stops trying to do tracking/popups/forms and becomes the analytics + cross-site management surface. End to End feeds Suite. They have non-overlapping jobs.',
+        pros: [
+          'Each product has a clear, defensible job.',
+          'Removes the Suite/End to End filter weirdness — they no longer overlap functionally.',
+          'Suite becomes a real Hub-tier product instead of a shadow of End to End.',
+        ],
+        cons: [
+          'Big refactor on the Suite side — strip out features it currently has.',
+          "If Hub already does aggregation, Suite is now competing with Hub. Awkward.",
+          "Two products that depend on each other = two release cadences to coordinate.",
+        ],
+        challenge: "Wait — what's the difference between 'Suite as the dashboard / aggregator' and 'Hub as the dashboard / aggregator'? If Hub already exists for that, Suite is solving a problem you already solved.",
+      },
+      {
+        value: 'defer',
+        title: 'D — Defer for 90 days',
+        desc: "Too entangled to decide right now. Park the question, revisit when End to End post-rebrand has stabilized.",
+        meaning: "Picking this means Suite gets no roadmap attention for 90 days. End to End decisions get made assuming Suite stays as-is. Re-open in August with more data.",
+        pros: [
+          "Avoids making a Suite decision under pressure of an End to End rebrand that just happened.",
+          'Gives time to see how customers actually respond to the rebrand.',
+          'Lets one decision set settle before opening the next.',
+        ],
+        cons: [
+          'Defers a decision that\'s actively causing weird code today.',
+          "'90 days' tends to become 'forever.'",
+          "Suite continues to drift — every week of indecision costs a little more in awkward filters.",
+        ],
+        challenge: "What changes in 90 days that doesn't change today? If you can't name a specific signal you're waiting for, 'defer' is a synonym for 'avoid.'",
+      },
+    ],
+  },
+  {
+    id: 'waf',
+    section: 'Risk',
+    title: 'How do you actually solve the WAF problem?',
+    context: 'Three releases in 48 hours fighting mod_security mangling Connect↔Hub responses. Status-code workarounds keep accumulating. Decide whether to fix the cause or keep patching symptoms.',
+    options: [
+      {
+        value: 'triage',
+        title: 'A — Per-client triage / whitelist',
+        desc: "Treat each WAF incident as ops. Help the affected client whitelist Hub IPs / paths.",
+        meaning: 'Picking this means no protocol-level work. When a client hits a WAF, support helps them configure the WAF or move hosts.',
+        pros: [
+          "Zero engineering investment up front.",
+          'Sometimes the fix really is a host config issue, not a protocol issue.',
+        ],
+        cons: [
+          "Doesn't scale. Every new client is a new triage incident.",
+          'Some hosts (managed WP hosts) won\'t let clients touch WAF rules.',
+          'You will keep shipping releases that "fix" WAF responses and the bug class never goes away.',
+        ],
+        challenge: "You've shipped three WAF-fix releases in two days. That's not triage — that's denial. How many more do you need to see before this graduates to 'real problem'?",
+      },
+      {
+        value: 'envelope',
+        title: 'B — Build the signed-envelope protocol',
+        desc: '~2 weeks of work. Sign the body, version the envelope, treat HTTP status codes as untrusted noise.',
+        meaning: "Picking this means a real protocol-layer fix. Connect↔Hub stops trusting HTTP semantics; the body itself carries auth and intent. WAFs can mangle codes all they want.",
+        pros: [
+          "Permanent fix to a recurring class of bug.",
+          'Better security story (signed bodies are a real win).',
+          "Easier to debug — protocol violations become explicit.",
+        ],
+        cons: [
+          '~2 weeks of focused engineering.',
+          'Both ends (Connect AND Hub) need to ship in lockstep.',
+          'Existing clients need a transition period where both protocols coexist.',
+        ],
+        challenge: "Two weeks is a real bet. If WAF issues actually only hit ~3 clients out of N, is the protocol effort worth it, or are you over-engineering a long-tail problem?",
+      },
+      {
+        value: 'subdomain',
+        title: 'C — Move Hub-bound traffic to a different subdomain/port',
+        desc: 'Some WAFs trust certain subdomain patterns (api.*, etc.) more than others. Test the cheap fix.',
+        meaning: 'Picking this means a few hours of DNS/routing work to see if WAFs leave a different endpoint alone. No protocol changes.',
+        pros: [
+          "Cheapest possible experiment.",
+          "If it works, it works — no further effort needed.",
+          "Easy to roll back.",
+        ],
+        cons: [
+          "Might not work at all. WAFs check more than subdomains.",
+          "Even if it works, doesn't solve the next class of WAF bug.",
+          "Adds a subdomain to maintain, monitor, and certificate.",
+        ],
+        challenge: "This is a hope, not a strategy. What's the prior probability that a different subdomain alone fixes a mod_security rule that's clearly inspecting bodies and codes?",
+      },
+      {
+        value: 'both',
+        title: 'D — Triage now, envelope medium-term',
+        desc: 'Use option A this week to unblock affected clients. Schedule option B for the next 2 weeks.',
+        meaning: "Picking this means the fire gets put out today, AND the underlying cause gets fixed. Both engineering and ops effort in sequence.",
+        pros: [
+          "Realistic — production fires don't wait for protocol redesigns.",
+          'Forces the envelope work to be scheduled, not just discussed.',
+          'Best long-term outcome.',
+        ],
+        cons: [
+          'Most expensive option in total effort.',
+          "Risk of triage 'good enough' inertia killing the medium-term work.",
+          "Scheduling discipline required — easy to slip.",
+        ],
+        challenge: "Picking 'both' is wise — but only if you actually commit to the medium-term part. What specific date does the envelope protocol design doc need to exist by, and who owns it?",
+      },
+    ],
+  },
+  {
+    id: 'surface',
+    section: 'Operational',
+    title: 'Where should the marketing surface live in 12 months?',
+    context: "Today: tracker/popups/forms run on the WP plugin (the edge), dashboards/storage live in Hub. Decide whether to push more toward edge or center.",
+    options: [
+      {
+        value: 'status-quo',
+        title: 'A — Status quo',
+        desc: 'Edge does execution, Hub does aggregation. Current split is the steady state.',
+        meaning: "Picking this means feature work distributes evenly — new tracking goes on the plugin, new analytics goes on Hub. No strategic shift.",
+        pros: [
+          'Matches what already works.',
+          "Each codebase plays to its strengths.",
+          'No migration cost.',
+        ],
+        cons: [
+          "Doesn't lean into the unique edge advantage (ad-blocker resilience, server-side capture).",
+          "Doesn't simplify Hub either.",
+          'Status quo answers feel safe but rarely create competitive advantage.',
+        ],
+        challenge: "Status quo is fine when nothing's wrong — but the WAF problems and the response-shape bugs are screaming that the seam isn't healthy. Are you sure the current split IS the steady state, or is it the local maximum?",
+      },
+      {
+        value: 'edge',
+        title: 'B — Move more to the edge (the on-site plugin)',
+        desc: "Lean into ad-blocker resilience, server-side everything, first-party tracking. Edge is the moat.",
+        meaning: "Picking this means new marketing features default to plugin-side. Hub becomes thinner over time. Tracker, popups, forms, conversion logic all gravitate to the WP install.",
+        pros: [
+          "The edge is your unique advantage — nobody else has code-level access to the client site.",
+          'First-party + server-side is the future of attribution as third-party cookies die.',
+          "Plugin can do things SaaS literally can't (file system, server-side rendering, runtime hooks).",
+        ],
+        cons: [
+          'Heavier plugin = more attack surface, more performance burden on client sites.',
+          "Plugin updates are slower than SaaS deploys — bugs ship for longer.",
+          "WP version compatibility forever.",
+        ],
+        challenge: "Doubling down on edge means doubling down on PHP and WP-version-compat hell. Are you and your team energized for that, or is SaaS work where the team actually wants to be?",
+      },
+      {
+        value: 'hub',
+        title: 'C — Move more to Hub',
+        desc: 'The single-site plugin should be a dumb pipe. Centralize logic, ship faster, debug easier.',
+        meaning: "Picking this means tracker logic, conversion rules, popup display logic gradually migrate to Hub. Plugin becomes a thin executor of Hub-controlled config.",
+        pros: [
+          "Faster iteration — Hub deploys instead of plugin updates.",
+          'Easier debugging — one source of truth.',
+          'Reduces the surface area of the plugin (smaller = safer).',
+        ],
+        cons: [
+          'Throws away the edge advantage — server-side execution is the unique wedge.',
+          'Increases Hub-dependency, contradicting any "standalone" framing.',
+          'WAF problems get WORSE — more chatter between Connect and Hub.',
+        ],
+        challenge: "Centralizing on Hub right after committing to fix WAF issues is like building a longer bridge over a river that keeps flooding. Are you sure you want more Hub-bound traffic, not less?",
+      },
+      {
+        value: 'unknown',
+        title: "D — Don't know yet — need usage data",
+        desc: "Defer until you have real telemetry on which features get used and where bottlenecks actually live.",
+        meaning: 'Picking this means investing in instrumentation first. Decide where things live AFTER seeing what actually gets used.',
+        pros: [
+          'Data > opinion.',
+          'May reveal that the question is overblown — most features run fine where they are.',
+        ],
+        cons: [
+          "Telemetry projects always take longer than expected.",
+          "Without a clear hypothesis, you'll collect data and still not know what to do.",
+          "Defers an architectural decision, which means tech debt accumulates in the meantime.",
+        ],
+        challenge: "What specific question would the telemetry answer? If you can't write the SQL query that would settle the debate, 'need data' is just 'need to feel certain' in disguise.",
+      },
+    ],
+  },
+  {
+    id: 'priorities',
+    section: 'Operational',
+    title: 'Immediate technical priorities (multi-select — pick all that apply)',
+    context: "From CAT's report. These are independent of the strategic answers above. Pick what gets worked on in the next 2-4 weeks.",
+    multi: true,
+    options: [
+      {
+        value: 'split-api',
+        title: 'Split the 2,819-line class-connect-api.php',
+        desc: 'Along the existing seam: health/updates/backup vs marketing/tracking/analytics-proxy.',
+        meaning: 'Refactor work, ~3-5 days. Reduces blast radius of every future change to that file.',
+        pros: ['Easier to reason about.', 'Future security audits scope shrinks.', 'New endpoints get added without touching unrelated code.'],
+        cons: ['Pure refactor — no user-visible value.', 'Risk of introducing bugs during the split.', "Doesn't ship customer features."],
+      },
+      {
+        value: 'envelope',
+        title: 'Harden Connect↔Hub transport (signed envelope)',
+        desc: 'Same as Q4 option B. ~2 weeks of focused work.',
+        meaning: 'Permanent fix to the WAF/response-shape bug class. Real protocol-level engineering.',
+        pros: ['Ends the WAF whack-a-mole.', 'Better security posture.', 'Less debugging time forever after.'],
+        cons: ['Two-week timeline.', 'Both ends ship in lockstep.', 'Existing clients need a transition period.'],
+      },
+      {
+        value: 'cleanup-repo',
+        title: 'Strip composer artifacts and dist/ZIPs from repo',
+        desc: 'composer.phar, composer-setup.php, 14 release ZIPs in dist/ — all should not be tracked.',
+        meaning: 'Cleanup work, ~1 hour. Smaller checkout, cleaner repo, no accidental reuse of stale binaries.',
+        pros: ['Trivial to do.', "Removes confusion ('which is the real composer.phar?')", 'Keeps repo lean.'],
+        cons: ['No real downside.', 'Worth checking that no script depends on the in-repo composer.phar first.'],
+      },
+      {
+        value: 'security-audit',
+        title: 'Real security audit on class-connect-api.php',
+        desc: '2,819-line API surface deserves a focused review pass before more endpoints get added.',
+        meaning: 'Dedicated review — auth checks, input sanitization, rate limiting, capability checks, SQL queries. ~2-3 days.',
+        pros: ['Catches issues before next release.', 'Documents the threat model for future work.', 'Establishes a baseline for the post-split refactor.'],
+        cons: ['Time investment.', 'May surface uncomfortable findings that block other work.'],
+      },
+      {
+        value: 'release-310',
+        title: 'Build SPA + ship 3.7.10 with rebrand',
+        desc: 'npm run build, version bump, GitHub release, mu-plugin sees the new name.',
+        meaning: 'The rebrand is in source but customers still see "Hub Connect" in the SPA bundle. This makes it real.',
+        pros: ['Closes the loop on the rebrand work.', 'Existing installs see the new name on next auto-update.', 'Trivial release.'],
+        cons: ['You may want to bundle other fixes with the release first.'],
+      },
+      {
+        value: 'axios-fix',
+        title: 'Fix the axios interceptor double-unwrap class of bug',
+        desc: 'Two bugs in 24 hours (3.7.2, 3.7.3) suggest the interceptor does magic call sites don\'t expect.',
+        meaning: 'Audit the axios layer — formalize the response shape, remove implicit unwrapping, type the contracts. ~2 days.',
+        pros: ['Eliminates a recurring bug class.', "Makes API contracts explicit and testable.", 'Adjacent to the envelope work.'],
+        cons: ['Touches every API call site to verify nothing breaks.', 'Pure cleanup, no new features.'],
+      },
+      {
+        value: 'other',
+        title: 'Other — write it in the notes',
+        desc: 'Capture priorities not on this list.',
+        meaning: 'Use the notes field on the next screen to describe what else needs to ship.',
+        pros: [],
+        cons: [],
+      },
+    ],
+  },
+];
+
+const state = {
+  index: 0,
+  phase: 'pick', // 'pick' | 'challenge' | 'done'
+  answers: {}, // id -> string | string[]
+  notes: {}, // id -> string
+};
+
+const root = document.getElementById('root');
+const progress = document.getElementById('progress');
+
+function renderProgress() {
+  progress.innerHTML = QUESTIONS.map((_, i) => {
+    let cls = '';
+    if (i < state.index) cls = 'done';
+    else if (i === state.index) cls = 'current';
+    return `<div class="pip ${cls}"></div>`;
+  }).join('');
+}
+
+function isAnswered(q) {
+  const a = state.answers[q.id];
+  if (q.multi) return Array.isArray(a) && a.length > 0;
+  return typeof a === 'string' && a.length > 0;
+}
+
+function renderPick(q) {
+  const isMulti = !!q.multi;
+  const inputType = isMulti ? 'checkbox' : 'radio';
+  const current = state.answers[q.id];
+
+  const optionsHTML = q.options.map(o => {
+    const checked = isMulti
+      ? Array.isArray(current) && current.includes(o.value)
+      : current === o.value;
+    return `
+      <label class="option ${checked ? 'selected' : ''}" data-val="${o.value}">
+        <input type="${inputType}" name="opt" value="${o.value}" ${checked ? 'checked' : ''} />
+        <div class="option-body">
+          <div class="option-title">${escapeHtml(o.title)}</div>
+          <div class="option-desc">${escapeHtml(o.desc)}</div>
+        </div>
+      </label>
+    `;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="card">
+      <div class="section-tag">${escapeHtml(q.section)} · question ${state.index + 1} of ${QUESTIONS.length}${isMulti ? ' · multi-select' : ''}</div>
+      <h2 class="q-title">${escapeHtml(q.title)}</h2>
+      <p class="q-context">${escapeHtml(q.context)}</p>
+      <div class="options" id="opts">${optionsHTML}</div>
+      <div class="actions">
+        ${state.index > 0 ? '<button class="ghost" id="back">Back</button>' : ''}
+        <button class="primary" id="next" ${isAnswered(q) ? '' : 'disabled'}>Next →</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('opts').addEventListener('click', e => {
+    const lbl = e.target.closest('.option');
+    if (!lbl) return;
+    const val = lbl.dataset.val;
+    if (isMulti) {
+      const arr = Array.isArray(state.answers[q.id]) ? [...state.answers[q.id]] : [];
+      const i = arr.indexOf(val);
+      if (i >= 0) arr.splice(i, 1); else arr.push(val);
+      state.answers[q.id] = arr;
+    } else {
+      state.answers[q.id] = val;
+    }
+    renderPick(q);
+  });
+
+  const nextBtn = document.getElementById('next');
+  if (nextBtn) nextBtn.addEventListener('click', () => {
+    if (!isAnswered(q)) return;
+    state.phase = 'challenge';
+    render();
+  });
+
+  const backBtn = document.getElementById('back');
+  if (backBtn) backBtn.addEventListener('click', () => {
+    state.index = Math.max(0, state.index - 1);
+    state.phase = 'pick';
+    render();
+  });
+}
+
+function renderChallenge(q) {
+  const a = state.answers[q.id];
+  const picks = q.multi ? a.map(v => q.options.find(o => o.value === v)).filter(Boolean) : [q.options.find(o => o.value === a)];
+
+  let body = '';
+  if (q.multi) {
+    body = `
+      <div class="picked-list">
+        ${picks.map(p => `
+          <div class="pick">
+            <div class="pick-title">${escapeHtml(p.title)}</div>
+            <div class="pick-meaning">${escapeHtml(p.meaning || p.desc)}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="counter">You picked ${picks.length} item${picks.length === 1 ? '' : 's'}. Anything you put on this list eats time you could spend on the strategic shifts above. Are these the highest-leverage moves, or the most comfortable ones?</div>
+    `;
+  } else {
+    const p = picks[0];
+    body = `
+      <div class="meaning">${escapeHtml(p.meaning)}</div>
+      <h4>Pros</h4>
+      <ul class="pros">${p.pros.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+      <h4>Cons</h4>
+      <ul class="cons">${p.cons.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+      <div class="counter">${escapeHtml(p.challenge)}</div>
+    `;
+  }
+
+  root.innerHTML = `
+    <div class="card">
+      <div class="section-tag">${escapeHtml(q.section)} · CAT pushes back</div>
+      <h2 class="q-title">${escapeHtml(q.title)}</h2>
+      <div class="challenge">${body}</div>
+      <textarea id="notes" placeholder="Any nuance, constraints, or pushback to your own answer? (optional, will go in the final summary)">${escapeHtml(state.notes[q.id] || '')}</textarea>
+      <div class="actions">
+        <button class="ghost" id="change">← Change my answer</button>
+        <button class="primary" id="stick">Stand by it →</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('notes').addEventListener('input', e => {
+    state.notes[q.id] = e.target.value;
+  });
+
+  document.getElementById('change').addEventListener('click', () => {
+    state.phase = 'pick';
+    render();
+  });
+
+  document.getElementById('stick').addEventListener('click', () => {
+    if (state.index === QUESTIONS.length - 1) {
+      state.phase = 'done';
+    } else {
+      state.index += 1;
+      state.phase = 'pick';
+    }
+    render();
+  });
+}
+
+function detectConflicts() {
+  const c = [];
+  const a = state.answers;
+
+  if (a.identity === 'satellite' && a.suite === 'deprecate') {
+    c.push("Q1 says End to End is a satellite of Hub, but Q3 says deprecate Suite. If End to End is just Hub's limb, what's the standalone product Suite users migrate to? Reconcile.");
+  }
+  if (a.identity === 'satellite' && a.surface === 'edge') {
+    c.push("Q1 says satellite (Hub is the brain) but Q5 says move more to the edge. A satellite that grows on its own is a contradiction — pick whether the plugin is gaining or shedding capability.");
+  }
+  if (a.identity === 'os' && a.surface === 'hub') {
+    c.push("Q1 says standalone marketing OS, Q5 says move more to Hub. Standalone means LESS Hub dependency, not more. These don't both fit.");
+  }
+  if (a.identity === 'os' && a.suite === 'split') {
+    c.push("Q1 says End to End is the standalone product, Q3 says Suite is the standalone-ish dashboard. Two standalone products from one ecosystem competing for attention — is that intentional?");
+  }
+  if (a.buyer === 'end-client' && a.identity === 'satellite') {
+    c.push("Q2 says single-site end-clients are the buyer, but Q1 says End to End requires a Hub. Single-site owners don't have Hubs. The buyer profile and the product framing aren't compatible.");
+  }
+  if (a.buyer === 'agency' && a.identity === 'os') {
+    c.push("Q2 says agencies are the buyer (multi-site, current tier model), but Q1 commits to a standalone OS. Agencies don't need standalone — they need multi-site management. Is the standalone OS a different product?");
+  }
+  if (a.suite === 'defer' && (a.identity === 'absorb' || a.identity === 'os' || a.identity === 'campaign-pure')) {
+    // identity values are different — keep this loose
+  }
+  if (a.suite === 'defer' && a.identity && a.identity !== 'trenchcoat') {
+    c.push("Q3 defers the Suite question, but Q1 makes a strong identity commitment that depends on Suite's status. You can't decide what End to End IS without deciding what Suite is doing.");
+  }
+  if (a.waf === 'triage' && (a.surface === 'hub' || a.surface === 'edge')) {
+    c.push("Q4 picks per-client WAF triage only, but Q5 commits to ANY architectural shift in marketing surface. Architectural shifts increase Connect↔Hub traffic — meaning more WAF incidents. Triage-only won't survive that.");
+  }
+  if (a.waf === 'subdomain' && a.surface === 'hub') {
+    c.push("Q4 hopes a subdomain change fixes the WAF, Q5 commits to MORE Hub-bound traffic. If the subdomain doesn't work (most likely), centralizing on Hub gets very painful.");
+  }
+  if (Array.isArray(a.priorities)) {
+    if (a.priorities.includes('envelope') && a.waf === 'triage') {
+      c.push("Q4 says triage-only, but Q6 includes building the envelope protocol. Pick one — either the envelope is worth it or it isn't.");
+    }
+    if (!a.priorities.includes('envelope') && a.waf === 'envelope') {
+      c.push("Q4 commits to the envelope protocol but Q6 didn't pick it as a priority. Either it's a priority or you're saying it's not getting done.");
+    }
+    if (!a.priorities.includes('envelope') && a.waf === 'both') {
+      c.push("Q4 says triage now + envelope medium-term, but Q6 didn't include the envelope work. Without scheduling it as a priority, 'medium-term' becomes 'never.'");
+    }
+    if (a.priorities.includes('split-api') && a.priorities.includes('security-audit')) {
+      c.push("Q6 includes BOTH split-api and security-audit. Order matters: audit before split (audit informs split design) or after (audit covers split output)? Decide which.");
+    }
+  }
+  return c;
+}
+
+function renderDone() {
+  const conflicts = detectConflicts();
+  const md = generateMarkdown();
+
+  let conflictsHTML = '';
+  if (conflicts.length > 0) {
+    conflictsHTML = `
+      <div class="conflicts">
+        <h3>⚠ Tensions to reconcile</h3>
+        <ul>${conflicts.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul>
+      </div>
+    `;
+  }
+
+  root.innerHTML = `
+    <div class="card">
+      <div class="section-tag">Final · paste back to Claude</div>
+      <h2 class="q-title">All decisions captured</h2>
+      ${conflictsHTML}
+      ${renderSummary()}
+      <hr/>
+      <h3 style="margin: 0 0 8px;">Markdown for Claude <button class="ghost copybtn" id="copy">Copy</button></h3>
+      <pre id="md">${escapeHtml(md)}</pre>
+      <div class="actions">
+        <button class="ghost" id="restart">Start over</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(md);
+      const btn = document.getElementById('copy');
+      btn.textContent = 'Copied ✓';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    } catch (e) {
+      alert('Copy failed — select the text manually.');
+    }
+  });
+
+  document.getElementById('restart').addEventListener('click', () => {
+    if (!confirm('Wipe all answers and start over?')) return;
+    state.index = 0;
+    state.phase = 'pick';
+    state.answers = {};
+    state.notes = {};
+    render();
+  });
+}
+
+function renderSummary() {
+  return QUESTIONS.map(q => {
+    const a = state.answers[q.id];
+    if (!a || (Array.isArray(a) && a.length === 0)) return '';
+    const opts = q.multi ? a.map(v => q.options.find(o => o.value === v)).filter(Boolean) : [q.options.find(o => o.value === a)];
+    const note = state.notes[q.id];
+    return `
+      <div class="summary-section">
+        <h3>${escapeHtml(q.title)}</h3>
+        <div class="picked-list">
+          ${opts.map(o => `
+            <div class="pick">
+              <div class="pick-title">${escapeHtml(o.title)}</div>
+              <div class="pick-meaning">${escapeHtml(o.meaning || o.desc)}</div>
+            </div>
+          `).join('')}
+          ${note ? `<div class="pick"><div class="small">Notes: ${escapeHtml(note)}</div></div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function generateMarkdown() {
+  const lines = ['# CAT decision tree — Peanut End to End', '', `_Captured ${new Date().toISOString().slice(0, 10)}_`, ''];
+  QUESTIONS.forEach(q => {
+    const a = state.answers[q.id];
+    if (!a || (Array.isArray(a) && a.length === 0)) return;
+    lines.push(`## ${q.title}`);
+    lines.push('');
+    const opts = q.multi ? a.map(v => q.options.find(o => o.value === v)).filter(Boolean) : [q.options.find(o => o.value === a)];
+    opts.forEach(o => {
+      lines.push(`- **${o.title}** — ${o.meaning || o.desc}`);
+    });
+    if (state.notes[q.id]) {
+      lines.push('');
+      lines.push(`> Notes: ${state.notes[q.id]}`);
+    }
+    lines.push('');
+  });
+
+  const conflicts = detectConflicts();
+  if (conflicts.length > 0) {
+    lines.push('## ⚠ Tensions to reconcile');
+    lines.push('');
+    conflicts.forEach(c => lines.push(`- ${c}`));
+    lines.push('');
+  }
+
+  lines.push('---');
+  lines.push('');
+  lines.push('Use these answers to draft an action plan. Surface any tensions above before committing to next steps.');
+  return lines.join('\n');
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function render() {
+  renderProgress();
+  if (state.phase === 'done') return renderDone();
+  const q = QUESTIONS[state.index];
+  if (state.phase === 'challenge') return renderChallenge(q);
+  return renderPick(q);
+}
+
+render();
+</script>
+</body>
+</html>
