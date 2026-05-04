@@ -666,7 +666,7 @@ class Peanut_Connect_API {
         // Disconnect from hub
         register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/hub/disconnect', [
             'methods' => WP_REST_Server::CREATABLE,
-            'callback' => [$this, 'disconnect_from_hub'],
+            'callback' => [$this, 'disconnect_hub'],
             'permission_callback' => [$this, 'admin_permission_check'],
         ]);
 
