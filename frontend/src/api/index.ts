@@ -13,10 +13,12 @@ export {
 export { marketingApi } from './marketing';
 export type {
   Utm,
+  UtmUpdateInput,
   Link,
   CampaignBuildInput,
   CampaignResult,
   JourneyStats,
   TrackingSetup,
   Paginated,
+  FunnelStage,
 } from './marketing';

@@ -15,8 +15,25 @@ export interface Utm {
   is_archived: boolean;
   click_count?: number;
   links_count?: number;
+  send_count?: number;
+  campaign_cost?: number | string | null;
+  cost_per_send?: number | string | null;
+  notes?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface UtmUpdateInput {
+  name?: string;
+  send_count?: number | null;
+  campaign_cost?: number | null;
+  notes?: string | null;
+  base_url?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string | null;
+  utm_term?: string | null;
 }
 
 export interface Link {
@@ -54,6 +71,8 @@ export interface CampaignBuildInput {
   utm_content?: string;
   utm_term?: string;
   custom_slug?: string;
+  send_count?: number;
+  campaign_cost?: number;
 }
 
 export interface CampaignResult {
@@ -62,6 +81,12 @@ export interface CampaignResult {
   link: Link;
   short_url: string;
   full_url: string;
+}
+
+export interface FunnelStage {
+  stage: string;
+  label: string;
+  count: number;
 }
 
 export interface JourneyStats {
@@ -79,6 +104,17 @@ export interface JourneyStats {
     journeys: number;
     conversions: number;
   }>;
+  funnel?: FunnelStage[];
+  cost_total?: number;
+  cost_per_acquisition?: number | null;
+  click_through_rate?: number | null;
+  time_series?: Array<{ date: string; journeys: number; conversions: number }>;
+  devices?: Array<{ device_type: string; count: number }>;
+  regions?: Array<{ country: string; region: string | null; count: number }>;
+  sankey?: {
+    nodes: Array<{ id: number; name: string; category: string }>;
+    links: Array<{ source: number; target: number; value: number }>;
+  };
 }
 
 export interface TrackingSetup {
@@ -98,6 +134,11 @@ export const marketingApi = {
   listUtms: async (params: { archived?: boolean; per_page?: number; page?: number } = {}): Promise<Paginated<Utm>> => {
     const res = await api.get('/marketing/utms', { params });
     return res.data as Paginated<Utm>;
+  },
+
+  updateUtm: async (id: number, input: UtmUpdateInput): Promise<Utm> => {
+    const res = await api.put(`/marketing/utms/${id}`, input);
+    return res.data.utm as Utm;
   },
 
   archiveUtm: async (id: number): Promise<Utm> => {

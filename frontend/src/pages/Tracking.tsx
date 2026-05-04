@@ -16,11 +16,11 @@ export default function Tracking() {
     const key = data?.site_key ? '<<paste your Site Key from Hub>>' : '<<paste your Site Key from Hub>>';
     return [
       '<script>',
-      "(function(w,d,s,k,h){w.pnut=w.pnut||function(){(w.pnut.q=w.pnut.q||[]).push(arguments)};",
-      "w.pnut.k=k;w.pnut.h=h;var f=d.getElementsByTagName(s)[0],j=d.createElement(s);",
+      "(function(w,d,s,k,h){w.phub=w.phub||function(){(w.phub.q=w.phub.q||[]).push(arguments)};",
+      "w.phub.k=k;w.phub.h=h;var f=d.getElementsByTagName(s)[0],j=d.createElement(s);",
       "j.async=true;j.src=h+'/js/tracker.min.js';f.parentNode.insertBefore(j,f);",
       `})(window,document,'script','${key}','${hub}');`,
-      "pnut('pageview');",
+      "phub('pageview');",
       '</script>',
     ].join('\n');
   }, [data]);
@@ -28,8 +28,8 @@ export default function Tracking() {
   const conversionSnippet = [
     '<script>',
     '(function checkPnut() {',
-    "  if (typeof pnut === 'function') {",
-    "    pnut('conversion', 'enrollment', 0);",
+    "  if (typeof phub === 'function') {",
+    "    phub('conversion', 'enrollment', 0);",
     '  } else { setTimeout(checkPnut, 100); }',
     '})();',
     '</script>',
@@ -84,7 +84,7 @@ export default function Tracking() {
             For richer reporting, add customer info:
           </p>
           <Snippet
-            code={"pnut('conversion', 'enrollment', 0, { email: {{Form Email}}, name: {{Form Name}} });"}
+            code={"phub('conversion', 'enrollment', 0, { email: {{Form Email}}, name: {{Form Name}} });"}
           />
         </Card>
 
@@ -93,7 +93,7 @@ export default function Tracking() {
           <ul className="text-sm text-slate-700 space-y-2 list-disc pl-5">
             <li>
               <strong>Conversion not appearing:</strong> open GTM Preview, confirm the conversion tag fires, and
-              run <code>typeof pnut</code> in the browser console — it should return <code>"function"</code>.
+              run <code>typeof phub</code> in the browser console — it should return <code>"function"</code>.
             </li>
             <li>
               <strong>Conversion fires but isn't linked to a campaign:</strong> verify <code>click_id</code> and

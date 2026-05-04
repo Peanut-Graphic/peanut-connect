@@ -2,11 +2,19 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, Button, Alert } from '@/components/common';
-import { marketingApi, type Utm } from '@/api';
-import { Archive, ArchiveRestore, Trash2, ExternalLink, Copy } from 'lucide-react';
+import { marketingApi, type Utm, type UtmUpdateInput } from '@/api';
+import {
+  Archive,
+  ArchiveRestore,
+  Trash2,
+  ExternalLink,
+  Copy,
+  Pencil,
+} from 'lucide-react';
 
 export default function Utms() {
   const [showArchived, setShowArchived] = useState(false);
+  const [editing, setEditing] = useState<Utm | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
@@ -28,6 +36,14 @@ export default function Utms() {
   const remove = useMutation({
     mutationFn: (id: number) => marketingApi.deleteUtm(id),
     onSuccess: invalidate,
+  });
+  const update = useMutation({
+    mutationFn: ({ id, input }: { id: number; input: UtmUpdateInput }) =>
+      marketingApi.updateUtm(id, input),
+    onSuccess: () => {
+      invalidate();
+      setEditing(null);
+    },
   });
 
   const utms = data?.data ?? [];
@@ -76,6 +92,8 @@ export default function Utms() {
                   <th className="text-left px-4 py-2 font-medium">Name</th>
                   <th className="text-left px-4 py-2 font-medium">Source / Medium</th>
                   <th className="text-left px-4 py-2 font-medium">Campaign</th>
+                  <th className="text-right px-4 py-2 font-medium">Reach</th>
+                  <th className="text-right px-4 py-2 font-medium">Cost</th>
                   <th className="text-right px-4 py-2 font-medium">Clicks</th>
                   <th className="text-right px-4 py-2 font-medium">Links</th>
                   <th className="px-4 py-2"></th>
@@ -87,10 +105,15 @@ export default function Utms() {
                     key={utm.id}
                     utm={utm}
                     archived={showArchived}
+                    onEdit={() => setEditing(utm)}
                     onArchive={() => archive.mutate(utm.id)}
                     onRestore={() => restore.mutate(utm.id)}
                     onDelete={() => {
-                      if (confirm(`Delete "${utm.name}"? This also removes its short links and click history.`)) {
+                      if (
+                        confirm(
+                          `Delete "${utm.name}"? This also removes its short links and click history.`,
+                        )
+                      ) {
                         remove.mutate(utm.id);
                       }
                     }}
@@ -101,6 +124,17 @@ export default function Utms() {
           </div>
         )}
       </Card>
+
+      {editing && (
+        <EditUtmModal
+          utm={editing}
+          isLive={(editing.click_count ?? 0) > 0}
+          onClose={() => setEditing(null)}
+          onSave={(input) => update.mutate({ id: editing.id, input })}
+          saving={update.isPending}
+          error={update.error ? (update.error as Error).message : null}
+        />
+      )}
     </Layout>
   );
 }
@@ -108,12 +142,14 @@ export default function Utms() {
 function UtmRow({
   utm,
   archived,
+  onEdit,
   onArchive,
   onRestore,
   onDelete,
 }: {
   utm: Utm;
   archived: boolean;
+  onEdit: () => void;
   onArchive: () => void;
   onRestore: () => void;
   onDelete: () => void;
@@ -126,6 +162,8 @@ function UtmRow({
     }
   }
 
+  const cost = utm.campaign_cost == null ? null : Number(utm.campaign_cost);
+
   return (
     <tr className="hover:bg-slate-50">
       <td className="px-4 py-3">
@@ -136,10 +174,27 @@ function UtmRow({
         {utm.utm_source} / {utm.utm_medium}
       </td>
       <td className="px-4 py-3 text-slate-700">{utm.utm_campaign}</td>
-      <td className="px-4 py-3 text-right text-slate-700 tabular-nums">{utm.click_count ?? 0}</td>
+      <td className="px-4 py-3 text-right text-slate-700 tabular-nums">
+        {utm.send_count ? utm.send_count.toLocaleString() : '—'}
+      </td>
+      <td className="px-4 py-3 text-right text-slate-700 tabular-nums">
+        {cost != null && cost > 0 ? `$${cost.toFixed(2)}` : '—'}
+      </td>
+      <td className="px-4 py-3 text-right text-slate-700 tabular-nums">
+        {utm.click_count ?? 0}
+      </td>
       <td className="px-4 py-3 text-right text-slate-700 tabular-nums">{utm.links_count ?? 0}</td>
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700"
+            aria-label="Edit UTM"
+            title="Edit"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
           <button
             type="button"
             onClick={copyUrl}
@@ -192,5 +247,201 @@ function UtmRow({
         </div>
       </td>
     </tr>
+  );
+}
+
+function EditUtmModal({
+  utm,
+  isLive,
+  onClose,
+  onSave,
+  saving,
+  error,
+}: {
+  utm: Utm;
+  isLive: boolean;
+  onClose: () => void;
+  onSave: (input: UtmUpdateInput) => void;
+  saving: boolean;
+  error: string | null;
+}) {
+  const [name, setName] = useState(utm.name);
+  const [sendCount, setSendCount] = useState<string>(
+    utm.send_count != null ? String(utm.send_count) : '',
+  );
+  const [cost, setCost] = useState<string>(
+    utm.campaign_cost != null ? String(Number(utm.campaign_cost).toFixed(2)) : '',
+  );
+  const [notes, setNotes] = useState(utm.notes ?? '');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [source, setSource] = useState(utm.utm_source);
+  const [medium, setMedium] = useState(utm.utm_medium);
+  const [campaign, setCampaign] = useState(utm.utm_campaign);
+  const [baseUrl, setBaseUrl] = useState(utm.base_url);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const input: UtmUpdateInput = {
+      name,
+      send_count: sendCount === '' ? 0 : Number(sendCount),
+      campaign_cost: cost === '' ? 0 : Number(cost),
+      notes: notes || null,
+    };
+    if (showAdvanced) {
+      input.utm_source = source;
+      input.utm_medium = medium;
+      input.utm_campaign = campaign;
+      input.base_url = baseUrl;
+    }
+    onSave(input);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 overflow-y-auto">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-lg shadow-xl w-full max-w-lg my-8"
+      >
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h2 className="text-base font-semibold text-slate-900">Edit campaign</h2>
+          <p className="text-xs text-slate-500 mt-0.5">{utm.name}</p>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {error && <Alert variant="error">{error}</Alert>}
+
+          <Field label="Campaign name">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+              required
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Reach (sent / impressions)"
+              hint="People you sent this campaign to."
+            >
+              <input
+                type="number"
+                min={0}
+                value={sendCount}
+                onChange={(e) => setSendCount(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                placeholder="e.g. 5000"
+              />
+            </Field>
+            <Field label="Cost (USD)" hint="Total spend for this campaign.">
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                placeholder="e.g. 75.00"
+              />
+            </Field>
+          </div>
+
+          <Field label="Notes" hint="Internal — not shown anywhere public.">
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+            />
+          </Field>
+
+          <div className="border-t border-slate-100 pt-4">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="text-sm text-slate-600 hover:text-slate-900 underline-offset-2 hover:underline"
+            >
+              {showAdvanced ? 'Hide' : 'Show'} advanced (campaign details)
+            </button>
+
+            {showAdvanced && (
+              <div className="mt-3 space-y-3">
+                {isLive && (
+                  <Alert variant="warning" className="text-xs">
+                    This campaign already has clicks. Changing source / medium /
+                    campaign will break attribution for clicks already in the system —
+                    they'll keep their old tags but the URL on this row will change.
+                    Only edit if you know what you're doing.
+                  </Alert>
+                )}
+
+                <Field label="Destination URL">
+                  <input
+                    type="url"
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                  />
+                </Field>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="utm_source">
+                    <input
+                      type="text"
+                      value={source}
+                      onChange={(e) => setSource(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                    />
+                  </Field>
+                  <Field label="utm_medium">
+                    <input
+                      type="text"
+                      value={medium}
+                      onChange={(e) => setMedium(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                    />
+                  </Field>
+                  <Field label="utm_campaign">
+                    <input
+                      type="text"
+                      value={campaign}
+                      onChange={(e) => setCampaign(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                    />
+                  </Field>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" type="button" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" size="sm" type="submit" disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-slate-700 mb-1">{label}</span>
+      {children}
+      {hint && <span className="block text-xs text-slate-500 mt-1">{hint}</span>}
+    </label>
   );
 }

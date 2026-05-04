@@ -29,6 +29,8 @@ interface WizardState {
   utm_content: string;
   utm_term: string;
   custom_slug: string;
+  send_count: string;
+  campaign_cost: string;
 }
 
 const INITIAL_STATE: WizardState = {
@@ -40,13 +42,79 @@ const INITIAL_STATE: WizardState = {
   utm_content: '',
   utm_term: '',
   custom_slug: '',
+  send_count: '',
+  campaign_cost: '',
 };
 
+const DRAFT_KEY = 'peanut-connect:campaign-wizard-draft';
+
+interface DraftPayload {
+  step: WizardStep;
+  state: WizardState;
+}
+
+function loadDraft(): DraftPayload | null {
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<DraftPayload>;
+    if (
+      parsed &&
+      typeof parsed.step === 'number' &&
+      parsed.state &&
+      typeof parsed.state === 'object'
+    ) {
+      return {
+        step: Math.min(parsed.step, 2) as WizardStep,
+        state: { ...INITIAL_STATE, ...parsed.state },
+      };
+    }
+  } catch {
+    // ignore — bad JSON or storage disabled
+  }
+  return null;
+}
+
+function saveDraft(payload: DraftPayload) {
+  try {
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore — storage might be full or disabled
+  }
+}
+
+function clearDraft() {
+  try {
+    window.localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function isDraftDirty(state: WizardState): boolean {
+  return Object.values(state).some((v) => String(v).trim() !== '');
+}
+
+function timeSince(ts: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  return `${h}h ago`;
+}
+
 export default function Campaigns() {
-  const [step, setStep] = useState<WizardStep>(0);
-  const [state, setState] = useState<WizardState>(INITIAL_STATE);
+  const initial = useMemo(() => loadDraft(), []);
+  const [step, setStep] = useState<WizardStep>(initial?.step ?? 0);
+  const [state, setState] = useState<WizardState>(initial?.state ?? INITIAL_STATE);
   const [result, setResult] = useState<CampaignResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(
+    initial ? Date.now() : null,
+  );
+  const [draftRestoredBanner, setDraftRestoredBanner] = useState<boolean>(!!initial);
   const queryClient = useQueryClient();
 
   const { data: tracking } = useQuery({
@@ -60,6 +128,8 @@ export default function Campaigns() {
       setResult(campaign);
       setError(null);
       setStep(3);
+      clearDraft();
+      setDraftSavedAt(null);
       queryClient.invalidateQueries({ queryKey: ['marketing', 'utms'] });
       queryClient.invalidateQueries({ queryKey: ['marketing', 'links'] });
     },
@@ -68,8 +138,25 @@ export default function Campaigns() {
     },
   });
 
+  // Auto-save draft as user types — but only while in steps 0–2 (the editable
+  // ones) and only if there's any dirty data.
+  useEffect(() => {
+    if (step >= 3) return;
+    if (!isDraftDirty(state)) {
+      clearDraft();
+      setDraftSavedAt(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      saveDraft({ step, state });
+      setDraftSavedAt(Date.now());
+    }, 400);
+    return () => clearTimeout(t);
+  }, [state, step]);
+
   function update<K extends keyof WizardState>(key: K, value: WizardState[K]) {
     setState((prev) => ({ ...prev, [key]: value }));
+    setDraftRestoredBanner(false);
   }
 
   function handleSubmit() {
@@ -83,6 +170,8 @@ export default function Campaigns() {
     if (state.utm_content.trim()) payload.utm_content = state.utm_content.trim();
     if (state.utm_term.trim()) payload.utm_term = state.utm_term.trim();
     if (state.custom_slug.trim()) payload.custom_slug = state.custom_slug.trim();
+    if (state.send_count.trim()) payload.send_count = Number(state.send_count);
+    if (state.campaign_cost.trim()) payload.campaign_cost = Number(state.campaign_cost);
 
     build.mutate(payload);
   }
@@ -92,6 +181,22 @@ export default function Campaigns() {
     setResult(null);
     setError(null);
     setStep(0);
+    clearDraft();
+    setDraftSavedAt(null);
+    setDraftRestoredBanner(false);
+  }
+
+  function discardDraft() {
+    if (!confirm('Discard this draft? You will lose anything you typed.')) return;
+    reset();
+  }
+
+  function saveAndExit() {
+    if (isDraftDirty(state)) {
+      saveDraft({ step, state });
+      setDraftSavedAt(Date.now());
+    }
+    alert("Draft saved. We'll restore it next time you open Campaigns.");
   }
 
   const step0Valid =
@@ -100,6 +205,19 @@ export default function Campaigns() {
     state.utm_source.trim() !== '' &&
     state.utm_medium.trim() !== '' &&
     state.utm_campaign.trim() !== '';
+
+  const stepReachable = (target: WizardStep): boolean => {
+    if (target <= step) return true;
+    // Forward navigation: prerequisites must hold for every step before target.
+    if (target >= 1 && !step0Valid) return false;
+    return true;
+  };
+
+  function gotoStep(target: WizardStep) {
+    if (step === 3) return; // final state, no jumping back
+    if (!stepReachable(target)) return;
+    setStep(target);
+  }
 
   return (
     <Layout
@@ -110,10 +228,45 @@ export default function Campaigns() {
           <Button variant="ghost" icon={<RotateCcw className="w-4 h-4" />} onClick={reset}>
             Build another
           </Button>
-        ) : null
+        ) : (
+          <div className="flex items-center gap-3">
+            {draftSavedAt && (
+              <span className="text-xs text-slate-500">
+                Draft saved {timeSince(draftSavedAt)}
+              </span>
+            )}
+            {isDraftDirty(state) && (
+              <>
+                <Button variant="ghost" size="sm" onClick={saveAndExit}>
+                  Save &amp; exit
+                </Button>
+                <button
+                  type="button"
+                  onClick={discardDraft}
+                  className="text-xs text-slate-500 hover:text-red-600 underline-offset-2 hover:underline"
+                >
+                  Discard
+                </button>
+              </>
+            )}
+          </div>
+        )
       }
     >
-      <Stepper current={step} />
+      <Stepper current={step} canReach={stepReachable} onStepClick={gotoStep} />
+
+      {draftRestoredBanner && (
+        <Alert variant="info" className="mb-4">
+          Picked up where you left off.{' '}
+          <button
+            type="button"
+            onClick={discardDraft}
+            className="underline underline-offset-2 hover:no-underline ml-1"
+          >
+            Start fresh
+          </button>
+        </Alert>
+      )}
 
       {error && (
         <Alert variant="error" className="mb-4">
@@ -160,29 +313,61 @@ export default function Campaigns() {
   );
 }
 
-function Stepper({ current }: { current: WizardStep }) {
+function Stepper({
+  current,
+  canReach,
+  onStepClick,
+}: {
+  current: WizardStep;
+  canReach: (target: WizardStep) => boolean;
+  onStepClick: (target: WizardStep) => void;
+}) {
   return (
     <ol className="flex items-center gap-2 mb-6 text-sm" role="list">
       {STEPS.map((s, idx) => {
+        const target = idx as WizardStep;
         const isCurrent = idx === current;
         const isDone = idx < current;
+        const reachable = canReach(target);
+        const clickable = reachable && idx !== current;
+
+        const circle = isDone
+          ? 'bg-primary-600 text-white'
+          : isCurrent
+          ? 'bg-primary-100 text-primary-700 ring-2 ring-primary-500'
+          : reachable
+          ? 'bg-slate-100 text-slate-600'
+          : 'bg-slate-100 text-slate-400';
+
+        const labelCls = isCurrent
+          ? 'font-medium text-slate-900 truncate'
+          : reachable
+          ? 'text-slate-600 truncate'
+          : 'text-slate-400 truncate';
+
         return (
           <li key={s.label} className="flex items-center gap-2 flex-1 min-w-0">
-            <span
+            <button
+              type="button"
+              onClick={() => clickable && onStepClick(target)}
+              disabled={!clickable}
               className={
-                isDone
-                  ? 'flex items-center justify-center w-7 h-7 rounded-full bg-primary-600 text-white font-medium flex-shrink-0'
-                  : isCurrent
-                  ? 'flex items-center justify-center w-7 h-7 rounded-full bg-primary-100 text-primary-700 font-medium ring-2 ring-primary-500 flex-shrink-0'
-                  : 'flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-500 font-medium flex-shrink-0'
+                'flex items-center gap-2 min-w-0 rounded transition ' +
+                (clickable
+                  ? 'cursor-pointer hover:bg-slate-50 px-1 py-0.5 -mx-1 -my-0.5'
+                  : 'cursor-default')
               }
               aria-current={isCurrent ? 'step' : undefined}
+              aria-label={`${s.label}${reachable ? '' : ' (complete prior steps to unlock)'}`}
+              title={reachable ? '' : 'Complete prior steps to unlock'}
             >
-              {isDone ? <Check className="w-3.5 h-3.5" /> : idx + 1}
-            </span>
-            <span className={isCurrent ? 'font-medium text-slate-900 truncate' : 'text-slate-600 truncate'}>
-              {s.label}
-            </span>
+              <span
+                className={`flex items-center justify-center w-7 h-7 rounded-full font-medium flex-shrink-0 ${circle}`}
+              >
+                {isDone ? <Check className="w-3.5 h-3.5" /> : idx + 1}
+              </span>
+              <span className={labelCls}>{s.label}</span>
+            </button>
             {idx < STEPS.length - 1 && (
               <span className="flex-1 h-px bg-slate-200 mx-1" aria-hidden />
             )}
@@ -273,6 +458,27 @@ function BasicsStep({
             hint="Keyword, if any."
           />
         </div>
+        <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
+          <Input
+            label="Reach (optional)"
+            type="number"
+            min={0}
+            placeholder="5000"
+            value={state.send_count}
+            onChange={(e) => update('send_count', e.target.value)}
+            hint="Email list size, ad impressions, etc. Powers the funnel."
+          />
+          <Input
+            label="Cost (optional, USD)"
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="75.00"
+            value={state.campaign_cost}
+            onChange={(e) => update('campaign_cost', e.target.value)}
+            hint="Total spend. Powers cost-per-acquisition."
+          />
+        </div>
         <div className="flex justify-end pt-2">
           <Button type="submit" disabled={!valid} icon={<ArrowRight className="w-4 h-4" />} iconPosition="right">
             Continue
@@ -343,11 +549,11 @@ function TrackingStep({
     const hub = tracking?.hub_url || 'https://hub.peanutgraphic.com';
     return [
       '<script>',
-      "(function(w,d,s,k,h){w.pnut=w.pnut||function(){(w.pnut.q=w.pnut.q||[]).push(arguments)};",
-      "w.pnut.k=k;w.pnut.h=h;var f=d.getElementsByTagName(s)[0],j=d.createElement(s);",
+      "(function(w,d,s,k,h){w.phub=w.phub||function(){(w.phub.q=w.phub.q||[]).push(arguments)};",
+      "w.phub.k=k;w.phub.h=h;var f=d.getElementsByTagName(s)[0],j=d.createElement(s);",
       "j.async=true;j.src=h+'/js/tracker.min.js';f.parentNode.insertBefore(j,f);",
       `})(window,document,'script','<<paste your Site Key from Hub>>','${hub}');`,
-      "pnut('pageview');",
+      "phub('pageview');",
       '</script>',
     ].join('\n');
   }, [tracking]);
@@ -355,8 +561,8 @@ function TrackingStep({
   const conversionSnippet = [
     '<script>',
     '(function checkPnut() {',
-    "  if (typeof pnut === 'function') {",
-    "    pnut('conversion', 'enrollment', 0);",
+    "  if (typeof phub === 'function') {",
+    "    phub('conversion', 'enrollment', 0);",
     '  } else { setTimeout(checkPnut, 100); }',
     '})();',
     '</script>',

@@ -201,7 +201,12 @@ class Peanut_Connect_Marketing {
     }
 
     public static function journey_stats(WP_REST_Request $request) {
-        return self::forward('GET', '/journeys/stats', null, $request->get_query_params());
+        // Send filters in a POST body — query strings with values like
+        // ?campaign=spring-promo trip the host's mod_security WAF, which
+        // rewrites the response to 406/503. POST + JSON body avoids that.
+        $params = $request->get_query_params();
+
+        return self::forward('POST', '/journeys/stats', $params);
     }
 
     public static function journey_detail(WP_REST_Request $request) {
@@ -286,11 +291,11 @@ class Peanut_Connect_Marketing {
         }
 
         // Some hosts (cPanel + ImunifyAV / mod_security) rewrite 2xx responses
-        // to 406 / 405 for "suspicious" payloads while passing the body
-        // through unchanged. If the body explicitly says success, honour it
-        // and return a clean 200 — otherwise the SPA's axios layer rejects
-        // the response purely on status code.
-        if (isset($data['success']) && $data['success'] === true && $status >= 400 && $status < 500) {
+        // to 406 / 405 / 503 for "suspicious" URL patterns while passing the
+        // body through unchanged. If the body explicitly says success, honour
+        // it and return a clean 200 regardless of the rewritten status —
+        // otherwise the SPA's axios layer rejects on status code.
+        if (isset($data['success']) && $data['success'] === true && $status >= 400) {
             $status = 200;
         }
 

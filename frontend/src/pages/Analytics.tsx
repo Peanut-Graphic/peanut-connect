@@ -1,8 +1,13 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useMemo } from 'react';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, CardHeader, StatCard, Alert } from '@/components/common';
+import { Funnel } from '@/components/charts/Funnel';
+import { TimeSeries } from '@/components/charts/TimeSeries';
+import { Donut } from '@/components/charts/Donut';
+import { Sankey } from '@/components/charts/Sankey';
 import { marketingApi, type JourneyStats } from '@/api';
+import { ChevronDown, X } from 'lucide-react';
 
 const RANGES = [
   { label: 'Last 7 days', value: 7 },
@@ -12,13 +17,50 @@ const RANGES = [
 
 export default function Analytics() {
   const [days, setDays] = useState<(typeof RANGES)[number]['value']>(30);
+  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
 
   const range = rangeFromDays(days);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['marketing', 'journeys', 'stats', { from: range.from, to: range.to }],
+  // Always fetch the unfiltered view — used for KPI cards (when nothing selected)
+  // and for populating the campaign list in the filter dropdown.
+  const allQuery = useQuery({
+    queryKey: ['marketing', 'journeys', 'stats', 'all', { from: range.from, to: range.to }],
     queryFn: () => marketingApi.journeyStats({ from: range.from, to: range.to }),
   });
+
+  const isCompare = selectedCampaigns.length >= 2;
+  const isFiltered = selectedCampaigns.length === 1;
+
+  // Per-campaign queries fired in parallel for compare mode (and for the
+  // single-campaign filter case).
+  const perCampaignQueries = useQueries({
+    queries: selectedCampaigns.map((c) => ({
+      queryKey: ['marketing', 'journeys', 'stats', { campaign: c, from: range.from, to: range.to }],
+      queryFn: () => marketingApi.journeyStats({ campaign: c, from: range.from, to: range.to }),
+    })),
+  });
+
+  // The "current view" data for KPI cards = filtered if exactly 1 selected,
+  // otherwise the all-campaigns aggregate.
+  const currentData: JourneyStats | undefined = isFiltered
+    ? perCampaignQueries[0]?.data
+    : allQuery.data;
+  const isLoading = allQuery.isLoading;
+  const error = allQuery.error || perCampaignQueries.find((q) => q.error)?.error;
+
+  const allCampaigns = useMemo(() => {
+    return (allQuery.data?.by_campaign ?? []).map((c) => c.utm_campaign);
+  }, [allQuery.data]);
+
+  function toggleCampaign(c: string) {
+    setSelectedCampaigns((prev) =>
+      prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c],
+    );
+  }
+
+  function clearCampaigns() {
+    setSelectedCampaigns([]);
+  }
 
   return (
     <Layout
@@ -49,28 +91,262 @@ export default function Analytics() {
         </Alert>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3 mb-6">
-        <StatCard
-          title="Total journeys"
-          value={isLoading ? '—' : (data?.total_journeys ?? 0).toLocaleString()}
+      <CampaignFilter
+        all={allCampaigns}
+        selected={selectedCampaigns}
+        onToggle={toggleCampaign}
+        onClear={clearCampaigns}
+      />
+
+      {!isCompare && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5 mb-6">
+            <StatCard
+              title="Total journeys"
+              value={isLoading ? '—' : (currentData?.total_journeys ?? 0).toLocaleString()}
+            />
+            <StatCard
+              title="Conversions"
+              value={isLoading ? '—' : (currentData?.conversions ?? 0).toLocaleString()}
+            />
+            <StatCard
+              title="Conversion rate"
+              value={isLoading ? '—' : `${(currentData?.conversion_rate ?? 0).toFixed(1)}%`}
+            />
+            <StatCard
+              title="Cost / acquisition"
+              value={
+                isLoading
+                  ? '—'
+                  : currentData?.cost_per_acquisition != null
+                  ? `$${currentData.cost_per_acquisition.toFixed(2)}`
+                  : '—'
+              }
+            />
+            <StatCard
+              title="Click-through rate"
+              value={
+                isLoading
+                  ? '—'
+                  : currentData?.click_through_rate != null
+                  ? `${currentData.click_through_rate.toFixed(2)}%`
+                  : '—'
+              }
+            />
+          </div>
+
+          <Card>
+            <CardHeader
+              title={isFiltered ? `Funnel — ${selectedCampaigns[0]}` : 'Conversion funnel'}
+              description="Stages from campaign send to enrollment, with drop-off between each."
+            />
+            {isLoading ? (
+              <div className="text-sm text-slate-500">Loading…</div>
+            ) : (
+              <Funnel stages={currentData?.funnel ?? []} />
+            )}
+          </Card>
+
+          <Card className="mt-4">
+            <CardHeader
+              title="Volume over time"
+              description="Daily journeys and conversions across the selected window."
+            />
+            {isLoading ? (
+              <div className="text-sm text-slate-500">Loading…</div>
+            ) : (
+              <TimeSeries data={currentData?.time_series ?? []} />
+            )}
+          </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2 mt-4">
+            <ByCampaignCard data={currentData} loading={isLoading} />
+            <ByChannelCard data={currentData} loading={isLoading} />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2 mt-4">
+            <DevicesCard data={currentData} loading={isLoading} />
+            <RegionsCard data={currentData} loading={isLoading} />
+          </div>
+
+          <Card className="mt-4">
+            <CardHeader
+              title="Campaign → channel → outcome"
+              description="Where journeys started, how they reached the site, and how they ended."
+            />
+            {isLoading ? (
+              <div className="text-sm text-slate-500">Loading…</div>
+            ) : (
+              <Sankey
+                nodes={currentData?.sankey?.nodes ?? []}
+                links={currentData?.sankey?.links ?? []}
+              />
+            )}
+          </Card>
+        </>
+      )}
+
+      {isCompare && (
+        <CompareView
+          campaigns={selectedCampaigns}
+          queries={perCampaignQueries}
         />
-        <StatCard
-          title="Conversions"
-          value={isLoading ? '—' : (data?.conversions ?? 0).toLocaleString()}
-        />
-        <StatCard
-          title="Conversion rate"
-          value={
-            isLoading ? '—' : `${((data?.conversion_rate ?? 0) * 100).toFixed(1)}%`
-          }
-        />
+      )}
+    </Layout>
+  );
+}
+
+function CampaignFilter({
+  all,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  all: string[];
+  selected: string[];
+  onToggle: (c: string) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded border border-slate-300 bg-white hover:bg-slate-50"
+        >
+          {selected.length === 0
+            ? 'All campaigns'
+            : selected.length === 1
+            ? `Campaign: ${selected[0]}`
+            : `Comparing ${selected.length} campaigns`}
+          <ChevronDown className="w-4 h-4 text-slate-400" />
+        </button>
+        {open && (
+          <div className="absolute z-10 mt-1 min-w-[18rem] max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg p-2">
+            {all.length === 0 ? (
+              <div className="px-2 py-2 text-sm text-slate-500">No campaigns yet.</div>
+            ) : (
+              all.map((c) => {
+                const isSel = selected.includes(c);
+                return (
+                  <label
+                    key={c}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSel}
+                      onChange={() => onToggle(c)}
+                      className="rounded border-slate-300"
+                    />
+                    <span className="text-slate-800 truncate">{c}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ByCampaignCard data={data} loading={isLoading} />
-        <ByChannelCard data={data} loading={isLoading} />
+      {selected.map((c) => (
+        <span
+          key={c}
+          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-primary-50 text-primary-700"
+        >
+          {c}
+          <button
+            type="button"
+            onClick={() => onToggle(c)}
+            className="text-primary-500 hover:text-primary-700"
+            aria-label={`Remove ${c}`}
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </span>
+      ))}
+
+      {selected.length > 0 && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-xs text-slate-500 hover:text-slate-700 underline-offset-2 hover:underline"
+        >
+          Clear
+        </button>
+      )}
+
+      <span className="ml-auto text-xs text-slate-500">
+        Pick one campaign to filter, two or more to compare.
+      </span>
+    </div>
+  );
+}
+
+function CompareView({
+  campaigns,
+  queries,
+}: {
+  campaigns: string[];
+  queries: Array<{ data?: JourneyStats; isLoading: boolean; error: unknown }>;
+}) {
+  const cols = Math.min(campaigns.length, 4);
+  const colClass =
+    cols === 2
+      ? 'grid-cols-1 md:grid-cols-2'
+      : cols === 3
+      ? 'grid-cols-1 md:grid-cols-3'
+      : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
+
+  return (
+    <Card>
+      <CardHeader
+        title="Compare campaigns"
+        description="Side-by-side funnels and KPIs at the same scale."
+      />
+      <div className={`grid ${colClass} gap-4`}>
+        {campaigns.map((name, i) => {
+          const q = queries[i];
+          const data = q?.data;
+          const stages = data?.funnel ?? [];
+          return (
+            <div
+              key={name}
+              className="border border-slate-100 rounded-lg p-3 bg-slate-50/40"
+            >
+              <div className="text-sm font-semibold text-slate-900 mb-1 truncate">
+                {name}
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs text-slate-600 mb-2">
+                <div>
+                  <div className="text-slate-500">Journeys</div>
+                  <div className="font-medium tabular-nums">
+                    {data?.total_journeys?.toLocaleString() ?? '—'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-500">Enrollments</div>
+                  <div className="font-medium tabular-nums">
+                    {data?.conversions?.toLocaleString() ?? '—'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-500">Conv. rate</div>
+                  <div className="font-medium tabular-nums">
+                    {data?.conversion_rate != null
+                      ? `${data.conversion_rate.toFixed(1)}%`
+                      : '—'}
+                  </div>
+                </div>
+              </div>
+              <Funnel stages={stages} compact />
+            </div>
+          );
+        })}
       </div>
-    </Layout>
+    </Card>
   );
 }
 
@@ -133,6 +409,69 @@ function ByChannelCard({ data, loading }: { data: JourneyStats | undefined; load
                 </div>
                 <div className="mt-1 h-1.5 rounded bg-slate-100 overflow-hidden">
                   <div className="h-full bg-primary-500" style={{ width: `${pct}%` }} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+const DEVICE_COLORS: Record<string, string> = {
+  desktop: '#6366f1',
+  mobile: '#10b981',
+  tablet: '#f59e0b',
+};
+
+function DevicesCard({ data, loading }: { data: JourneyStats | undefined; loading: boolean }) {
+  const slices = (data?.devices ?? []).map((d) => ({
+    label: d.device_type,
+    count: d.count,
+    color: DEVICE_COLORS[d.device_type] ?? '#94a3b8',
+  }));
+
+  return (
+    <Card>
+      <CardHeader title="Devices" description="What did people view on?" />
+      {loading ? (
+        <div className="text-sm text-slate-500">Loading…</div>
+      ) : slices.length === 0 ? (
+        <div className="text-sm text-slate-500">No device data yet.</div>
+      ) : (
+        <Donut slices={slices} />
+      )}
+    </Card>
+  );
+}
+
+function RegionsCard({ data, loading }: { data: JourneyStats | undefined; loading: boolean }) {
+  const rows = data?.regions ?? [];
+  const total = rows.reduce((s, r) => s + r.count, 0);
+
+  return (
+    <Card>
+      <CardHeader title="Top regions" description="Where journeys originated." />
+      {loading ? (
+        <div className="text-sm text-slate-500">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="text-sm text-slate-500">No region data yet.</div>
+      ) : (
+        <ul className="space-y-2">
+          {rows.map((r, i) => {
+            const pct = total > 0 ? (r.count / total) * 100 : 0;
+            const label = r.region ? `${r.region}, ${r.country}` : r.country;
+            return (
+              <li key={i}>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-700">{label}</span>
+                  <span className="text-slate-500 tabular-nums">
+                    {r.count.toLocaleString()} · {pct.toFixed(0)}%
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 rounded bg-slate-100 overflow-hidden">
+                  <div className="h-full bg-indigo-500" style={{ width: `${pct}%` }} />
                 </div>
               </li>
             );
