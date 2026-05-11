@@ -5,6 +5,99 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.21] - 2026-05-11
+
+### Security (defense-in-depth)
+- **`/restore` endpoint host allowlist.** The bearer-protected restore endpoint accepted `backup_url` from any host, then unzipped + replayed its SQL dump + copied files into `wp-content` — RCE-equivalent if the Hub bearer ever leaked. Now rejects URLs whose host doesn't match the configured `peanut_connect_hub_url`.
+- **SSRF guard on Hub URL save.** `update_hub_settings` now rejects non-HTTPS schemes, IP-literal hosts in private ranges, `localhost`/`.local`/`.internal` hostnames, and hostnames that resolve to RFC1918/loopback/link-local addresses. Prevents an admin (or compromised admin session) from repointing the plugin at cloud-metadata services or internal HTTP services that would receive the Hub bearer header.
+- **Hide-login Referer bypass.** `class-connect-security.php` previously allowed direct POSTs to `wp-login.php` if `HTTP_REFERER` contained the custom-login slug as a substring. Referer is attacker-controlled, so `Referer: https://evil/<slug>` bypassed the gate. Now verifies the Referer host equals `home_url()`'s host AND the path begins with the slug.
+
+### UX
+- **Mutation toasts on UTMs + Links pages.** Archive/restore/delete/toggle/update mutations now emit success and error toasts. Previously failures silently looked like successes.
+- **Styled confirm dialogs.** Added `useConfirm()` hook backed by the existing `ConfirmModal`. All four native browser `confirm()` calls (Links delete, UTMs delete, ErrorLog clear, Activity clear) now use the styled dialog — keyboard-accessible, blocks page properly, matches the rest of the SPA.
+
+### Cleanup
+- **`disable_suite_loading()` no longer nukes every plugin's `plugins_loaded` hook.** Previously it called `remove_all_actions('plugins_loaded', 10)` which removed every priority-10 handler across the WP install — massive collateral damage. Now removes only Suite's `peanut_run` bootstrap specifically.
+- **Added `uninstall.php`.** Plugin removal now drops the 8 tracking tables, clears all scheduled cron events (including the legacy `peanut_connect_sync_to_hub` hook), deletes every `peanut_connect_*` option, and clears the slug transient.
+
+## [3.7.20] - 2026-05-11
+
+### Fixed
+- **`peanut_connect_sync_requested` action handler was unhooked.** Heartbeat schedules a single event with this name when Hub returns `sync_now=true`. The handler used to live in `Hub_Sync::init()`, which was dead code as of 3.7.17, so every Hub-requested immediate sync silently no-op'd. Now hooked in `Peanut_Connect::init_hooks()`.
+- **HTTP_REFERER sanitization.** Tracker writes (`record_event` pageviews, `record_touch` channel + referrer column) now pass `$_SERVER['HTTP_REFERER']` through `esc_url_raw()` before DB write. Previously raw client-controlled values were stored verbatim.
+- **Event banner CSS/HTML render safety.** Hub-provided CSS is now stripped of `</style>` sequences before render so a hostile Hub payload can't break out of the `<style>` block. Hub-provided HTML now passes through `wp_kses_post()` at render to strip script tags and other dangerous markup.
+- **FormFlow shortcode escaping bug.** `do_shortcode('[formflow id="' . esc_attr($form['id']) . '"]')` was entity-encoding quotes inside a shortcode string, which the shortcode parser then saw as literal entities. Replaced with `absint()` validation and raw insertion.
+- **Safe `last_sync` date parsing.** New `utils/date.ts` exports `formatRelative()` that returns `'Never'` on unparseable input instead of throwing `Invalid time value`. Dashboard and Settings pages now use it.
+- **UTM edit no longer zeros `send_count`/`campaign_cost`.** Editing only the Notes field used to send `0` for blank send_count/cost, silently clobbering valid existing values. Now sends `null` when blank.
+- **Router transitions instead of hash anchors.** `Campaigns.tsx` Done step's "Open Tracking tab" link and `Dashboard.tsx`'s "View Updates" recommendation now use React Router (`<Link>` / `useNavigate`) instead of `href="#/foo"` / `window.location.hash`, which bypassed router lifecycle and felt janky.
+- **Sidebar wordmark.** Changed from `Connect` to `End to End` to match the actual product name. First-time users were confused which product they were in.
+- **Header search no longer silently redirects.** Previously, 5 hardcoded keyword branches; anything else routed to Dashboard with no feedback (a "search is broken" trap). Now covers all 11 nav items and surfaces a `No page matches "X"` error on unmatched queries.
+
+### Removed
+- Dead code: `register_sync_endpoint()`, `handle_manual_sync()`, `get_sync_status()` (never wired to `rest_api_init`), and `unschedule()` (only cleared a legacy hook).
+
+## [3.7.19] - 2026-05-11
+
+### Fixed
+- **Unbounded sync loops.** `sync_campaign_events`, `sync_campaign_visitors`, `sync_popup_interactions`, and `sync_form_submissions` each ran a `while (true)` loop with no batch cap. On a backlog, a single WP-Cron tick could spin through arbitrarily many 200-row batches and hit `max_execution_time` mid-flight, leaving data half-synced and aborting all subsequent batches silently. Added `MAX_BATCHES_PER_RUN = 50` constant (50 × 200 = 10K rows per record type per tick). Remainder defers naturally to the next cron tick.
+
+## [3.7.18] - 2026-05-11
+
+### Added / improved
+- **Paginated slug fetcher.** `class-connect-short-links.php` was capped at 100 active links (the first paginator page); sites with >100 would silently 404 beyond that. Now follows Laravel paginator `current_page`/`last_page` through up to 20 pages (2,000 active-link ceiling).
+- **Tracker snippet substitutes the real Site Key.** `tracking-setup` returns the unmasked `site_key` (the unmasked value is destined for public HTML in the tracker snippet anyway) AND a separate `site_key_masked` for the UI's "Site Identity" card. Snippets on the Tracking page and in the campaign wizard now embed the real key instead of `<<paste your Site Key from Hub>>`.
+- **Nav reordered.** Sidebar puts `Tracking` before `Analytics` so the setup flow reads top-to-bottom (set up tracking → run campaigns → watch analytics).
+
+### Fixed
+- **Done card `✓` Unicode replaced with Lucide `Check`** for visual consistency with the rest of the SPA.
+- **Paste-URL field type changed from `url` to `text`** so the browser's built-in URL validation doesn't fire before the custom parser has a chance.
+- **Draft saved-at timestamp is now persisted in localStorage** so the "Draft saved Xm ago" header reflects actual save time instead of mount time after a page reload.
+- **DoneStep next-steps now links to the Tracking tab directly** instead of saying "from Step 3" (which becomes ambiguous once the wizard locks).
+
+## [3.7.17] - 2026-05-11
+
+### Fixed (post-audit cleanup bundle)
+- **Sync cron deduplication.** `Peanut_Connect_Hub_Sync::init()` was dead code that would have created a duplicate cron schedule (`peanut_connect_sync_to_hub`) if called. Replaced with a no-op. Added one-time cleanup of any stale legacy schedule from earlier versions. Deactivation hook also clears it.
+- **Tracking snippet placeholder.** `Campaigns.tsx` (step 3) and `Tracking.tsx` emitted the literal string `<<paste your Site Key from Hub>>` even when the API already returned the site key. Snippet now uses the real value when available, falls back to a clearer placeholder pointing to where in Hub the key lives.
+- **Slug cache TTL.** Reduced from 1 hour to 5 minutes so direct edits in the Hub UI propagate before printed-postcard tests fail.
+- **Dashboard "Peanut Suite" stat card** relabeled "Marketing Suite" with copy clarifying it refers to an *optional companion plugin*, not this plugin's own status. First-time users were reading "Not Installed" as a problem with Peanut End to End itself.
+- **Removed `alert()` modal** from `saveAndExit` in the campaign wizard. The existing "Draft saved just now" header text already conveys the state without blocking the page.
+
+### Removed
+- **Legacy `options-general.php?page=peanut-connect` settings page.** It read pre-Hub option names (`peanut_connect_manager_url` / `peanut_connect_site_key`) and falsely reported "Not connected" on working Hub installs. The React SPA at the top-level menu is the canonical configuration surface now.
+
+## [3.7.16] - 2026-05-11
+
+### Fixed
+- **Empty Done step.** When Hub returned a 2xx response without a `campaign` payload, the wizard set `step=3` but `result=null`, so the entire left column on the Done page was blank. `buildCampaign` now throws on missing payload (so `onError` fires and the user sees an inline error). When `step===3 && !result`, a fallback card explains the situation and offers a "Build another" reset + link to the Links tab to confirm the link still got created.
+- **Stale Preview copy on Done.** The "Preview" card's description was hardcoded to `Updates as you fill in Step 1.`, which is wrong at every later step. Now per-step: "Campaign details (no result payload returned by Hub)" at step 4, "Last review before submit" at step 3, "Short link + QR details on the next step" at step 2.
+- **`Request failed with status code 405` on Campaign Analytics.** The plugin's `journey_stats` proxy was forwarding to Hub as `POST` (an older WAF workaround), but Hub registered `/journeys/stats` as `GET`. Now matches.
+
+## [3.7.15] - 2026-05-11
+
+### Added
+- **Short-link redirect handler.** `https://yoursite.com/<slug>` now actually redirects through Hub. New `Peanut_Connect_Short_Links` class hooks `template_redirect` priority 1, catches 404s on single-segment URIs, validates the slug against a cached list of active slugs fetched from Hub (`GET /api/v1/marketing/links?active=1`), and 302-redirects to `{hub_url}/go/{slug}` so Hub handles UTM expansion + click tracking. Active slugs cached for 1 hour (reduced to 5 min in 3.7.17). Cache busted automatically on every link create/update/toggle/delete and on campaign creation.
+
+## [3.7.14] - 2026-05-11
+
+### Added
+- **Copy full UTM URL button on Links table.** Each row now has a second copy icon (next to the existing short-link copy) that copies the full UTM-tagged destination URL — useful for systems that don't follow redirects.
+
+## [3.7.13] - 2026-05-11
+
+### Fixed
+- **Paste URL now also fills the Campaign name.** Pasting a pre-built UTM URL in the campaign builder pre-fills `Campaign name` from `utm_campaign` (only when the name field is empty), so the Continue button enables in one shot instead of forcing the user to retype the campaign identifier.
+
+## [3.7.12] - 2026-05-11
+
+### Added
+- **Paste-URL field in the campaign builder.** New input at the top of the wizard's Step 1 accepts a fully-tagged third-party URL (e.g. `https://example.com/landing?utm_source=usa&utm_medium=banner&utm_campaign=...`) and auto-fills the destination URL + all 5 UTM fields below. Lets users import pre-built UTMs from third-party builders without splitting params by hand.
+
+## [3.7.11] - 2026-05-04
+
+### Internal
+- Plumbing release bumped between 3.7.10 and 3.7.12 work. No customer-visible changes.
+
 ## [3.7.10] - 2026-05-04
 
 ### Changed
