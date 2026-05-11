@@ -19,6 +19,7 @@ import {
 import { errorLogApi } from '@/api/endpoints';
 import type { ErrorLevel, ErrorLogEntry } from '@/types';
 import { useToast } from '@/components/common';
+import { useConfirm } from '@/hooks/useConfirm';
 import { Layout } from '@/components/layout';
 
 const levelConfig: Record<ErrorLevel, { icon: typeof AlertTriangle; color: string; bg: string }> = {
@@ -34,6 +35,7 @@ export default function ErrorLog() {
   const limit = 25;
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   // Fetch error log
   const { data, isLoading, refetch } = useQuery({
@@ -124,10 +126,14 @@ export default function ErrorLog() {
         <Download className="w-5 h-5" />
       </button>
       <button
-        onClick={() => {
-          if (confirm('Are you sure you want to clear the error log?')) {
-            clearMutation.mutate();
-          }
+        onClick={async () => {
+          const ok = await confirm({
+            title: 'Clear error log?',
+            message: 'This deletes all stored entries. Export first if you need them.',
+            confirmText: 'Clear log',
+            variant: 'danger',
+          });
+          if (ok) clearMutation.mutate();
         }}
         className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
         title="Clear Log"
@@ -242,6 +248,7 @@ export default function ErrorLog() {
           </button>
         </div>
       )}
+      {confirmDialog}
     </Layout>
   );
 }

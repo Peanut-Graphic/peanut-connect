@@ -164,10 +164,21 @@ class Peanut_Connect_Security {
 
             // Block direct access to wp-login.php
             if (strpos($request_path, 'wp-login.php') !== false) {
-                // Allow POST requests (actual login attempts) with valid referrer
+                // Allow POST requests (actual login attempts) with valid referrer.
+                // v3.7.21: Referer is attacker-controlled — substring match alone
+                // is bypassable with "Referer: https://evil.com/<slug>". Now we
+                // verify the Referer host equals this site's host AND the path
+                // begins with the custom slug.
                 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $referer = $_SERVER['HTTP_REFERER'] ?? '';
-                    if (strpos($referer, $custom_slug) !== false) {
+                    $ref_host = strtolower((string) wp_parse_url($referer, PHP_URL_HOST));
+                    $ref_path = (string) wp_parse_url($referer, PHP_URL_PATH);
+                    $site_host = strtolower((string) wp_parse_url(home_url(), PHP_URL_HOST));
+                    if (
+                        $ref_host !== ''
+                        && $ref_host === $site_host
+                        && strpos(ltrim($ref_path, '/'), $custom_slug) === 0
+                    ) {
                         return;
                     }
                 }

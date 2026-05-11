@@ -1,11 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, Alert } from '@/components/common';
+import { useToast } from '@/components/common/Toast';
+import { useConfirm } from '@/hooks/useConfirm';
 import { marketingApi, type Link as ShortLink } from '@/api';
 import { Power, PowerOff, Trash2, ExternalLink, Copy, Link2 } from 'lucide-react';
 
 export default function Links() {
   const queryClient = useQueryClient();
+  const toast = useToast();
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['marketing', 'links'],
@@ -17,11 +21,13 @@ export default function Links() {
 
   const toggle = useMutation({
     mutationFn: (id: number) => marketingApi.toggleLink(id),
-    onSuccess: invalidate,
+    onSuccess: () => { invalidate(); toast.success('Link updated.'); },
+    onError: (err: Error) => toast.error(`Could not toggle link: ${err.message || 'unknown error'}`),
   });
   const remove = useMutation({
     mutationFn: (id: number) => marketingApi.deleteLink(id),
-    onSuccess: invalidate,
+    onSuccess: () => { invalidate(); toast.success('Link deleted.'); },
+    onError: (err: Error) => toast.error(`Could not delete link: ${err.message || 'unknown error'}`),
   });
 
   const links = data?.data ?? [];
@@ -63,10 +69,14 @@ export default function Links() {
                     key={link.id}
                     link={link}
                     onToggle={() => toggle.mutate(link.id)}
-                    onDelete={() => {
-                      if (confirm(`Delete "/${link.slug}"? Click history is removed too.`)) {
-                        remove.mutate(link.id);
-                      }
+                    onDelete={async () => {
+                      const ok = await confirm({
+                        title: 'Delete short link?',
+                        message: `Delete "/${link.slug}"? Click history is removed too.`,
+                        confirmText: 'Delete',
+                        variant: 'danger',
+                      });
+                      if (ok) remove.mutate(link.id);
                     }}
                   />
                 ))}
@@ -75,6 +85,7 @@ export default function Links() {
           </div>
         )}
       </Card>
+      {confirmDialog}
     </Layout>
   );
 }

@@ -1813,6 +1813,48 @@ class Peanut_Connect_API {
     /**
      * Update hub connection settings
      */
+    /**
+     * Return true if a Hub host can be safely stored — public HTTPS only,
+     * no loopback / RFC1918 / link-local / multicast / unspecified.
+     *
+     * @since 3.7.21
+     */
+    private static function is_safe_hub_host(string $host, string $scheme): bool {
+        if ($host === '') return false;
+        if ($scheme !== '' && $scheme !== 'https') {
+            // Allow localhost-only HTTP during dev environments? No — production
+            // installs need TLS to protect the bearer header. Use HTTPS.
+            return false;
+        }
+        // Block raw IP-literal forms.
+        $ip = filter_var($host, FILTER_VALIDATE_IP);
+        if ($ip !== false) {
+            // Reject private/reserved ranges. FILTER_FLAG_NO_PRIV_RANGE +
+            // NO_RES_RANGE returns false if the IP is in those ranges.
+            $public = filter_var(
+                $ip,
+                FILTER_VALIDATE_IP,
+                FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+            );
+            return $public !== false;
+        }
+        // Block obvious local hostnames + metadata service hostnames.
+        $blocked_hosts = ['localhost', 'metadata.google.internal'];
+        if (in_array($host, $blocked_hosts, true)) return false;
+        if (str_ends_with($host, '.local') || str_ends_with($host, '.internal')) return false;
+        // Resolve once and reject if it points to a non-public address.
+        $resolved = gethostbyname($host);
+        if ($resolved !== $host) {
+            $public = filter_var(
+                $resolved,
+                FILTER_VALIDATE_IP,
+                FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+            );
+            if ($public === false) return false;
+        }
+        return true;
+    }
+
     public function update_hub_settings(WP_REST_Request $request): WP_REST_Response {
         $hub_url = $request->get_param('hub_url');
         $api_key = $request->get_param('api_key');
@@ -1822,6 +1864,18 @@ class Peanut_Connect_API {
         // Validate and save hub URL
         if ($hub_url !== null) {
             $hub_url = esc_url_raw($hub_url);
+            // v3.7.21: SSRF guard — reject internal hosts so a compromised
+            // admin can't repoint the plugin at metadata endpoints or
+            // RFC1918 services that would receive the Hub bearer header.
+            $host = strtolower((string) wp_parse_url($hub_url, PHP_URL_HOST));
+            $scheme = strtolower((string) wp_parse_url($hub_url, PHP_URL_SCHEME));
+            if ($hub_url !== '' && !self::is_safe_hub_host($host, $scheme)) {
+                return new WP_REST_Response([
+                    'success' => false,
+                    'code' => 'peanut_connect_hub_url_invalid',
+                    'message' => __('Hub URL must be a public HTTPS host (no internal/loopback addresses).', 'peanut-connect'),
+                ], 400);
+            }
             update_option('peanut_connect_hub_url', $hub_url);
         }
 
@@ -2764,7 +2818,24 @@ class Peanut_Connect_API {
     public function restore_backup(WP_REST_Request $request): WP_REST_Response {
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup.php';
 
-        $result = Peanut_Connect_Backup::restore_backup($request->get_param('backup_url'));
+        $backup_url = (string) $request->get_param('backup_url');
+
+        // v3.7.21: restrict the source host to the configured Hub. Without
+        // this, the bearer-protected /restore endpoint accepts any URL and
+        // executes its SQL dump + copies its files into wp-content — full
+        // RCE-equivalent if the bearer ever leaks.
+        $hub_url = (string) get_option('peanut_connect_hub_url', '');
+        $hub_host = $hub_url !== '' ? strtolower((string) wp_parse_url($hub_url, PHP_URL_HOST)) : '';
+        $url_host = strtolower((string) wp_parse_url($backup_url, PHP_URL_HOST));
+        if ($hub_host === '' || $url_host === '' || $url_host !== $hub_host) {
+            return new WP_REST_Response([
+                'success' => false,
+                'code' => 'peanut_connect_backup_url_not_allowed',
+                'message' => 'Backup URL must be hosted on the configured Hub.',
+            ], 400);
+        }
+
+        $result = Peanut_Connect_Backup::restore_backup($backup_url);
 
         if (is_wp_error($result)) {
             return new WP_REST_Response([

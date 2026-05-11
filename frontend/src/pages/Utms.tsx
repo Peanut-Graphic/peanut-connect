@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, Button, Alert } from '@/components/common';
+import { useToast } from '@/components/common/Toast';
+import { useConfirm } from '@/hooks/useConfirm';
 import { marketingApi, type Utm, type UtmUpdateInput } from '@/api';
 import {
   Archive,
@@ -16,6 +18,8 @@ export default function Utms() {
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<Utm | null>(null);
   const queryClient = useQueryClient();
+  const toast = useToast();
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['marketing', 'utms', { archived: showArchived }],
@@ -25,17 +29,23 @@ export default function Utms() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ['marketing', 'utms'] });
 
+  const onMutationError = (verb: string) => (err: Error) =>
+    toast.error(`Could not ${verb} UTM: ${err.message || 'unknown error'}`);
+
   const archive = useMutation({
     mutationFn: (id: number) => marketingApi.archiveUtm(id),
-    onSuccess: invalidate,
+    onSuccess: () => { invalidate(); toast.success('UTM archived.'); },
+    onError: onMutationError('archive'),
   });
   const restore = useMutation({
     mutationFn: (id: number) => marketingApi.restoreUtm(id),
-    onSuccess: invalidate,
+    onSuccess: () => { invalidate(); toast.success('UTM restored.'); },
+    onError: onMutationError('restore'),
   });
   const remove = useMutation({
     mutationFn: (id: number) => marketingApi.deleteUtm(id),
-    onSuccess: invalidate,
+    onSuccess: () => { invalidate(); toast.success('UTM deleted.'); },
+    onError: onMutationError('delete'),
   });
   const update = useMutation({
     mutationFn: ({ id, input }: { id: number; input: UtmUpdateInput }) =>
@@ -43,7 +53,9 @@ export default function Utms() {
     onSuccess: () => {
       invalidate();
       setEditing(null);
+      toast.success('UTM updated.');
     },
+    onError: onMutationError('update'),
   });
 
   const utms = data?.data ?? [];
@@ -108,14 +120,14 @@ export default function Utms() {
                     onEdit={() => setEditing(utm)}
                     onArchive={() => archive.mutate(utm.id)}
                     onRestore={() => restore.mutate(utm.id)}
-                    onDelete={() => {
-                      if (
-                        confirm(
-                          `Delete "${utm.name}"? This also removes its short links and click history.`,
-                        )
-                      ) {
-                        remove.mutate(utm.id);
-                      }
+                    onDelete={async () => {
+                      const ok = await confirm({
+                        title: 'Delete UTM?',
+                        message: `Delete "${utm.name}"? This also removes its short links and click history.`,
+                        confirmText: 'Delete',
+                        variant: 'danger',
+                      });
+                      if (ok) remove.mutate(utm.id);
                     }}
                   />
                 ))}
@@ -135,6 +147,7 @@ export default function Utms() {
           error={update.error ? (update.error as Error).message : null}
         />
       )}
+      {confirmDialog}
     </Layout>
   );
 }

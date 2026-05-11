@@ -8,6 +8,7 @@ import {
   CollapsibleBanner,
   HelpTooltip,
 } from '@/components/common';
+import { useConfirm } from '@/hooks/useConfirm';
 import { getActivityLog, clearActivityLog, activityLogger } from '@/services/activityLog';
 import type { ActivityLogEntry, ActivityStatus, ActivityType } from '@/types';
 import {
@@ -61,6 +62,7 @@ const typeConfig: Record<ActivityType, { icon: typeof Activity; label: string }>
 export default function ActivityPage() {
   const [entries, setEntries] = useState<ActivityLogEntry[]>([]);
   const [filter, setFilter] = useState<'all' | ActivityStatus>('all');
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
     loadEntries();
@@ -70,8 +72,14 @@ export default function ActivityPage() {
     setEntries(getActivityLog());
   };
 
-  const handleClearLog = () => {
-    if (confirm('Are you sure you want to clear the activity log? This cannot be undone.')) {
+  const handleClearLog = async () => {
+    const ok = await confirm({
+      title: 'Clear activity log?',
+      message: 'This deletes all stored entries and cannot be undone.',
+      confirmText: 'Clear log',
+      variant: 'danger',
+    });
+    if (ok) {
       clearActivityLog();
       setEntries([]);
     }
@@ -280,6 +288,7 @@ export default function ActivityPage() {
           </Card>
         )}
       </div>
+      {confirmDialog}
     </Layout>
   );
 }
