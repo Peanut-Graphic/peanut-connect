@@ -211,12 +211,9 @@ class Peanut_Connect_Marketing {
     }
 
     public static function journey_stats(WP_REST_Request $request) {
-        // Send filters in a POST body — query strings with values like
-        // ?campaign=spring-promo trip the host's mod_security WAF, which
-        // rewrites the response to 406/503. POST + JSON body avoids that.
         $params = $request->get_query_params();
 
-        return self::forward('POST', '/journeys/stats', $params);
+        return self::forward('GET', '/journeys/stats', null, $params);
     }
 
     public static function journey_detail(WP_REST_Request $request) {

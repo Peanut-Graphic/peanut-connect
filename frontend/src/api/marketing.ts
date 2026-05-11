@@ -128,7 +128,14 @@ export const marketingApi = {
   buildCampaign: async (input: CampaignBuildInput): Promise<CampaignResult> => {
     const res = await api.post('/marketing/campaigns', input);
     // Hub returns { success, campaign: {...} }
-    return res.data.campaign as CampaignResult;
+    const campaign = res.data?.campaign as CampaignResult | undefined;
+    if (!campaign) {
+      throw new Error(
+        res.data?.message ||
+          'Hub did not return a campaign payload. The link may still have been created — check the Links tab.'
+      );
+    }
+    return campaign;
   },
 
   listUtms: async (params: { archived?: boolean; per_page?: number; page?: number } = {}): Promise<Paginated<Utm>> => {

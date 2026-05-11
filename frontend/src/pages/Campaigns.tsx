@@ -303,6 +303,19 @@ export default function Campaigns() {
           {step === 3 && result && (
             <DoneStep result={result} tracking={tracking} onReset={reset} />
           )}
+          {step === 3 && !result && (
+            <Card>
+              <CardHeader
+                title="Campaign saved, but no payload returned"
+                description="Hub didn't return the campaign object after creation. The link may still exist — check the Links tab to confirm, then build another."
+              />
+              <div className="flex items-center gap-3 pt-1">
+                <Button variant="ghost" onClick={reset} icon={<RotateCcw className="w-4 h-4" />}>
+                  Build another
+                </Button>
+              </div>
+            </Card>
+          )}
         </div>
 
         <aside className="lg:col-span-2">
@@ -833,9 +846,17 @@ function SummaryCard({
   }
 
   const filled = state.name || state.base_url || state.utm_source;
+  const previewDescription =
+    step === 3
+      ? 'Campaign details (no result payload returned by Hub).'
+      : step === 2
+        ? 'Last review before submit.'
+        : step === 1
+          ? 'Short link + QR details on the next step.'
+          : 'Updates as you fill in Step 1.';
   return (
     <Card>
-      <CardHeader title="Preview" description="Updates as you fill in Step 1." />
+      <CardHeader title="Preview" description={previewDescription} />
       {filled ? (
         <dl className="text-sm space-y-2">
           {state.name && <SummaryRow label="Name" value={state.name} />}
