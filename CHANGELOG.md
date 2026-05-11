@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.23] - 2026-05-11 — HOTFIX
+
+### Fixed (regression in 3.7.22)
+- **All lazy-loaded route chunks 404'd in production.** 3.7.22's React.lazy code-split emitted chunk imports like `/js/Campaigns-D5yzJRHT.js`, which the browser resolved relative to the page URL (`wp-admin/admin.php/...`) instead of the plugin's assets path. Every code-split route + every grouped icon chunk returned 404, hydration crashed mid-render, and the ErrorBoundary fallback ("Something went wrong") overlaid every page. Reverted `App.tsx` to eager imports so all routes resolve via the single `main.js` bundle again. Bundle is back to ~545 KB; proper code-splitting needs Vite `base` configured against the plugin's URL via WP — deferred until that integration is wired.
+
 ## [3.7.22] - 2026-05-11
 
 ### Performance
