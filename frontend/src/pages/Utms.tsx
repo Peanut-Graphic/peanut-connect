@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, Button, Alert } from '@/components/common';
+import Modal from '@/components/common/Modal';
 import { useToast } from '@/components/common/Toast';
 import { useConfirm } from '@/hooks/useConfirm';
 import { marketingApi, type Utm, type UtmUpdateInput } from '@/api';
@@ -312,18 +313,11 @@ function EditUtmModal({
     onSave(input);
   }
 
+  // v3.7.22: replaced raw fixed-overlay div with the project's Modal
+  // component for focus trap, Esc-to-close, and body-scroll lock.
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 overflow-y-auto">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white rounded-lg shadow-xl w-full max-w-lg my-8"
-      >
-        <div className="px-5 py-4 border-b border-slate-100">
-          <h2 className="text-base font-semibold text-slate-900">Edit campaign</h2>
-          <p className="text-xs text-slate-500 mt-0.5">{utm.name}</p>
-        </div>
-
-        <div className="px-5 py-4 space-y-4">
+    <Modal isOpen onClose={onClose} title="Edit UTM" description={utm.name} size="lg">
+      <form onSubmit={handleSubmit} className="space-y-4">
           {error && <Alert variant="error">{error}</Alert>}
 
           <Field label="Campaign name">
@@ -429,9 +423,8 @@ function EditUtmModal({
               </div>
             )}
           </div>
-        </div>
 
-        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2">
+        <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
           <Button variant="ghost" size="sm" type="button" onClick={onClose}>
             Cancel
           </Button>
@@ -440,7 +433,7 @@ function EditUtmModal({
           </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 

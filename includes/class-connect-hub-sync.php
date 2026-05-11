@@ -80,7 +80,7 @@ class Peanut_Connect_Hub_Sync {
         if (empty($hub_url) || empty($api_key)) {
             return [
                 'success' => false,
-                'message' => 'Hub not configured',
+                'message' => __('Hub not configured', 'peanut-connect'),
             ];
         }
 
@@ -135,39 +135,72 @@ class Peanut_Connect_Hub_Sync {
     /**
      * Sync only events that have a click_id (came from Hub campaign links)
      */
-    private static function sync_campaign_events(string $hub_url, string $api_key): int {
-        global $wpdb;
-
-        $table = Peanut_Connect_Database::table('events');
+    /**
+     * Shared batched-sync driver. Fetches up to BATCH_SIZE rows via
+     * $fetcher, optionally transforms them via $formatter, POSTs to Hub
+     * keyed by $payload_key, then calls $marker with the synced row ids.
+     * Bails after MAX_BATCHES_PER_RUN batches per cron tick.
+     *
+     * @param callable      $fetcher   fn(int $size): array<int, array<string,mixed>> rows (each must include 'id')
+     * @param callable      $marker    fn(array<int,int> $ids): void
+     * @param ?callable     $formatter Optional fn(array $rows): array transform
+     * @since 3.7.22
+     */
+    private static function sync_in_batches(
+        string $hub_url,
+        string $api_key,
+        string $payload_key,
+        string $error_label,
+        callable $fetcher,
+        callable $marker,
+        ?callable $formatter = null
+    ): int {
         $synced = 0;
         $batches = 0;
 
         while ($batches < self::MAX_BATCHES_PER_RUN) {
-            $events = $wpdb->get_results(
-                $wpdb->prepare(
-                    "SELECT * FROM $table WHERE synced = 0 AND click_id IS NOT NULL AND click_id != '' ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                    self::BATCH_SIZE
-                ),
-                ARRAY_A
-            );
-
-            if (empty($events)) {
+            $rows = $fetcher(self::BATCH_SIZE);
+            if (empty($rows)) {
                 break;
             }
 
-            $response = self::send_to_hub($hub_url, $api_key, ['events' => $events]);
+            $payload = $formatter ? $formatter($rows) : $rows;
+            $response = self::send_to_hub($hub_url, $api_key, [$payload_key => $payload]);
 
-            if ($response['success']) {
-                $ids = array_column($events, 'id');
-                self::mark_synced($table, $ids);
-                $synced += count($events);
-                $batches++;
-            } else {
-                throw new \Exception('Failed to sync events: ' . ($response['message'] ?? 'Unknown error'));
+            if (!$response['success']) {
+                throw new \Exception(
+                    sprintf(
+                        /* translators: 1: record type label (events, visitors, etc.); 2: error message */
+                        __('Failed to sync %1$s: %2$s', 'peanut-connect'),
+                        $error_label,
+                        $response['message'] ?? __('Unknown error', 'peanut-connect')
+                    )
+                );
             }
+
+            $marker(array_column($rows, 'id'));
+            $synced += count($rows);
+            $batches++;
         }
 
         return $synced;
+    }
+
+    private static function sync_campaign_events(string $hub_url, string $api_key): int {
+        global $wpdb;
+        $table = Peanut_Connect_Database::table('events');
+
+        return self::sync_in_batches(
+            $hub_url, $api_key, 'events', 'events',
+            fn(int $size) => $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM $table WHERE synced = 0 AND click_id IS NOT NULL AND click_id != '' ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                    $size
+                ),
+                ARRAY_A
+            ),
+            fn(array $ids) => self::mark_synced($table, $ids),
+        );
     }
 
     /**
@@ -175,42 +208,23 @@ class Peanut_Connect_Hub_Sync {
      */
     private static function sync_campaign_visitors(string $hub_url, string $api_key): int {
         global $wpdb;
-
         $visitors_table = Peanut_Connect_Database::table('visitors');
         $events_table = Peanut_Connect_Database::table('events');
-        $synced = 0;
-        $batches = 0;
 
-        while ($batches < self::MAX_BATCHES_PER_RUN) {
-            // Get unsynced visitors that have at least one event with a click_id
-            $visitors = $wpdb->get_results(
+        return self::sync_in_batches(
+            $hub_url, $api_key, 'visitors', 'visitors',
+            fn(int $size) => $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT DISTINCT v.* FROM $visitors_table v
                      INNER JOIN $events_table e ON v.visitor_id = e.visitor_id
                      WHERE v.synced = 0 AND e.click_id IS NOT NULL AND e.click_id != ''
                      ORDER BY v.id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                    self::BATCH_SIZE
+                    $size
                 ),
                 ARRAY_A
-            );
-
-            if (empty($visitors)) {
-                break;
-            }
-
-            $response = self::send_to_hub($hub_url, $api_key, ['visitors' => $visitors]);
-
-            if ($response['success']) {
-                $ids = array_column($visitors, 'id');
-                self::mark_synced($visitors_table, $ids);
-                $synced += count($visitors);
-                $batches++;
-            } else {
-                throw new \Exception('Failed to sync visitors: ' . ($response['message'] ?? 'Unknown error'));
-            }
-        }
-
-        return $synced;
+            ),
+            fn(array $ids) => self::mark_synced($visitors_table, $ids),
+        );
     }
 
     /**
@@ -218,37 +232,19 @@ class Peanut_Connect_Hub_Sync {
      */
     private static function sync_popup_interactions(string $hub_url, string $api_key): int {
         global $wpdb;
-
         $table = Peanut_Connect_Database::table('popup_interactions');
-        $synced = 0;
-        $batches = 0;
 
-        while ($batches < self::MAX_BATCHES_PER_RUN) {
-            $interactions = $wpdb->get_results(
+        return self::sync_in_batches(
+            $hub_url, $api_key, 'popup_interactions', 'popup interactions',
+            fn(int $size) => $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM $table WHERE synced = 0 ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                    self::BATCH_SIZE
+                    $size
                 ),
                 ARRAY_A
-            );
-
-            if (empty($interactions)) {
-                break;
-            }
-
-            $response = self::send_to_hub($hub_url, $api_key, ['popup_interactions' => $interactions]);
-
-            if ($response['success']) {
-                $ids = array_column($interactions, 'id');
-                self::mark_synced($table, $ids);
-                $synced += count($interactions);
-                $batches++;
-            } else {
-                throw new \Exception('Failed to sync popup interactions: ' . ($response['message'] ?? 'Unknown error'));
-            }
-        }
-
-        return $synced;
+            ),
+            fn(array $ids) => self::mark_synced($table, $ids),
+        );
     }
 
     /**
@@ -259,44 +255,23 @@ class Peanut_Connect_Hub_Sync {
             return 0;
         }
 
-        $synced = 0;
-        $batches = 0;
-
-        while ($batches < self::MAX_BATCHES_PER_RUN) {
-            $submissions = Peanut_Connect_Forms::get_unsynced_submissions(self::BATCH_SIZE);
-
-            if (empty($submissions)) {
-                break;
-            }
-
-            $formatted = [];
-            foreach ($submissions as $sub) {
-                $formatted[] = [
-                    'submission_uuid' => $sub['submission_uuid'],
-                    'source' => $sub['source'],
-                    'hub_form_id' => $sub['hub_form_id'],
-                    'form_id' => $sub['formflow_instance_id'] ? (string) $sub['formflow_instance_id'] : null,
-                    'form_name' => $sub['form_name'],
-                    'visitor_id' => $sub['visitor_id'],
-                    'data' => $sub['data'],
-                    'metadata' => $sub['metadata'],
-                    'submitted_at' => $sub['submitted_at'],
-                ];
-            }
-
-            $response = self::send_to_hub($hub_url, $api_key, ['form_submissions' => $formatted]);
-
-            if ($response['success']) {
-                $ids = array_column($submissions, 'id');
-                Peanut_Connect_Forms::mark_submissions_synced($ids);
-                $synced += count($submissions);
-                $batches++;
-            } else {
-                throw new \Exception('Failed to sync form submissions: ' . ($response['message'] ?? 'Unknown error'));
-            }
-        }
-
-        return $synced;
+        return self::sync_in_batches(
+            $hub_url, $api_key, 'form_submissions', 'form submissions',
+            fn(int $size) => Peanut_Connect_Forms::get_unsynced_submissions($size),
+            fn(array $ids) => Peanut_Connect_Forms::mark_submissions_synced($ids),
+            // form_submissions need a column transform before send_to_hub.
+            fn(array $rows) => array_map(static fn(array $sub) => [
+                'submission_uuid' => $sub['submission_uuid'],
+                'source' => $sub['source'],
+                'hub_form_id' => $sub['hub_form_id'],
+                'form_id' => $sub['formflow_instance_id'] ? (string) $sub['formflow_instance_id'] : null,
+                'form_name' => $sub['form_name'],
+                'visitor_id' => $sub['visitor_id'],
+                'data' => $sub['data'],
+                'metadata' => $sub['metadata'],
+                'submitted_at' => $sub['submitted_at'],
+            ], $rows),
+        );
     }
 
     /**
@@ -417,7 +392,7 @@ class Peanut_Connect_Hub_Sync {
         if (empty($hub_url) || empty($api_key)) {
             return [
                 'success' => false,
-                'message' => 'Hub not configured',
+                'message' => __('Hub not configured', 'peanut-connect'),
             ];
         }
 

@@ -20,7 +20,7 @@ class Peanut_Connect_Database {
     /**
      * Database version
      */
-    const DB_VERSION = '1.1.0';
+    const DB_VERSION = '1.2.0';
 
     /**
      * Option name for DB version
@@ -105,7 +105,8 @@ class Peanut_Connect_Database {
             KEY event_type (event_type),
             KEY synced (synced),
             KEY occurred_at (occurred_at),
-            KEY click_id (click_id)
+            KEY click_id (click_id),
+            KEY visitor_synced (visitor_id, synced)
         ) $charset_collate;";
         dbDelta($sql_events);
 
@@ -264,30 +265,53 @@ class Peanut_Connect_Database {
     }
 
     /**
-     * Clean old records (retention policy)
+     * Clean old records (retention policy). Only deletes rows that have
+     * already been synced to Hub. Visitors get a longer retention so that
+     * the visitor row still exists when a delayed event/touch references it.
+     *
+     * v3.7.22: was previously only cleaning events/touches/popup_interactions.
+     * conversions, visitors, and form_submissions accumulated forever.
      */
     public static function cleanup_old_records(int $days = 90): int {
         global $wpdb;
 
         $cutoff = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
+        // Visitors are referenced by events/touches/conversions, so keep them
+        // ~50% longer than the dependent rows to avoid orphan inserts.
+        $visitor_cutoff = gmdate('Y-m-d H:i:s', strtotime('-' . ((int) ($days * 1.5)) . ' days'));
         $deleted = 0;
 
-        // Only clean synced records
-        $tables = ['events', 'touches', 'popup_interactions'];
+        // Per-table date column.
+        $tables = [
+            'events'             => 'occurred_at',
+            'touches'            => 'touched_at',
+            'popup_interactions' => 'occurred_at',
+            'conversions'        => 'converted_at',
+            'form_submissions'   => 'submitted_at',
+        ];
 
-        foreach ($tables as $table) {
+        foreach ($tables as $table => $field) {
             $table_name = self::table($table);
-            $field = $table === 'touches' ? 'touched_at' : 'occurred_at';
-
             $count = $wpdb->query(
                 $wpdb->prepare(
                     "DELETE FROM $table_name WHERE synced = 1 AND $field < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
                     $cutoff
                 )
             );
-
-            $deleted += $count;
+            $deleted += (int) $count;
         }
+
+        // Visitors: prune synced rows whose last_seen_at is older than the
+        // longer cutoff. Joins to events/touches would be safer but expensive;
+        // the visitor_cutoff buffer reduces the orphan-insert window.
+        $visitors_table = self::table('visitors');
+        $count = $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM $visitors_table WHERE synced = 1 AND last_seen_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $visitor_cutoff
+            )
+        );
+        $deleted += (int) $count;
 
         return $deleted;
     }

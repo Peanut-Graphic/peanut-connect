@@ -1,11 +1,249 @@
 {
+  "_Modal-DaoXn_QU.js": {
+    "file": "js/Modal-DaoXn_QU.js",
+    "name": "Modal",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_archive-DYIltb-t.js": {
+    "file": "js/archive-DYIltb-t.js",
+    "name": "archive",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_check-DvOa3FJW.js": {
+    "file": "js/check-DvOa3FJW.js",
+    "name": "check",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_clock-DFiRit7e.js": {
+    "file": "js/clock-DFiRit7e.js",
+    "name": "clock",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_copy-CoYrbfdJ.js": {
+    "file": "js/copy-CoYrbfdJ.js",
+    "name": "copy",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_file-code-DfqSVP4d.js": {
+    "file": "js/file-code-DfqSVP4d.js",
+    "name": "file-code",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_globe-B21Jk8fq.js": {
+    "file": "js/globe-B21Jk8fq.js",
+    "name": "globe",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_link-2-DVVtxncb.js": {
+    "file": "js/link-2-DVVtxncb.js",
+    "name": "link-2",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_marketing-CneYCAMr.js": {
+    "file": "js/marketing-CneYCAMr.js",
+    "name": "marketing",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_power-EMs9of8E.js": {
+    "file": "js/power-EMs9of8E.js",
+    "name": "power",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_useConfirm-D_fMTEZN.js": {
+    "file": "js/useConfirm-D_fMTEZN.js",
+    "name": "useConfirm",
+    "imports": [
+      "src/main.tsx",
+      "_Modal-DaoXn_QU.js"
+    ]
+  },
+  "_useMutation-_xISP9nJ.js": {
+    "file": "js/useMutation-_xISP9nJ.js",
+    "name": "useMutation",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "_user-D-uQJple.js": {
+    "file": "js/user-D-uQJple.js",
+    "name": "user",
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
   "src/main.tsx": {
     "file": "js/main.js",
     "name": "main",
     "src": "src/main.tsx",
     "isEntry": true,
+    "dynamicImports": [
+      "src/pages/Health.tsx",
+      "src/pages/Updates.tsx",
+      "src/pages/Activity.tsx",
+      "src/pages/ErrorLog.tsx",
+      "src/pages/Campaigns.tsx",
+      "src/pages/Utms.tsx",
+      "src/pages/Links.tsx",
+      "src/pages/Analytics.tsx",
+      "src/pages/Tracking.tsx",
+      "src/pages/Settings.tsx"
+    ],
     "css": [
       "css/main.css"
+    ]
+  },
+  "src/pages/Activity.tsx": {
+    "file": "js/Activity-DfBEjgzl.js",
+    "name": "Activity",
+    "src": "src/pages/Activity.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx",
+      "_useConfirm-D_fMTEZN.js",
+      "_link-2-DVVtxncb.js",
+      "_Modal-DaoXn_QU.js"
+    ]
+  },
+  "src/pages/Analytics.tsx": {
+    "file": "js/Analytics-7pqmafM2.js",
+    "name": "Analytics",
+    "src": "src/pages/Analytics.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx",
+      "_marketing-CneYCAMr.js"
+    ]
+  },
+  "src/pages/Campaigns.tsx": {
+    "file": "js/Campaigns-D5yzJRHT.js",
+    "name": "Campaigns",
+    "src": "src/pages/Campaigns.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx",
+      "_useMutation-_xISP9nJ.js",
+      "_marketing-CneYCAMr.js",
+      "_check-DvOa3FJW.js",
+      "_copy-CoYrbfdJ.js"
+    ]
+  },
+  "src/pages/ErrorLog.tsx": {
+    "file": "js/ErrorLog-BA7d93JK.js",
+    "name": "ErrorLog",
+    "src": "src/pages/ErrorLog.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx",
+      "_useMutation-_xISP9nJ.js",
+      "_useConfirm-D_fMTEZN.js",
+      "_user-D-uQJple.js",
+      "_file-code-DfqSVP4d.js",
+      "_clock-DFiRit7e.js",
+      "_globe-B21Jk8fq.js",
+      "_Modal-DaoXn_QU.js"
+    ]
+  },
+  "src/pages/Health.tsx": {
+    "file": "js/Health-Cm8u-VwH.js",
+    "name": "Health",
+    "src": "src/pages/Health.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx",
+      "_file-code-DfqSVP4d.js",
+      "_globe-B21Jk8fq.js",
+      "_archive-DYIltb-t.js"
+    ]
+  },
+  "src/pages/Links.tsx": {
+    "file": "js/Links-DDyYBVgP.js",
+    "name": "Links",
+    "src": "src/pages/Links.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx",
+      "_useMutation-_xISP9nJ.js",
+      "_marketing-CneYCAMr.js",
+      "_useConfirm-D_fMTEZN.js",
+      "_copy-CoYrbfdJ.js",
+      "_link-2-DVVtxncb.js",
+      "_power-EMs9of8E.js",
+      "_Modal-DaoXn_QU.js"
+    ]
+  },
+  "src/pages/Settings.tsx": {
+    "file": "js/Settings-CMJ8BMWt.js",
+    "name": "Settings",
+    "src": "src/pages/Settings.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx",
+      "_useMutation-_xISP9nJ.js",
+      "_Modal-DaoXn_QU.js",
+      "_user-D-uQJple.js",
+      "_power-EMs9of8E.js",
+      "_link-2-DVVtxncb.js"
+    ]
+  },
+  "src/pages/Tracking.tsx": {
+    "file": "js/Tracking-BJ9uoZjd.js",
+    "name": "Tracking",
+    "src": "src/pages/Tracking.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx",
+      "_marketing-CneYCAMr.js",
+      "_check-DvOa3FJW.js",
+      "_copy-CoYrbfdJ.js"
+    ]
+  },
+  "src/pages/Updates.tsx": {
+    "file": "js/Updates-D7EO-Jgt.js",
+    "name": "Updates",
+    "src": "src/pages/Updates.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx",
+      "_useMutation-_xISP9nJ.js",
+      "_Modal-DaoXn_QU.js",
+      "_archive-DYIltb-t.js",
+      "_clock-DFiRit7e.js",
+      "_globe-B21Jk8fq.js"
+    ]
+  },
+  "src/pages/Utms.tsx": {
+    "file": "js/Utms-6Ru6ZvC3.js",
+    "name": "Utms",
+    "src": "src/pages/Utms.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx",
+      "_useMutation-_xISP9nJ.js",
+      "_marketing-CneYCAMr.js",
+      "_Modal-DaoXn_QU.js",
+      "_useConfirm-D_fMTEZN.js",
+      "_copy-CoYrbfdJ.js",
+      "_archive-DYIltb-t.js"
     ]
   }
 }

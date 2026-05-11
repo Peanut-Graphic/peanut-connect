@@ -1,17 +1,37 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import Dashboard from './pages/Dashboard';
-import Settings from './pages/Settings';
-import Health from './pages/Health';
-import Updates from './pages/Updates';
-import Activity from './pages/Activity';
-import ErrorLog from './pages/ErrorLog';
-import Campaigns from './pages/Campaigns';
-import Utms from './pages/Utms';
-import Links from './pages/Links';
-import Analytics from './pages/Analytics';
-import Tracking from './pages/Tracking';
 import { ToastProvider, ErrorBoundary } from './components/common';
 import { ThemeProvider } from './contexts';
+
+// Dashboard is the default landing page — keep it eagerly imported so the
+// initial paint doesn't need a chunk roundtrip.
+import Dashboard from './pages/Dashboard';
+
+// Every other route is code-split so the initial bundle is small. Each
+// route is loaded on demand; QRCode + chart libs etc. only download when
+// their owning page is first visited.
+const Health = lazy(() => import('./pages/Health'));
+const Updates = lazy(() => import('./pages/Updates'));
+const Activity = lazy(() => import('./pages/Activity'));
+const ErrorLog = lazy(() => import('./pages/ErrorLog'));
+const Campaigns = lazy(() => import('./pages/Campaigns'));
+const Utms = lazy(() => import('./pages/Utms'));
+const Links = lazy(() => import('./pages/Links'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const Tracking = lazy(() => import('./pages/Tracking'));
+const Settings = lazy(() => import('./pages/Settings'));
+
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center py-16">
+      <div
+        className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary-600"
+        role="status"
+        aria-label="Loading page"
+      />
+    </div>
+  );
+}
 
 /**
  * Main Application Component
@@ -20,6 +40,7 @@ import { ThemeProvider } from './contexts';
  * - ThemeProvider: For dark/light mode support
  * - ToastProvider: For toast notifications
  * - ErrorBoundary: For graceful error handling
+ * - Suspense: Per-route lazy-load fallback (v3.7.22+ code-split)
  */
 export default function App() {
   return (
@@ -32,19 +53,21 @@ export default function App() {
           >
             Skip to main content
           </a>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/health" element={<Health />} />
-            <Route path="/updates" element={<Updates />} />
-            <Route path="/activity" element={<Activity />} />
-            <Route path="/errors" element={<ErrorLog />} />
-            <Route path="/campaigns" element={<Campaigns />} />
-            <Route path="/utms" element={<Utms />} />
-            <Route path="/links" element={<Links />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/tracking" element={<Tracking />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/health" element={<Health />} />
+              <Route path="/updates" element={<Updates />} />
+              <Route path="/activity" element={<Activity />} />
+              <Route path="/errors" element={<ErrorLog />} />
+              <Route path="/campaigns" element={<Campaigns />} />
+              <Route path="/utms" element={<Utms />} />
+              <Route path="/links" element={<Links />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/tracking" element={<Tracking />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </ToastProvider>
     </ThemeProvider>

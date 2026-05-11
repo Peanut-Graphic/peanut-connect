@@ -5,6 +5,27 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.22] - 2026-05-11
+
+### Performance
+- **Code-split SPA per route.** `App.tsx` now lazy-loads every page via `React.lazy + Suspense`; only Dashboard is eagerly imported for the initial paint. **Main bundle dropped from 543 KB → 314 KB (~42% reduction).** Per-page chunks: Health 51 KB, Campaigns 46 KB, Settings 38 KB, Analytics 24 KB, Activity 21 KB, Updates 17 KB, Utms 11 KB, ErrorLog 9 KB, Links 5 KB, Tracking 5 KB.
+- **Composite index on `events(visitor_id, synced)`.** The visitors-sync JOIN previously tablescanned `events` for every batch on installs at scale. New composite key + DB_VERSION bumped to 1.2.0 so the migration runner picks it up automatically.
+
+### Architecture
+- **Migration runner is now hooked.** `Peanut_Connect_Database::init()` is called from the main plugin file so `check_db_version` runs on every `plugins_loaded` and applies schema bumps without requiring plugin reactivation. Previously dead code.
+- **Sync batch loops deduped.** The 4 `sync_*` methods (events / visitors / popup_interactions / form_submissions) are now thin callers of a single `sync_in_batches()` helper. Same behavior, ~120 fewer lines, easier to extend.
+- **Settings.tsx split.** 1,227-line monolith reduced to 809 lines by extracting Security Hardening → `Settings/SecurityCard.tsx` and Hub Permissions → `Settings/PermissionsCard.tsx`. Each card owns its own queries + mutations.
+
+### Data retention
+- **`cleanup_old_records` now cleans all synced tables.** Previously only events / touches / popup_interactions. Now also conversions, visitors, and form_submissions. Visitor retention is automatically 50% longer than dependent rows to avoid orphan-insert windows.
+
+### Accessibility
+- **Analytics campaign dropdown** now closes on Esc + click-outside, with `aria-haspopup="listbox"` + `aria-expanded` on the trigger and `role="listbox" aria-multiselectable="true"` on the menu.
+- **UTM edit modal** migrated from a raw fixed-overlay div to the project's `Modal` component, gaining focus trap, Esc-to-close, body-scroll lock, and proper ARIA labelling.
+
+### i18n
+- Wrapped untranslated strings in `__()` / `_n()` across `class-connect-forms.php` and `class-connect-hub-sync.php` ("Hub not configured", "Unknown error", "Synced %d forms from Hub", "Failed to sync %s: %s"). Translation domain: `peanut-connect`.
+
 ## [3.7.21] - 2026-05-11
 
 ### Security (defense-in-depth)

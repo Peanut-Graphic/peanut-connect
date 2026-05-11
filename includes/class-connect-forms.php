@@ -61,14 +61,18 @@ class Peanut_Connect_Forms {
         if ($result['success']) {
             return new WP_REST_Response([
                 'success' => true,
-                'message' => sprintf('Synced %d forms from Hub', $result['count']),
+                'message' => sprintf(
+                    /* translators: %d: number of forms synced */
+                    _n('Synced %d form from Hub', 'Synced %d forms from Hub', $result['count'], 'peanut-connect'),
+                    $result['count']
+                ),
                 'count' => $result['count'],
             ], 200);
         }
 
         return new WP_REST_Response([
             'success' => false,
-            'message' => $result['error'] ?? 'Unknown error',
+            'message' => $result['error'] ?? __('Unknown error', 'peanut-connect'),
         ], 500);
     }
 
@@ -80,7 +84,7 @@ class Peanut_Connect_Forms {
         $api_key = get_option('peanut_connect_hub_api_key');
 
         if (empty($hub_url) || empty($api_key)) {
-            return ['success' => false, 'error' => 'Hub not configured'];
+            return ['success' => false, 'error' => __('Hub not configured', 'peanut-connect')];
         }
 
         $response = wp_remote_get(trailingslashit($hub_url) . 'api/v1/forms/active', [
