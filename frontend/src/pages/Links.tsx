@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, Alert } from '@/components/common';
 import { marketingApi, type Link as ShortLink } from '@/api';
-import { Power, PowerOff, Trash2, ExternalLink, Copy } from 'lucide-react';
+import { Power, PowerOff, Trash2, ExternalLink, Copy, Link2 } from 'lucide-react';
 
 export default function Links() {
   const queryClient = useQueryClient();
@@ -98,6 +98,14 @@ function LinkRow({
     }
   }
 
+  async function copyFull() {
+    try {
+      await navigator.clipboard.writeText(link.destination_url);
+    } catch {
+      // Browser blocked clipboard.
+    }
+  }
+
   return (
     <tr className="hover:bg-slate-50">
       <td className="px-4 py-3">
@@ -132,6 +140,15 @@ function LinkRow({
             title="Copy short link"
           >
             <Copy className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={copyFull}
+            className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700"
+            aria-label="Copy full UTM URL"
+            title="Copy full UTM URL"
+          >
+            <Link2 className="w-4 h-4" />
           </button>
           {link.short_url && (
             <a
