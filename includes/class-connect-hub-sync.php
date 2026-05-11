@@ -60,57 +60,11 @@ class Peanut_Connect_Hub_Sync {
         return $schedules;
     }
 
-    /**
-     * Register REST endpoint for manual sync
-     */
-    public static function register_sync_endpoint(): void {
-        register_rest_route('peanut-connect/v1', '/sync/trigger', [
-            'methods' => 'POST',
-            'callback' => [__CLASS__, 'handle_manual_sync'],
-            'permission_callback' => function() {
-                return current_user_can('manage_options');
-            },
-        ]);
-
-        register_rest_route('peanut-connect/v1', '/sync/status', [
-            'methods' => 'GET',
-            'callback' => [__CLASS__, 'get_sync_status'],
-            'permission_callback' => function() {
-                return current_user_can('manage_options');
-            },
-        ]);
-    }
-
-    /**
-     * Handle manual sync trigger
-     */
-    public static function handle_manual_sync(\WP_REST_Request $request): \WP_REST_Response {
-        $result = self::run_sync();
-
-        return new \WP_REST_Response([
-            'success' => $result['success'],
-            'stats' => $result['stats'] ?? null,
-            'message' => $result['message'] ?? null,
-        ]);
-    }
-
-    /**
-     * Get sync status
-     */
-    public static function get_sync_status(\WP_REST_Request $request): \WP_REST_Response {
-        $unsynced = Peanut_Connect_Database::get_unsynced_counts();
-        $last_sync = get_option('peanut_connect_last_hub_sync');
-        $hub_url = get_option('peanut_connect_hub_url');
-        $connected = !empty($hub_url) && !empty(get_option('peanut_connect_hub_api_key'));
-
-        return new \WP_REST_Response([
-            'connected' => $connected,
-            'hub_url' => $hub_url,
-            'last_sync' => $last_sync,
-            'pending' => $unsynced,
-            'total_pending' => array_sum($unsynced),
-        ]);
-    }
+    // Removed in 3.7.20: register_sync_endpoint(), handle_manual_sync(),
+    // and get_sync_status() registered /sync/trigger and /sync/status but
+    // were never wired to rest_api_init. The SPA uses /settings/hub/sync
+    // (class-connect-api.php) instead. Dead routes that never existed at
+    // runtime.
 
     /**
      * Run the sync process
@@ -607,13 +561,7 @@ class Peanut_Connect_Hub_Sync {
         return [];
     }
 
-    /**
-     * Unschedule sync cron
-     */
-    public static function unschedule(): void {
-        $timestamp = wp_next_scheduled('peanut_connect_sync_to_hub');
-        if ($timestamp) {
-            wp_unschedule_event($timestamp, 'peanut_connect_sync_to_hub');
-        }
-    }
+    // Removed in 3.7.20: unschedule() only cleared the legacy
+    // peanut_connect_sync_to_hub hook (dead since 3.7.17). Real cleanup
+    // lives in the deactivation hook in peanut-connect.php.
 }

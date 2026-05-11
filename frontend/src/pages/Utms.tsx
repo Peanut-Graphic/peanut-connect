@@ -283,8 +283,11 @@ function EditUtmModal({
     e.preventDefault();
     const input: UtmUpdateInput = {
       name,
-      send_count: sendCount === '' ? 0 : Number(sendCount),
-      campaign_cost: cost === '' ? 0 : Number(cost),
+      // Blank → null (preserve existing server-side value). Previously this
+      // forced 0, which silently zeroed valid Reach/Cost when a user only
+      // edited Notes.
+      send_count: sendCount === '' ? null : Number(sendCount),
+      campaign_cost: cost === '' ? null : Number(cost),
       notes: notes || null,
     };
     if (showAdvanced) {

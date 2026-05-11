@@ -262,9 +262,15 @@ class Peanut_Connect_Forms {
             return self::render_hub_form($form, $options);
         }
 
-        // If it's a FormFlow form, use FormFlow's shortcode
+        // If it's a FormFlow form, use FormFlow's shortcode.
+        // form['id'] is validated as numeric before passing to do_shortcode;
+        // esc_attr() would entity-encode quotes and break shortcode parsing.
         if ($form['source'] === 'formflow') {
-            return do_shortcode('[formflow id="' . esc_attr($form['id']) . '"]');
+            $form_id = absint($form['id'] ?? 0);
+            if ($form_id <= 0) {
+                return '<!-- Peanut Form: invalid FormFlow id -->';
+            }
+            return do_shortcode('[formflow id="' . $form_id . '"]');
         }
 
         return '<!-- Peanut Form: Unknown form source -->';

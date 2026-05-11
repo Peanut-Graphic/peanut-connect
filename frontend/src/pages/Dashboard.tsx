@@ -29,10 +29,11 @@ import {
   ArrowRight,
   Sparkles,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { Link } from 'react-router-dom';
+import { formatRelative } from '@/utils/date';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { data: dashboard, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['dashboard'],
     queryFn: dashboardApi.get,
@@ -155,9 +156,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-500">
-            Last sync: {dashboard?.hub?.last_sync
-              ? formatDistanceToNow(new Date(dashboard.hub.last_sync + (dashboard.hub.last_sync.includes('Z') || dashboard.hub.last_sync.includes('+') ? '' : 'Z')), { addSuffix: true })
-              : 'Never'}
+            Last sync: {formatRelative(dashboard?.hub?.last_sync)}
           </span>
         </div>
         <Button
@@ -236,7 +235,7 @@ export default function Dashboard() {
           title={`${totalUpdates} Update${totalUpdates > 1 ? 's' : ''} Available`}
           action={{
             label: 'View Updates',
-            onClick: () => window.location.hash = '#/updates',
+            onClick: () => navigate('/updates'),
           }}
         >
           Keeping your WordPress site updated is crucial for security and performance.
@@ -278,10 +277,7 @@ export default function Dashboard() {
               )}
               {dashboard.hub.last_sync && (
                 <p className="text-sm text-slate-500">
-                  Last sync:{' '}
-                  {formatDistanceToNow(new Date(dashboard.hub.last_sync + (dashboard.hub.last_sync.includes('Z') || dashboard.hub.last_sync.includes('+') ? '' : 'Z')), {
-                    addSuffix: true,
-                  })}
+                  Last sync: {formatRelative(dashboard.hub.last_sync)}
                 </p>
               )}
               <InfoPanel variant="success" title="What this means" collapsible defaultOpen={false}>

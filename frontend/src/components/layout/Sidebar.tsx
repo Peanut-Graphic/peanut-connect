@@ -55,7 +55,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {!collapsed && (
           <div className="flex items-center gap-2">
             <Link2 className="w-5 h-5 text-primary-600" />
-            <span className="text-lg font-bold text-primary-600">Connect</span>
+            <span className="text-lg font-bold text-primary-600 leading-tight">
+              End to End
+            </span>
           </div>
         )}
         {collapsed && (

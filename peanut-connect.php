@@ -3,7 +3,7 @@
  * Plugin Name: Peanut End to End
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: End-to-end campaign and site platform for WordPress — runs campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all wired to a central Peanut Hub.
- * Version: 3.7.19
+ * Version: 3.7.20
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.7.19');
+define('PEANUT_CONNECT_VERSION', '3.7.20');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -96,7 +96,7 @@ final class Peanut_Connect {
         // Marketing proxy (campaign builder, UTMs, links, analytics) for Hub (v3.7.1+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-marketing.php';
 
-        // Short-link redirect handler — turns 404 hits on /<slug> into a 302 to Hub's /go/<slug> (v3.7.19+)
+        // Short-link redirect handler — turns 404 hits on /<slug> into a 302 to Hub's /go/<slug> (v3.7.20+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-short-links.php';
         Peanut_Connect_Short_Links::init();
 
@@ -141,6 +141,10 @@ final class Peanut_Connect {
             // Schedule sync cron
             add_action('peanut_connect_hub_sync', [Peanut_Connect_Hub_Sync::class, 'run_sync']);
             add_action('peanut_connect_hub_heartbeat', [Peanut_Connect_Hub_Sync::class, 'send_heartbeat']);
+            // Hub-requested immediate sync (scheduled as a single event from heartbeat
+            // response when sync_now=true; v3.7.20: this handler used to live in
+            // Hub_Sync::init() which was dead code, so sync_now silently no-op'd).
+            add_action('peanut_connect_sync_requested', [Peanut_Connect_Hub_Sync::class, 'run_sync']);
 
             if (!wp_next_scheduled('peanut_connect_hub_sync')) {
                 wp_schedule_event(time(), 'fifteen_minutes', 'peanut_connect_hub_sync');
@@ -338,7 +342,7 @@ final class Peanut_Connect {
             80
         );
 
-        // Legacy options-general.php settings page removed in v3.7.19 — it
+        // Legacy options-general.php settings page removed in v3.7.20 — it
         // referenced pre-Hub option names (peanut_connect_manager_url /
         // peanut_connect_site_key) and falsely reported "Not connected" on
         // working Hub installs. The React SPA at the top-level menu is the
@@ -651,7 +655,7 @@ add_action('init', 'peanut_connect_init', 0);
 /**
  * One-time cleanup of stale cron schedules from earlier plugin versions.
  *
- * v3.7.19: peanut_connect_sync_to_hub was a legacy schedule registered by
+ * v3.7.20: peanut_connect_sync_to_hub was a legacy schedule registered by
  * an older Peanut_Connect_Hub_Sync::init() entry point. The real cron is
  * peanut_connect_hub_sync (registered in Peanut_Connect::init_hooks()).
  * This runs once per install via an option flag.
@@ -700,7 +704,7 @@ register_deactivation_hook(__FILE__, function() {
     wp_clear_scheduled_hook('peanut_connect_hub_heartbeat');
     wp_clear_scheduled_hook('peanut_connect_cleanup');
 
-    // Clear legacy sync cron hook (v3.7.19+: superseded by peanut_connect_hub_sync)
+    // Clear legacy sync cron hook (v3.7.20+: superseded by peanut_connect_hub_sync)
     wp_clear_scheduled_hook('peanut_connect_sync_to_hub');
 
     // Clear ML training cron job (v3.7.1+)

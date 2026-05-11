@@ -42,7 +42,7 @@ import {
   BarChart3,
   User,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelative } from '@/utils/date';
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -296,10 +296,7 @@ export default function Settings() {
             </div>
             {settings.hub.last_sync && (
               <p className="text-sm text-slate-500">
-                Last sync:{' '}
-                {formatDistanceToNow(new Date(settings.hub.last_sync + (settings.hub.last_sync.includes('Z') || settings.hub.last_sync.includes('+') ? '' : 'Z')), {
-                  addSuffix: true,
-                })}
+                Last sync: {formatRelative(settings.hub.last_sync)}
               </p>
             )}
             <div className="space-y-3">

@@ -127,7 +127,7 @@ class Peanut_Connect_Tracker {
         self::record_event($visitor_id, 'pageview', [
             'page_url' => self::get_current_url(),
             'page_title' => wp_get_document_title(),
-            'referrer' => wp_get_referer() ?: ($_SERVER['HTTP_REFERER'] ?? ''),
+            'referrer' => esc_url_raw((string) (wp_get_referer() ?: ($_SERVER['HTTP_REFERER'] ?? ''))),
         ]);
 
         // Check for UTM parameters and create attribution touch
@@ -245,10 +245,11 @@ class Peanut_Connect_Tracker {
         );
 
         // Determine channel
+        $referer = esc_url_raw((string) ($_SERVER['HTTP_REFERER'] ?? ''));
         $channel = self::determine_channel(
             $utm['source'] ?? null,
             $utm['medium'] ?? null,
-            $_SERVER['HTTP_REFERER'] ?? null
+            $referer !== '' ? $referer : null
         );
 
         $wpdb->insert(
@@ -260,7 +261,7 @@ class Peanut_Connect_Tracker {
                 'medium' => $utm['medium'] ?? null,
                 'campaign' => $utm['campaign'] ?? null,
                 'landing_page' => self::get_current_url(),
-                'referrer' => $_SERVER['HTTP_REFERER'] ?? null,
+                'referrer' => $referer !== '' ? $referer : null,
                 'touch_position' => $position,
                 'touched_at' => current_time('mysql', true),
                 'synced' => 0,

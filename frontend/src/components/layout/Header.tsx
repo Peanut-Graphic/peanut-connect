@@ -28,23 +28,38 @@ export default function Header({ title, description, action }: HeaderProps) {
     return <Sun className="w-5 h-5" />;
   };
 
+  // Keyword → route lookup. Order matters: earlier matches win. If nothing
+  // matches we DON'T silently redirect to Dashboard — we set an error so
+  // the user knows their query didn't resolve to a page.
+  const SEARCH_ROUTES: Array<{ keywords: string[]; path: string }> = [
+    { keywords: ['dashboard', 'home', 'overview'], path: '/' },
+    { keywords: ['campaign', 'utm builder', 'build', 'wizard'], path: '/campaigns' },
+    { keywords: ['utm', 'source', 'medium'], path: '/utms' },
+    { keywords: ['link', 'short link', 'slug', 'qr'], path: '/links' },
+    { keywords: ['tracking', 'snippet', 'gtm', 'tag', 'pixel'], path: '/tracking' },
+    { keywords: ['analytic', 'journey', 'conversion', 'funnel', 'report'], path: '/analytics' },
+    { keywords: ['health', 'status', 'check'], path: '/health' },
+    { keywords: ['update', 'plugin', 'theme', 'core'], path: '/updates' },
+    { keywords: ['activity', 'history', 'audit'], path: '/activity' },
+    { keywords: ['error', 'log', 'fatal', 'warning'], path: '/errors' },
+    { keywords: ['setting', 'connect', 'hub', 'key', 'config'], path: '/settings' },
+  ];
+
+  const [searchError, setSearchError] = useState<string | null>(null);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Navigate based on search query
-    const query = searchQuery.toLowerCase();
-    if (query.includes('health') || query.includes('status')) {
-      navigate('/health');
-    } else if (query.includes('update') || query.includes('plugin') || query.includes('theme')) {
-      navigate('/updates');
-    } else if (query.includes('setting') || query.includes('connect') || query.includes('key')) {
-      navigate('/settings');
-    } else if (query.includes('activity') || query.includes('log') || query.includes('history')) {
-      navigate('/activity');
-    } else {
-      navigate('/');
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return;
+    const match = SEARCH_ROUTES.find((r) => r.keywords.some((k) => query.includes(k)));
+    if (!match) {
+      setSearchError(`No page matches "${searchQuery}".`);
+      return;
     }
+    navigate(match.path);
     setShowSearch(false);
     setSearchQuery('');
+    setSearchError(null);
   };
 
   return (
@@ -55,17 +70,28 @@ export default function Header({ title, description, action }: HeaderProps) {
           {/* Search */}
           {showSearch ? (
             <form onSubmit={handleSearch} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search pages..."
-                className="w-48 px-3 py-1.5 text-sm text-slate-900 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                autoFocus
-              />
+              <div className="flex flex-col">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    if (searchError) setSearchError(null);
+                  }}
+                  placeholder="Search pages..."
+                  className="w-48 px-3 py-1.5 text-sm text-slate-900 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  autoFocus
+                />
+                {searchError && (
+                  <span className="text-xs text-red-600 mt-1">{searchError}</span>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={() => setShowSearch(false)}
+                onClick={() => {
+                  setShowSearch(false);
+                  setSearchError(null);
+                }}
                 className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
               >
                 <X className="w-4 h-4" />

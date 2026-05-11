@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { Layout } from '@/components/layout';
@@ -712,12 +713,12 @@ function DoneStep({
               Confirm the GTM tags are installed on the landing page
               {tracking?.hub_url ? ` (and reporting to ${new URL(tracking.hub_url).host})` : ''}.
               {' '}
-              <a
-                href="#/tracking"
+              <Link
+                to="/tracking"
                 className="underline underline-offset-2 hover:no-underline text-amber-700"
               >
                 Open Tracking tab
-              </a>
+              </Link>
               {' '}for the copyable snippets.
             </li>
             <li>

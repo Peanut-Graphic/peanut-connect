@@ -143,13 +143,16 @@ class Peanut_Connect_Event_Banner {
             }
         }
 
-        // Output custom CSS
+        // Output custom CSS — strip any </style> escape attempts before
+        // rendering. CSS is treated as untrusted text from Hub.
         if (!empty($banner['css'])) {
-            echo '<style id="peanut-event-banner-custom-css">' . $banner['css'] . '</style>' . "\n";
+            $safe_css = preg_replace('#</\s*style\s*>#i', '', (string) $banner['css']);
+            echo '<style id="peanut-event-banner-custom-css">' . $safe_css . '</style>' . "\n";
         }
 
-        // Output banner HTML
-        echo $banner['html'] . "\n";
+        // Output banner HTML — pass through wp_kses_post to strip script tags
+        // and other dangerous markup that may have slipped past Hub's saver.
+        echo wp_kses_post((string) $banner['html']) . "\n";
 
         // Add body class via inline script
         $position = esc_attr($banner['position']);
