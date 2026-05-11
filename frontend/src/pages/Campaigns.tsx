@@ -413,6 +413,7 @@ function BasicsStep({
       if (campaign !== null) update('utm_campaign', campaign);
       if (content !== null) update('utm_content', content);
       if (term !== null) update('utm_term', term);
+      if (campaign && state.name.trim() === '') update('name', campaign);
       setPasteError(null);
     } catch {
       setPasteError("That doesn't look like a valid URL.");
