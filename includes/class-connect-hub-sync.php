@@ -28,25 +28,16 @@ class Peanut_Connect_Hub_Sync {
     const SYNC_INTERVAL = 15;
 
     /**
-     * Initialize sync
+     * Deprecated: superseded by hooks in peanut-connect.php main file.
+     * Kept as a no-op for safety in case any caller still references it.
+     *
+     * Cron scheduling now happens exclusively in Peanut_Connect::init_hooks()
+     * under the 'peanut_connect_hub_sync' hook. The old
+     * 'peanut_connect_sync_to_hub' schedule is cleaned up at plugin load
+     * (see peanut_connect_cleanup_stale_schedules() in peanut-connect.php).
      */
     public static function init(): void {
-        // Register cron hook
-        add_action('peanut_connect_sync_to_hub', [__CLASS__, 'run_sync']);
-
-        // Register hook for Hub-requested immediate sync
-        add_action('peanut_connect_sync_requested', [__CLASS__, 'run_sync']);
-
-        // Schedule cron if not already
-        if (!wp_next_scheduled('peanut_connect_sync_to_hub')) {
-            wp_schedule_event(time(), 'peanut_fifteen_minutes', 'peanut_connect_sync_to_hub');
-        }
-
-        // Add custom cron interval
-        add_filter('cron_schedules', [__CLASS__, 'add_cron_interval']);
-
-        // REST endpoint for manual trigger
-        add_action('rest_api_init', [__CLASS__, 'register_sync_endpoint']);
+        // Intentionally empty.
     }
 
     /**

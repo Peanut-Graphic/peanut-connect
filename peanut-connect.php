@@ -3,7 +3,7 @@
  * Plugin Name: Peanut End to End
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: End-to-end campaign and site platform for WordPress — runs campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all wired to a central Peanut Hub.
- * Version: 3.7.16
+ * Version: 3.7.17
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.7.16');
+define('PEANUT_CONNECT_VERSION', '3.7.17');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -96,7 +96,7 @@ final class Peanut_Connect {
         // Marketing proxy (campaign builder, UTMs, links, analytics) for Hub (v3.7.1+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-marketing.php';
 
-        // Short-link redirect handler — turns 404 hits on /<slug> into a 302 to Hub's /go/<slug> (v3.7.16+)
+        // Short-link redirect handler — turns 404 hits on /<slug> into a 302 to Hub's /go/<slug> (v3.7.17+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-short-links.php';
         Peanut_Connect_Short_Links::init();
 
@@ -338,14 +338,11 @@ final class Peanut_Connect {
             80
         );
 
-        // Keep legacy settings page as a fallback
-        add_options_page(
-            __('Peanut End to End (Legacy)', 'peanut-connect'),
-            __('Peanut End to End', 'peanut-connect'),
-            'manage_options',
-            'peanut-connect',
-            [$this, 'render_settings_page']
-        );
+        // Legacy options-general.php settings page removed in v3.7.17 — it
+        // referenced pre-Hub option names (peanut_connect_manager_url /
+        // peanut_connect_site_key) and falsely reported "Not connected" on
+        // working Hub installs. The React SPA at the top-level menu is the
+        // canonical configuration surface now.
     }
 
     /**
@@ -652,6 +649,22 @@ function peanut_connect_init(): Peanut_Connect {
 add_action('init', 'peanut_connect_init', 0);
 
 /**
+ * One-time cleanup of stale cron schedules from earlier plugin versions.
+ *
+ * v3.7.17: peanut_connect_sync_to_hub was a legacy schedule registered by
+ * an older Peanut_Connect_Hub_Sync::init() entry point. The real cron is
+ * peanut_connect_hub_sync (registered in Peanut_Connect::init_hooks()).
+ * This runs once per install via an option flag.
+ */
+add_action('init', function() {
+    if (get_option('peanut_connect_stale_crons_cleared_v3_7_17')) {
+        return;
+    }
+    wp_clear_scheduled_hook('peanut_connect_sync_to_hub');
+    update_option('peanut_connect_stale_crons_cleared_v3_7_17', 1, false);
+}, 5);
+
+/**
  * Activation hook
  */
 register_activation_hook(__FILE__, function() {
@@ -686,6 +699,9 @@ register_deactivation_hook(__FILE__, function() {
     wp_clear_scheduled_hook('peanut_connect_hub_sync');
     wp_clear_scheduled_hook('peanut_connect_hub_heartbeat');
     wp_clear_scheduled_hook('peanut_connect_cleanup');
+
+    // Clear legacy sync cron hook (v3.7.17+: superseded by peanut_connect_hub_sync)
+    wp_clear_scheduled_hook('peanut_connect_sync_to_hub');
 
     // Clear ML training cron job (v3.7.1+)
     wp_clear_scheduled_hook('peanut_ml_connect_train');

@@ -196,7 +196,8 @@ export default function Campaigns() {
       saveDraft({ step, state });
       setDraftSavedAt(Date.now());
     }
-    alert("Draft saved. We'll restore it next time you open Campaigns.");
+    // The header now shows "Draft saved just now" via draftSavedAt; no
+    // modal needed. We'll restore the draft on next page load.
   }
 
   const step0Valid =
@@ -602,12 +603,15 @@ function TrackingStep({
 }) {
   const trackerSnippet = useMemo(() => {
     const hub = tracking?.hub_url || 'https://hub.peanutgraphic.com';
+    const key = tracking?.site_key && tracking.site_key !== '—'
+      ? tracking.site_key
+      : '<<your Site Key from Hub → Sites → Tracking>>';
     return [
       '<script>',
       "(function(w,d,s,k,h){w.phub=w.phub||function(){(w.phub.q=w.phub.q||[]).push(arguments)};",
       "w.phub.k=k;w.phub.h=h;var f=d.getElementsByTagName(s)[0],j=d.createElement(s);",
       "j.async=true;j.src=h+'/js/tracker.min.js';f.parentNode.insertBefore(j,f);",
-      `})(window,document,'script','<<paste your Site Key from Hub>>','${hub}');`,
+      `})(window,document,'script','${key}','${hub}');`,
       "phub('pageview');",
       '</script>',
     ].join('\n');

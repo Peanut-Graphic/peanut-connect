@@ -207,11 +207,11 @@ export default function Dashboard() {
         <StatCard
           title={
             <span className="flex items-center gap-1.5">
-              Peanut Suite
-              <HelpTooltip content="Peanut Suite provides marketing tools including UTM tracking, link management, contacts, and analytics. Data syncs with Hub when installed." />
+              Marketing Suite
+              <HelpTooltip content="Peanut Suite is an optional companion plugin with extra marketing tools (UTM tracking, link management, contacts, analytics). 'Not installed' here refers to that companion plugin, not Peanut End to End itself." />
             </span>
           }
-          value={dashboard?.peanut_suite?.installed ? 'Active' : 'Not Installed'}
+          value={dashboard?.peanut_suite?.installed ? 'Companion active' : 'Companion not installed'}
           icon={<Sparkles className="w-5 h-5" />}
         />
       </div>

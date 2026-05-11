@@ -18,7 +18,10 @@ if (!defined('ABSPATH')) {
 class Peanut_Connect_Short_Links {
 
     private const CACHE_KEY      = 'peanut_connect_short_link_slugs';
-    private const CACHE_TTL      = HOUR_IN_SECONDS;
+    // 5-minute TTL: short enough that direct edits in the Hub UI propagate
+    // before a printed-postcard test fails, long enough that we don't hit
+    // Hub on every 404.
+    private const CACHE_TTL      = 5 * MINUTE_IN_SECONDS;
     private const SKIP_PREFIXES  = [
         'wp-admin', 'wp-content', 'wp-includes', 'wp-json', 'wp-login.php',
         'wp-cron.php', 'xmlrpc.php', 'feed', 'comments', 'sitemap',

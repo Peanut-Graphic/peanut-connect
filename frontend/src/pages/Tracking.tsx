@@ -13,7 +13,9 @@ export default function Tracking() {
 
   const trackerSnippet = useMemo(() => {
     const hub = data?.hub_url ?? 'https://hub.peanutgraphic.com';
-    const key = data?.site_key ? '<<paste your Site Key from Hub>>' : '<<paste your Site Key from Hub>>';
+    const key = data?.site_key && data.site_key !== '—'
+      ? data.site_key
+      : '<<your Site Key from Hub → Sites → Tracking>>';
     return [
       '<script>',
       "(function(w,d,s,k,h){w.phub=w.phub||function(){(w.phub.q=w.phub.q||[]).push(arguments)};",
