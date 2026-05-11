@@ -389,6 +389,36 @@ function BasicsStep({
   onNext: () => void;
   valid: boolean;
 }) {
+  const [pastedUrl, setPastedUrl] = useState('');
+  const [pasteError, setPasteError] = useState<string | null>(null);
+
+  const handlePasteUrl = (value: string) => {
+    setPastedUrl(value);
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setPasteError(null);
+      return;
+    }
+    try {
+      const url = new URL(trimmed);
+      const params = url.searchParams;
+      update('base_url', `${url.origin}${url.pathname}`);
+      const source = params.get('utm_source');
+      const medium = params.get('utm_medium');
+      const campaign = params.get('utm_campaign');
+      const content = params.get('utm_content');
+      const term = params.get('utm_term');
+      if (source !== null) update('utm_source', source);
+      if (medium !== null) update('utm_medium', medium);
+      if (campaign !== null) update('utm_campaign', campaign);
+      if (content !== null) update('utm_content', content);
+      if (term !== null) update('utm_term', term);
+      setPasteError(null);
+    } catch {
+      setPasteError("That doesn't look like a valid URL.");
+    }
+  };
+
   return (
     <Card>
       <CardHeader title="Step 1 — Campaign basics" description={STEPS[0].description} />
@@ -399,6 +429,17 @@ function BasicsStep({
           if (valid) onNext();
         }}
       >
+        <Input
+          label="Already have a UTM URL? Paste it here"
+          placeholder="https://example.com/page?utm_source=...&utm_medium=...&utm_campaign=..."
+          type="url"
+          value={pastedUrl}
+          onChange={(e) => handlePasteUrl(e.target.value)}
+          hint="Auto-fills the destination URL and all UTM fields below."
+        />
+        {pasteError && (
+          <p className="text-sm text-red-600 -mt-2">{pasteError}</p>
+        )}
         <Input
           label="Campaign name"
           placeholder="e.g. PTR Postcard 2024"
