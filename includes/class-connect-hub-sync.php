@@ -23,6 +23,15 @@ class Peanut_Connect_Hub_Sync {
     const BATCH_SIZE = 200;
 
     /**
+     * Maximum batches per cron tick (per record type) before we bail out
+     * and defer the remainder to the next run. 50 × 200 = 10,000 rows
+     * worth of headroom per record type per tick — generous, but bounded
+     * so a backlog can't trigger a PHP timeout that leaves data in a
+     * half-synced state.
+     */
+    const MAX_BATCHES_PER_RUN = 50;
+
+    /**
      * Sync interval in minutes
      */
     const SYNC_INTERVAL = 15;
@@ -177,8 +186,9 @@ class Peanut_Connect_Hub_Sync {
 
         $table = Peanut_Connect_Database::table('events');
         $synced = 0;
+        $batches = 0;
 
-        while (true) {
+        while ($batches < self::MAX_BATCHES_PER_RUN) {
             $events = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM $table WHERE synced = 0 AND click_id IS NOT NULL AND click_id != '' ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -197,6 +207,7 @@ class Peanut_Connect_Hub_Sync {
                 $ids = array_column($events, 'id');
                 self::mark_synced($table, $ids);
                 $synced += count($events);
+                $batches++;
             } else {
                 throw new \Exception('Failed to sync events: ' . ($response['message'] ?? 'Unknown error'));
             }
@@ -214,8 +225,9 @@ class Peanut_Connect_Hub_Sync {
         $visitors_table = Peanut_Connect_Database::table('visitors');
         $events_table = Peanut_Connect_Database::table('events');
         $synced = 0;
+        $batches = 0;
 
-        while (true) {
+        while ($batches < self::MAX_BATCHES_PER_RUN) {
             // Get unsynced visitors that have at least one event with a click_id
             $visitors = $wpdb->get_results(
                 $wpdb->prepare(
@@ -238,6 +250,7 @@ class Peanut_Connect_Hub_Sync {
                 $ids = array_column($visitors, 'id');
                 self::mark_synced($visitors_table, $ids);
                 $synced += count($visitors);
+                $batches++;
             } else {
                 throw new \Exception('Failed to sync visitors: ' . ($response['message'] ?? 'Unknown error'));
             }
@@ -254,8 +267,9 @@ class Peanut_Connect_Hub_Sync {
 
         $table = Peanut_Connect_Database::table('popup_interactions');
         $synced = 0;
+        $batches = 0;
 
-        while (true) {
+        while ($batches < self::MAX_BATCHES_PER_RUN) {
             $interactions = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM $table WHERE synced = 0 ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -274,6 +288,7 @@ class Peanut_Connect_Hub_Sync {
                 $ids = array_column($interactions, 'id');
                 self::mark_synced($table, $ids);
                 $synced += count($interactions);
+                $batches++;
             } else {
                 throw new \Exception('Failed to sync popup interactions: ' . ($response['message'] ?? 'Unknown error'));
             }
@@ -291,8 +306,9 @@ class Peanut_Connect_Hub_Sync {
         }
 
         $synced = 0;
+        $batches = 0;
 
-        while (true) {
+        while ($batches < self::MAX_BATCHES_PER_RUN) {
             $submissions = Peanut_Connect_Forms::get_unsynced_submissions(self::BATCH_SIZE);
 
             if (empty($submissions)) {
@@ -320,6 +336,7 @@ class Peanut_Connect_Hub_Sync {
                 $ids = array_column($submissions, 'id');
                 Peanut_Connect_Forms::mark_submissions_synced($ids);
                 $synced += count($submissions);
+                $batches++;
             } else {
                 throw new \Exception('Failed to sync form submissions: ' . ($response['message'] ?? 'Unknown error'));
             }
