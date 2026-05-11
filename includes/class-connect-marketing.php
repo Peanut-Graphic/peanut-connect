@@ -225,15 +225,23 @@ class Peanut_Connect_Marketing {
 
     public static function tracking_setup(): WP_REST_Response {
         $hub_url = (string) get_option('peanut_connect_hub_url', '');
-        $has_key = (bool) get_option('peanut_connect_hub_api_key', '');
+        $api_key = (string) get_option('peanut_connect_hub_api_key', '');
+        $has_key = $api_key !== '';
 
         return new WP_REST_Response([
             'success' => true,
             'data'    => [
-                'connected'  => $hub_url !== '' && $has_key,
-                'hub_url'    => $hub_url,
-                'tracker_js' => $hub_url !== '' ? trailingslashit($hub_url) . 'js/tracker.min.js' : '',
-                'site_key'   => self::masked_key(),
+                'connected'        => $hub_url !== '' && $has_key,
+                'hub_url'          => $hub_url,
+                'tracker_js'       => $hub_url !== '' ? trailingslashit($hub_url) . 'js/tracker.min.js' : '',
+                // Unmasked: the site key is embedded in the public tracker
+                // snippet anyway, so masking it in this admin-only endpoint
+                // adds no security but breaks the copyable snippet.
+                'site_key'         => $api_key,
+                // Masked variant for UI display ("Site Identity" card on the
+                // Tracking page) where we want to confirm the key is set
+                // without surfacing the value mid-screen.
+                'site_key_masked'  => self::masked_key(),
             ],
         ], 200);
     }

@@ -122,6 +122,7 @@ export interface TrackingSetup {
   hub_url: string;
   tracker_js: string;
   site_key: string;
+  site_key_masked?: string;
 }
 
 export const marketingApi = {

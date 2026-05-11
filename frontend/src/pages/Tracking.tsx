@@ -63,7 +63,7 @@ export default function Tracking() {
           />
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <Field label="Hub URL" value={data?.hub_url || '—'} mono />
-            <Field label="Site Key" value={data?.site_key || '—'} mono />
+            <Field label="Site Key" value={data?.site_key_masked || '—'} mono />
             <Field label="Tracker script" value={data?.tracker_js || '—'} mono />
           </dl>
         </Card>

@@ -114,7 +114,9 @@ class Peanut_Connect_Short_Links {
 
     /**
      * Hit Hub's /marketing/links?active=1 endpoint and return slug strings.
-     * Negative results are cached as an empty array so we don't hammer Hub.
+     * Paginates through all pages so sites with >100 active links don't
+     * silently 404 beyond the first page. Bounded by MAX_PAGES to avoid
+     * runaway loops.
      *
      * @return array<int, string>
      */
@@ -125,40 +127,54 @@ class Peanut_Connect_Short_Links {
             return [];
         }
 
-        $url = trailingslashit($hub_url) . 'api/v1/marketing/links?active=1&per_page=100';
-        $response = wp_remote_get($url, [
-            'timeout' => 8,
-            'headers' => [
-                'Accept'        => 'application/json',
-                'Authorization' => 'Bearer ' . $api_key,
-            ],
-        ]);
+        $slugs    = [];
+        $page     = 1;
+        $maxPages = 20; // 20 pages × 100 per page = 2,000 active links cap
 
-        if (is_wp_error($response)) {
-            return [];
-        }
-        $code = (int) wp_remote_retrieve_response_code($response);
-        if ($code < 200 || $code >= 300) {
-            return [];
-        }
+        while ($page <= $maxPages) {
+            $url = trailingslashit($hub_url) . 'api/v1/marketing/links?active=1&per_page=100&page=' . $page;
+            $response = wp_remote_get($url, [
+                'timeout' => 8,
+                'headers' => [
+                    'Accept'        => 'application/json',
+                    'Authorization' => 'Bearer ' . $api_key,
+                ],
+            ]);
 
-        $body = json_decode((string) wp_remote_retrieve_body($response), true);
-        if (!is_array($body)) {
-            return [];
-        }
-
-        // Response shape: { success: true, data: { data: [Link, ...], ... } }
-        $rows = $body['data']['data'] ?? $body['data'] ?? [];
-        if (!is_array($rows)) {
-            return [];
-        }
-
-        $slugs = [];
-        foreach ($rows as $row) {
-            if (isset($row['slug']) && is_string($row['slug']) && $row['slug'] !== '') {
-                $slugs[] = $row['slug'];
+            if (is_wp_error($response)) {
+                break;
             }
+            $code = (int) wp_remote_retrieve_response_code($response);
+            if ($code < 200 || $code >= 300) {
+                break;
+            }
+
+            $body = json_decode((string) wp_remote_retrieve_body($response), true);
+            if (!is_array($body)) {
+                break;
+            }
+
+            // Laravel paginator shape: { success, data: { data: [...], current_page, last_page, ... } }
+            $rows = $body['data']['data'] ?? $body['data'] ?? [];
+            if (!is_array($rows) || $rows === []) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                if (isset($row['slug']) && is_string($row['slug']) && $row['slug'] !== '') {
+                    $slugs[] = $row['slug'];
+                }
+            }
+
+            // Stop when we've consumed the last page (or the API didn't tell us).
+            $currentPage = (int) ($body['data']['current_page'] ?? $page);
+            $lastPage    = (int) ($body['data']['last_page'] ?? $currentPage);
+            if ($currentPage >= $lastPage) {
+                break;
+            }
+            $page++;
         }
+
         return $slugs;
     }
 

@@ -51,6 +51,7 @@ const DRAFT_KEY = 'peanut-connect:campaign-wizard-draft';
 interface DraftPayload {
   step: WizardStep;
   state: WizardState;
+  savedAt?: number;
 }
 
 function loadDraft(): DraftPayload | null {
@@ -67,6 +68,7 @@ function loadDraft(): DraftPayload | null {
       return {
         step: Math.min(parsed.step, 2) as WizardStep,
         state: { ...INITIAL_STATE, ...parsed.state },
+        savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : undefined,
       };
     }
   } catch {
@@ -77,7 +79,10 @@ function loadDraft(): DraftPayload | null {
 
 function saveDraft(payload: DraftPayload) {
   try {
-    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+    window.localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ ...payload, savedAt: payload.savedAt ?? Date.now() }),
+    );
   } catch {
     // ignore — storage might be full or disabled
   }
@@ -112,7 +117,7 @@ export default function Campaigns() {
   const [result, setResult] = useState<CampaignResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(
-    initial ? Date.now() : null,
+    initial?.savedAt ?? null,
   );
   const [draftRestoredBanner, setDraftRestoredBanner] = useState<boolean>(!!initial);
   const queryClient = useQueryClient();
@@ -215,7 +220,7 @@ export default function Campaigns() {
   };
 
   function gotoStep(target: WizardStep) {
-    if (step === 3) return; // final state, no jumping back
+    if (step === 3) return; // final state, use "Build another" to reset
     if (!stepReachable(target)) return;
     setStep(target);
   }
@@ -447,7 +452,7 @@ function BasicsStep({
         <Input
           label="Already have a UTM URL? Paste it here"
           placeholder="https://example.com/page?utm_source=...&utm_medium=...&utm_campaign=..."
-          type="url"
+          type="text"
           value={pastedUrl}
           onChange={(e) => handlePasteUrl(e.target.value)}
           hint="Auto-fills the destination URL and all UTM fields below."
@@ -682,7 +687,12 @@ function DoneStep({
   return (
     <Card>
       <CardHeader
-        title={`✓  ${result.name}`}
+        title={
+          <span className="flex items-center gap-2">
+            <Check className="w-5 h-5 text-emerald-500" />
+            {result.name}
+          </span>
+        }
         description="Campaign created. Here's everything you need."
       />
       <div className="space-y-5">
@@ -699,8 +709,16 @@ function DoneStep({
               intact.
             </li>
             <li>
-              Confirm the GTM tags from Step 3 are installed on the landing page
+              Confirm the GTM tags are installed on the landing page
               {tracking?.hub_url ? ` (and reporting to ${new URL(tracking.hub_url).host})` : ''}.
+              {' '}
+              <a
+                href="#/tracking"
+                className="underline underline-offset-2 hover:no-underline text-amber-700"
+              >
+                Open Tracking tab
+              </a>
+              {' '}for the copyable snippets.
             </li>
             <li>
               Watch for the journey to appear under <strong>Analytics</strong> within ~1 minute of the test click.
