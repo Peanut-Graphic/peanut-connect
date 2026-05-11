@@ -136,7 +136,9 @@ class Peanut_Connect_Marketing {
     // ===== Campaign builder =====
 
     public static function create_campaign(WP_REST_Request $request) {
-        return self::forward('POST', '/marketing/campaigns', $request->get_json_params());
+        $response = self::forward('POST', '/marketing/campaigns', $request->get_json_params());
+        Peanut_Connect_Short_Links::clear_cache();
+        return $response;
     }
 
     // ===== UTMs =====
@@ -176,22 +178,30 @@ class Peanut_Connect_Marketing {
     }
 
     public static function create_link(WP_REST_Request $request) {
-        return self::forward('POST', '/marketing/links', $request->get_json_params());
+        $response = self::forward('POST', '/marketing/links', $request->get_json_params());
+        Peanut_Connect_Short_Links::clear_cache();
+        return $response;
     }
 
     public static function update_link(WP_REST_Request $request) {
         $id = (int) $request['id'];
-        return self::forward('PUT', "/marketing/links/{$id}", $request->get_json_params());
+        $response = self::forward('PUT', "/marketing/links/{$id}", $request->get_json_params());
+        Peanut_Connect_Short_Links::clear_cache();
+        return $response;
     }
 
     public static function delete_link(WP_REST_Request $request) {
         $id = (int) $request['id'];
-        return self::forward('DELETE', "/marketing/links/{$id}");
+        $response = self::forward('DELETE', "/marketing/links/{$id}");
+        Peanut_Connect_Short_Links::clear_cache();
+        return $response;
     }
 
     public static function toggle_link(WP_REST_Request $request) {
         $id = (int) $request['id'];
-        return self::forward('PATCH', "/marketing/links/{$id}/toggle");
+        $response = self::forward('PATCH', "/marketing/links/{$id}/toggle");
+        Peanut_Connect_Short_Links::clear_cache();
+        return $response;
     }
 
     // ===== Analytics =====

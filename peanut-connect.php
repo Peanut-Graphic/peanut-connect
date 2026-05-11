@@ -3,7 +3,7 @@
  * Plugin Name: Peanut End to End
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: End-to-end campaign and site platform for WordPress — runs campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all wired to a central Peanut Hub.
- * Version: 3.7.14
+ * Version: 3.7.15
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.7.14');
+define('PEANUT_CONNECT_VERSION', '3.7.15');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -95,6 +95,10 @@ final class Peanut_Connect {
 
         // Marketing proxy (campaign builder, UTMs, links, analytics) for Hub (v3.7.1+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-marketing.php';
+
+        // Short-link redirect handler — turns 404 hits on /<slug> into a 302 to Hub's /go/<slug> (v3.7.15+)
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-short-links.php';
+        Peanut_Connect_Short_Links::init();
 
         // Initialize logging early
         Peanut_Connect_Activity_Log::init();
