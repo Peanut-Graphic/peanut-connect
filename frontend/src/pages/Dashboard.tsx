@@ -111,7 +111,7 @@ export default function Dashboard() {
       {showWelcome && (
         <InfoPanel
           variant="guide"
-          title="Welcome to Peanut End to End!"
+          title="Welcome to End-to-End!"
           className="mb-6"
         >
           <p className="mb-3">
@@ -207,7 +207,7 @@ export default function Dashboard() {
           title={
             <span className="flex items-center gap-1.5">
               Marketing Suite
-              <HelpTooltip content="Peanut Suite is an optional companion plugin with extra marketing tools (UTM tracking, link management, contacts, analytics). 'Not installed' here refers to that companion plugin, not Peanut End to End itself." />
+              <HelpTooltip content="Peanut Suite is an optional companion plugin with extra marketing tools (UTM tracking, link management, contacts, analytics). 'Not installed' here refers to that companion plugin, not End-to-End itself." />
             </span>
           }
           value={dashboard?.peanut_suite?.installed ? 'Companion active' : 'Companion not installed'}
@@ -520,7 +520,7 @@ export default function Dashboard() {
       {/* Quick Feature Overview - Only show for disconnected users */}
       {!isConnected && (
         <div className="mt-8">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">What Peanut End to End Can Do</h2>
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">What End-to-End Can Do</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <FeatureCard
               icon={<Eye className="w-5 h-5" />}

@@ -5,6 +5,14 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.24] - 2026-05-11
+
+### Changed
+- **Plugin renamed from "Peanut End to End" to "End-to-End"** in user-visible places: WordPress plugin header `Plugin Name`, admin menu labels, sidebar wordmark + version footer, Dashboard welcome panel, Settings tooltips, exported reports, and Suite-detection help copy. Slug, REST namespace, option keys, and update-server endpoints all remain `peanut-connect` for backwards compatibility. References to other ecosystem products ("Peanut Hub", "Peanut Suite", "Peanut Graphic") are unchanged — only this plugin's own name was dropped.
+
+### Fixed
+- **"Save & exit" no longer lies.** The button used to be labeled `Save & exit` but never actually navigated anywhere and didn't submit the in-progress campaign — it only wrote a draft to localStorage. Users assumed it had created the UTM and were confused when nothing appeared in the UTMs list. Renamed to **Save draft** and the click now emits a toast: _"Draft saved locally. Your form will restore next time. The campaign isn't submitted yet — finish all 4 steps to create it."_
+
 ## [3.7.23] - 2026-05-11 — HOTFIX
 
 ### Fixed (regression in 3.7.22)

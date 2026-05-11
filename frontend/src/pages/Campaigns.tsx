@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { Layout } from '@/components/layout';
 import { Card, CardHeader, Button, Input, Alert } from '@/components/common';
+import { useToast } from '@/components/common/Toast';
 import {
   marketingApi,
   type CampaignBuildInput,
@@ -122,6 +123,7 @@ export default function Campaigns() {
   );
   const [draftRestoredBanner, setDraftRestoredBanner] = useState<boolean>(!!initial);
   const queryClient = useQueryClient();
+  const toast = useToast();
 
   const { data: tracking } = useQuery({
     queryKey: ['marketing', 'tracking-setup'],
@@ -197,13 +199,15 @@ export default function Campaigns() {
     reset();
   }
 
-  function saveAndExit() {
+  function saveDraftToLocal() {
     if (isDraftDirty(state)) {
       saveDraft({ step, state });
       setDraftSavedAt(Date.now());
+      toast.info(
+        "Draft saved locally. Your form will restore next time. The campaign isn't submitted yet — finish all 4 steps to create it.",
+        6000,
+      );
     }
-    // The header now shows "Draft saved just now" via draftSavedAt; no
-    // modal needed. We'll restore the draft on next page load.
   }
 
   const step0Valid =
@@ -244,8 +248,8 @@ export default function Campaigns() {
             )}
             {isDraftDirty(state) && (
               <>
-                <Button variant="ghost" size="sm" onClick={saveAndExit}>
-                  Save &amp; exit
+                <Button variant="ghost" size="sm" onClick={saveDraftToLocal}>
+                  Save draft
                 </Button>
                 <button
                   type="button"
