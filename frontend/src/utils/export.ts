@@ -1,4 +1,46 @@
 import type { HealthData } from '@/types';
+import type { Utm } from '@/api/marketing';
+
+const UTM_CSV_COLUMNS = [
+  'name',
+  'source',
+  'medium',
+  'target_url',
+  'full_url',
+  'campaign',
+  'clicks',
+] as const;
+
+// RFC 4180: wrap every field in quotes and double any embedded quote.
+function csvField(value: string | number): string {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+// Build an RFC 4180 CSV for the given UTMs. Pure (no DOM) so it can be
+// unit-tested; an empty list still yields the header row.
+export function buildUtmCsv(utms: Utm[]): string {
+  const header = UTM_CSV_COLUMNS.map(csvField).join(',');
+  const rows = utms.map((u) =>
+    [
+      u.name,
+      u.utm_source,
+      u.utm_medium,
+      u.base_url,
+      u.full_url,
+      u.utm_campaign,
+      u.click_count ?? 0,
+    ]
+      .map(csvField)
+      .join(',')
+  );
+  return [header, ...rows].join('\r\n');
+}
+
+// Download the selected UTMs as a CSV file.
+export function exportUtmsCsv(utms: Utm[], filename = 'utms'): void {
+  const blob = new Blob([buildUtmCsv(utms)], { type: 'text/csv;charset=utf-8' });
+  downloadBlob(blob, `${filename}-${formatDateForFilename()}.csv`);
+}
 
 // Export health data as JSON file
 export function exportAsJson(data: HealthData, filename: string = 'health-report'): void {

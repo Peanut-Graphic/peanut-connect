@@ -5,6 +5,9 @@ import { Card, Button, Alert } from '@/components/common';
 import Modal from '@/components/common/Modal';
 import { useToast } from '@/components/common/Toast';
 import { useConfirm } from '@/hooks/useConfirm';
+import { useRowSelection } from '@/hooks/useRowSelection';
+import { runBulk } from '@/utils/runBulk';
+import { exportUtmsCsv } from '@/utils/export';
 import { marketingApi, type Utm, type UtmUpdateInput } from '@/api';
 import {
   Archive,
@@ -13,6 +16,8 @@ import {
   ExternalLink,
   Copy,
   Pencil,
+  Download,
+  X,
 } from 'lucide-react';
 
 export default function Utms() {
@@ -61,6 +66,62 @@ export default function Utms() {
 
   const utms = data?.data ?? [];
 
+  const selection = useRowSelection();
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const visibleIds = utms.map((u) => u.id);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selection.isSelected(id));
+  const someVisibleSelected =
+    !allVisibleSelected && visibleIds.some((id) => selection.isSelected(id));
+  const selectedUtms = utms.filter((u) => selection.isSelected(u.id));
+
+  const switchView = (archived: boolean) => {
+    selection.clear();
+    setShowArchived(archived);
+  };
+
+  async function runBulkAction(
+    verb: string,
+    action: (id: number) => Promise<unknown>
+  ) {
+    const ids = selectedUtms.map((u) => u.id);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    const result = await runBulk(ids, action);
+    setBulkBusy(false);
+    invalidate();
+    selection.clear();
+    if (result.failed.length === 0) {
+      toast.success(`${verb} ${result.succeeded.length} UTM(s).`);
+    } else {
+      const f = result.failed[0];
+      toast.error(
+        `${verb} stopped: "${f.error}". ${result.succeeded.length} done, ${
+          ids.length - result.succeeded.length
+        } not processed.`
+      );
+    }
+  }
+
+  const onBulkArchive = () =>
+    runBulkAction('Archived', (id) => marketingApi.archiveUtm(id));
+  const onBulkRestore = () =>
+    runBulkAction('Restored', (id) => marketingApi.restoreUtm(id));
+  const onBulkDelete = async () => {
+    const n = selection.selectedCount;
+    const ok = await confirm({
+      title: `Delete ${n} UTM${n === 1 ? '' : 's'}?`,
+      message: `This permanently deletes ${n} UTM${
+        n === 1 ? '' : 's'
+      } and also removes their short links and click history. This cannot be undone.`,
+      confirmText: `Delete ${n}`,
+      variant: 'danger',
+    });
+    if (ok) runBulkAction('Deleted', (id) => marketingApi.deleteUtm(id));
+  };
+  const onBulkExport = () => exportUtmsCsv(selectedUtms);
+
   return (
     <Layout
       title="UTMs"
@@ -70,14 +131,14 @@ export default function Utms() {
           <Button
             variant={showArchived ? 'ghost' : 'primary'}
             size="sm"
-            onClick={() => setShowArchived(false)}
+            onClick={() => switchView(false)}
           >
             Active
           </Button>
           <Button
             variant={showArchived ? 'primary' : 'ghost'}
             size="sm"
-            onClick={() => setShowArchived(true)}
+            onClick={() => switchView(true)}
           >
             Archived
           </Button>
@@ -88,6 +149,66 @@ export default function Utms() {
         <Alert variant="error" className="mb-4">
           {(error as Error).message}
         </Alert>
+      )}
+
+      {selection.selectedCount > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5">
+          <span className="text-sm font-medium text-slate-700">
+            {selection.selectedCount} selected
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {showArchived ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={bulkBusy}
+                onClick={onBulkRestore}
+              >
+                <ArchiveRestore className="w-4 h-4 mr-1.5" />
+                Restore
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={bulkBusy}
+                onClick={onBulkArchive}
+              >
+                <Archive className="w-4 h-4 mr-1.5" />
+                Archive
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={bulkBusy}
+              onClick={onBulkExport}
+            >
+              <Download className="w-4 h-4 mr-1.5" />
+              Export CSV
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={bulkBusy}
+              onClick={onBulkDelete}
+              className="text-red-600 hover:bg-red-50"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Delete
+            </Button>
+            <button
+              type="button"
+              onClick={selection.clear}
+              disabled={bulkBusy}
+              className="p-1.5 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-50"
+              aria-label="Clear selection"
+              title="Clear selection"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       )}
 
       <Card padding="none">
@@ -102,6 +223,20 @@ export default function Utms() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
+                  <th className="w-10 px-4 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all visible UTMs"
+                      className="rounded border-slate-300 align-middle"
+                      checked={allVisibleSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someVisibleSelected;
+                      }}
+                      onChange={() =>
+                        selection.toggleMany(visibleIds, !allVisibleSelected)
+                      }
+                    />
+                  </th>
                   <th className="text-left px-4 py-2 font-medium">Name</th>
                   <th className="text-left px-4 py-2 font-medium">Source / Medium</th>
                   <th className="text-left px-4 py-2 font-medium">Campaign</th>
@@ -118,6 +253,8 @@ export default function Utms() {
                     key={utm.id}
                     utm={utm}
                     archived={showArchived}
+                    selected={selection.isSelected(utm.id)}
+                    onToggleSelect={() => selection.toggle(utm.id)}
                     onEdit={() => setEditing(utm)}
                     onArchive={() => archive.mutate(utm.id)}
                     onRestore={() => restore.mutate(utm.id)}
@@ -156,6 +293,8 @@ export default function Utms() {
 function UtmRow({
   utm,
   archived,
+  selected,
+  onToggleSelect,
   onEdit,
   onArchive,
   onRestore,
@@ -163,6 +302,8 @@ function UtmRow({
 }: {
   utm: Utm;
   archived: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
   onEdit: () => void;
   onArchive: () => void;
   onRestore: () => void;
@@ -179,7 +320,16 @@ function UtmRow({
   const cost = utm.campaign_cost == null ? null : Number(utm.campaign_cost);
 
   return (
-    <tr className="hover:bg-slate-50">
+    <tr className={selected ? 'bg-slate-50' : 'hover:bg-slate-50'}>
+      <td className="w-10 px-4 py-3">
+        <input
+          type="checkbox"
+          aria-label={`Select ${utm.name}`}
+          className="rounded border-slate-300 align-middle"
+          checked={selected}
+          onChange={onToggleSelect}
+        />
+      </td>
       <td className="px-4 py-3">
         <div className="font-medium text-slate-900">{utm.name}</div>
         <div className="text-xs text-slate-500 truncate max-w-md">{utm.base_url}</div>
