@@ -39,6 +39,35 @@ const api: AxiosInstance = axios.create({
   },
 });
 
+/**
+ * Flatten a Hub success envelope into a single object for callers.
+ *
+ * Hub's API is not uniform: list/setup endpoints nest the payload under
+ * `data` ({ success, data: {...} }), while mutation endpoints return the
+ * resource at the top level ({ success, campaign|utm|link: {...} }). The
+ * old interceptor only forwarded `data.data`, silently dropping top-level
+ * resource keys — so the campaign builder and every UTM/link mutation
+ * came back empty. Spread the nested `data` (back-compat for lists) AND
+ * the remaining top-level keys (mutation payloads), then re-attach
+ * message/success.
+ */
+export const flattenApiResponse = (
+  data: Record<string, unknown>
+): Record<string, unknown> => {
+  const { success, message, data: inner, ...rest } = data;
+  const isPlainObject =
+    inner != null && typeof inner === 'object' && !Array.isArray(inner);
+  return {
+    ...(isPlainObject ? (inner as Record<string, unknown>) : {}),
+    ...rest,
+    // A non-object `data` (array / primitive) can't be spread without
+    // mangling it, so keep it addressable under `data`.
+    ...(inner !== undefined && !isPlainObject ? { data: inner } : {}),
+    message,
+    success,
+  };
+};
+
 // Response interceptor
 api.interceptors.response.use(
   (response) => {
@@ -48,14 +77,9 @@ api.interceptors.response.use(
       if (!data.success) {
         return Promise.reject(new Error(data.message || 'Request failed'));
       }
-      // Preserve message alongside inner data for mutation handlers
       return {
         ...response,
-        data: {
-          ...data.data,
-          message: data.message,
-          success: data.success,
-        },
+        data: flattenApiResponse(data),
       };
     }
     return response;

@@ -1,5 +1,48 @@
 import { describe, it, expect, vi } from 'vitest';
-import api, { isWordPressAdmin, getVersion } from './client';
+import api, { isWordPressAdmin, getVersion, flattenApiResponse } from './client';
+
+describe('flattenApiResponse', () => {
+  it('preserves top-level resource keys from mutation responses (campaign/utm/link)', () => {
+    // Hub returns mutation payloads at the top level, not nested under `data`.
+    const result = flattenApiResponse({
+      success: true,
+      campaign: { name: 'DOME2620RS1_learn', short_url: '/DOME2620WS1_learn' },
+    });
+    expect(result.campaign).toEqual({
+      name: 'DOME2620RS1_learn',
+      short_url: '/DOME2620WS1_learn',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('still spreads nested `data` for list/setup responses (back-compat)', () => {
+    const result = flattenApiResponse({
+      success: true,
+      data: { data: [{ id: 1 }], current_page: 1, total: 1 },
+    });
+    expect(result.data).toEqual([{ id: 1 }]);
+    expect(result.current_page).toBe(1);
+    expect(result.total).toBe(1);
+  });
+
+  it('keeps a non-object `data` value addressable under data', () => {
+    const result = flattenApiResponse({
+      success: true,
+      data: [{ id: 1 }, { id: 2 }],
+    });
+    expect(result.data).toEqual([{ id: 1 }, { id: 2 }]);
+  });
+
+  it('carries the message through alongside the payload', () => {
+    const result = flattenApiResponse({
+      success: true,
+      message: 'Campaign created',
+      utm: { id: 7 },
+    });
+    expect(result.utm).toEqual({ id: 7 });
+    expect(result.message).toBe('Campaign created');
+  });
+});
 
 describe('API Client', () => {
   describe('isWordPressAdmin', () => {
