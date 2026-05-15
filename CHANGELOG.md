@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.25] - 2026-05-15
+
+### Fixed
+- **Campaign builder no longer fails with "Hub did not return a campaign payload."** The SPA's axios response interceptor only forwarded the nested `data` envelope and silently discarded Hub mutation responses, which return the resource at the top level (`{ success, campaign|utm|link: {...} }`). The campaign builder threw the generic payload error even though the short link _was_ created, and `updateUtm` / `archiveUtm` / `restoreUtm` / `updateLink` all came back empty through the same path. The interceptor now preserves both the nested-`data` envelope (list/setup endpoints) and top-level resource keys (mutation endpoints).
+
 ## [3.7.24] - 2026-05-11
 
 ### Changed
