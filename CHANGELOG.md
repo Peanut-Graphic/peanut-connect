@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.26] - 2026-05-15
+
+### Added
+- **Bulk actions on the UTMs tab.** A checkbox column (with select-all-visible) and a bulk action bar: **Archive**, **Restore**, **Delete**, and **Export CSV** for the selected UTMs. Bulk operations run sequentially (well under the Hub's per-site rate limit), stop at the first failure, and report honest partial success rather than silently swallowing errors. Bulk delete reuses the danger confirmation, reworded for N items. Selection clears when switching Active/Archived and after a completed bulk action. CSV export downloads the selected rows (`name, source, medium, target_url, full_url, campaign, clicks`). _(Phase 1 — grouping and a Shortcode column follow once the Hub side ships.)_
+
 ## [3.7.25] - 2026-05-15
 
 ### Fixed
