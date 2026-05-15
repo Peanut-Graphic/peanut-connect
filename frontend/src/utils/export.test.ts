@@ -14,6 +14,8 @@ const makeUtm = (over: Partial<Utm> = {}): Utm => ({
   utm_content: null,
   utm_term: null,
   full_url: 'https://example.com/learn?utm_source=dominion-email',
+  primary_link_slug: 'DOME2620RS1_learn',
+  group_label: null,
   is_archived: false,
   click_count: 7,
   created_at: '2026-05-15T00:00:00Z',
@@ -25,7 +27,7 @@ describe('buildUtmCsv', () => {
   it('emits a header row even for an empty selection', () => {
     const csv = buildUtmCsv([]);
     expect(csv).toBe(
-      '"name","source","medium","target_url","full_url","campaign","clicks"'
+      '"name","source","medium","target_url","full_url","campaign","shortcode","clicks"'
     );
   });
 
@@ -33,11 +35,18 @@ describe('buildUtmCsv', () => {
     const csv = buildUtmCsv([makeUtm()]);
     const [header, row] = csv.split('\r\n');
     expect(header).toBe(
-      '"name","source","medium","target_url","full_url","campaign","clicks"'
+      '"name","source","medium","target_url","full_url","campaign","shortcode","clicks"'
     );
     expect(row).toBe(
-      '"Spring Learn","dominion-email","email","https://example.com/learn","https://example.com/learn?utm_source=dominion-email","DOME2620RS1","7"'
+      '"Spring Learn","dominion-email","email","https://example.com/learn","https://example.com/learn?utm_source=dominion-email","DOME2620RS1","DOME2620RS1_learn","7"'
     );
+  });
+
+  it('uses primary_link_slug as the shortcode, empty when null', () => {
+    const withSlug = buildUtmCsv([makeUtm()]).split('\r\n')[1];
+    expect(withSlug).toContain('"DOME2620RS1","DOME2620RS1_learn","7"');
+    const noSlug = buildUtmCsv([makeUtm({ primary_link_slug: null })]).split('\r\n')[1];
+    expect(noSlug).toContain('"DOME2620RS1","","7"');
   });
 
   it('escapes embedded quotes, commas and newlines per RFC 4180', () => {

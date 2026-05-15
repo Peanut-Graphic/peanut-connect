@@ -12,6 +12,11 @@ export interface Utm {
   utm_content: string | null;
   utm_term: string | null;
   full_url: string;
+  // Phase 2 (Hub >= group_label/primary_link_slug deploy): the UTM's primary
+  // (oldest) short link slug, and the operator-typed grouping label. Both
+  // null when absent / not yet labelled.
+  primary_link_slug: string | null;
+  group_label: string | null;
   is_archived: boolean;
   click_count?: number;
   links_count?: number;
@@ -34,6 +39,7 @@ export interface UtmUpdateInput {
   utm_campaign?: string;
   utm_content?: string | null;
   utm_term?: string | null;
+  group_label?: string | null;
 }
 
 export interface Link {

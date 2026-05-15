@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.28] - 2026-05-15
+
+### Added
+- **UTMs Phase 2 — Shortcode column, grouping & short link in CSV export.** The UTMs tab now shows a **Shortcode** column (the campaign's primary short-link slug) and a **Group** column. UTMs with a group label collapse under expandable group headers, with an "Ungrouped" bucket last. The bulk action bar gains **Assign to group** (type a name — with a typeahead of existing labels — or leave blank to clear; applied to the selection). The Edit dialog also has a **Group** field. CSV export now includes a `shortcode` column. Requires the Hub-side `group_label` + `primary_link_slug` support (deployed 2026-05-15); `primary_link_slug` is null-safe so the column degrades gracefully if absent.
+
 ## [3.7.27] - 2026-05-15
 
 ### Changed

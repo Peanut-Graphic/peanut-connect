@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, Button, Alert } from '@/components/common';
@@ -8,6 +8,7 @@ import { useConfirm } from '@/hooks/useConfirm';
 import { useRowSelection } from '@/hooks/useRowSelection';
 import { runBulk } from '@/utils/runBulk';
 import { exportUtmsCsv } from '@/utils/export';
+import { groupUtms } from '@/utils/groupUtms';
 import { marketingApi, type Utm, type UtmUpdateInput } from '@/api';
 import {
   Archive,
@@ -18,6 +19,9 @@ import {
   Pencil,
   Download,
   X,
+  ChevronDown,
+  ChevronRight,
+  FolderInput,
 } from 'lucide-react';
 
 export default function Utms() {
@@ -76,6 +80,28 @@ export default function Utms() {
     !allVisibleSelected && visibleIds.some((id) => selection.isSelected(id));
   const selectedUtms = utms.filter((u) => selection.isSelected(u.id));
 
+  const groups = useMemo(() => groupUtms(utms), [utms]);
+  const hasLabelledGroups = groups.some((g) => g.label !== null);
+  const knownLabels = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          utms
+            .map((u) => (u.group_label ?? '').trim())
+            .filter((l) => l !== '')
+        )
+      ).sort(),
+    [utms]
+  );
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [groupInput, setGroupInput] = useState('');
+  const toggleCollapsed = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
   const switchView = (archived: boolean) => {
     selection.clear();
     setShowArchived(archived);
@@ -121,6 +147,12 @@ export default function Utms() {
     if (ok) runBulkAction('Deleted', (id) => marketingApi.deleteUtm(id));
   };
   const onBulkExport = () => exportUtmsCsv(selectedUtms);
+  const onBulkAssignGroup = () => {
+    const label = groupInput.trim();
+    void runBulkAction(label ? `Grouped into “${label}”` : 'Ungrouped', (id) =>
+      marketingApi.updateUtm(id, { group_label: label || null })
+    ).then(() => setGroupInput(''));
+  };
 
   return (
     <Layout
@@ -178,6 +210,40 @@ export default function Utms() {
                 Archive
               </Button>
             )}
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                list="utm-group-labels"
+                value={groupInput}
+                onChange={(e) => setGroupInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !bulkBusy) onBulkAssignGroup();
+                }}
+                placeholder="Group name…"
+                disabled={bulkBusy}
+                className="w-36 rounded border border-slate-300 px-2 py-1 text-sm"
+                aria-label="Group name to assign"
+              />
+              <datalist id="utm-group-labels">
+                {knownLabels.map((l) => (
+                  <option key={l} value={l} />
+                ))}
+              </datalist>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={bulkBusy}
+                onClick={onBulkAssignGroup}
+                title={
+                  groupInput.trim()
+                    ? `Assign selected to “${groupInput.trim()}”`
+                    : 'Clear group on selected'
+                }
+              >
+                <FolderInput className="w-4 h-4 mr-1.5" />
+                {groupInput.trim() ? 'Assign to group' : 'Clear group'}
+              </Button>
+            </div>
             <Button
               variant="ghost"
               size="sm"
@@ -240,6 +306,8 @@ export default function Utms() {
                   <th className="text-left px-4 py-2 font-medium">Name</th>
                   <th className="text-left px-4 py-2 font-medium">Source / Medium</th>
                   <th className="text-left px-4 py-2 font-medium">Campaign</th>
+                  <th className="text-left px-4 py-2 font-medium">Shortcode</th>
+                  <th className="text-left px-4 py-2 font-medium">Group</th>
                   <th className="text-right px-4 py-2 font-medium">Reach</th>
                   <th className="text-right px-4 py-2 font-medium">Cost</th>
                   <th className="text-right px-4 py-2 font-medium">Clicks</th>
@@ -248,27 +316,57 @@ export default function Utms() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {utms.map((utm) => (
-                  <UtmRow
-                    key={utm.id}
-                    utm={utm}
-                    archived={showArchived}
-                    selected={selection.isSelected(utm.id)}
-                    onToggleSelect={() => selection.toggle(utm.id)}
-                    onEdit={() => setEditing(utm)}
-                    onArchive={() => archive.mutate(utm.id)}
-                    onRestore={() => restore.mutate(utm.id)}
-                    onDelete={async () => {
-                      const ok = await confirm({
-                        title: 'Delete UTM?',
-                        message: `Delete "${utm.name}"? This also removes its short links and click history.`,
-                        confirmText: 'Delete',
-                        variant: 'danger',
-                      });
-                      if (ok) remove.mutate(utm.id);
-                    }}
-                  />
-                ))}
+                {groups.map((group) => {
+                  const key = group.label ?? ' ungrouped';
+                  const isCollapsed = collapsed.has(key);
+                  return (
+                    <Fragment key={key}>
+                      {hasLabelledGroups && (
+                        <tr className="bg-slate-100/70">
+                          <td colSpan={11} className="px-4 py-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleCollapsed(key)}
+                              className="flex items-center gap-1.5 text-sm font-medium text-slate-700 hover:text-slate-900"
+                            >
+                              {isCollapsed ? (
+                                <ChevronRight className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                              {group.label ?? 'Ungrouped'}
+                              <span className="font-normal text-slate-400">
+                                ({group.utms.length})
+                              </span>
+                            </button>
+                          </td>
+                        </tr>
+                      )}
+                      {(!hasLabelledGroups || !isCollapsed) &&
+                        group.utms.map((utm) => (
+                          <UtmRow
+                            key={utm.id}
+                            utm={utm}
+                            archived={showArchived}
+                            selected={selection.isSelected(utm.id)}
+                            onToggleSelect={() => selection.toggle(utm.id)}
+                            onEdit={() => setEditing(utm)}
+                            onArchive={() => archive.mutate(utm.id)}
+                            onRestore={() => restore.mutate(utm.id)}
+                            onDelete={async () => {
+                              const ok = await confirm({
+                                title: 'Delete UTM?',
+                                message: `Delete "${utm.name}"? This also removes its short links and click history.`,
+                                confirmText: 'Delete',
+                                variant: 'danger',
+                              });
+                              if (ok) remove.mutate(utm.id);
+                            }}
+                          />
+                        ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -338,6 +436,18 @@ function UtmRow({
         {utm.utm_source} / {utm.utm_medium}
       </td>
       <td className="px-4 py-3 text-slate-700">{utm.utm_campaign}</td>
+      <td className="px-4 py-3 font-mono text-xs text-slate-600">
+        {utm.primary_link_slug ?? '—'}
+      </td>
+      <td className="px-4 py-3 text-slate-700">
+        {utm.group_label ? (
+          <span className="inline-block rounded bg-slate-100 px-2 py-0.5 text-xs">
+            {utm.group_label}
+          </span>
+        ) : (
+          '—'
+        )}
+      </td>
       <td className="px-4 py-3 text-right text-slate-700 tabular-nums">
         {utm.send_count ? utm.send_count.toLocaleString() : '—'}
       </td>
@@ -437,6 +547,7 @@ function EditUtmModal({
     utm.campaign_cost != null ? String(Number(utm.campaign_cost).toFixed(2)) : '',
   );
   const [notes, setNotes] = useState(utm.notes ?? '');
+  const [group, setGroup] = useState(utm.group_label ?? '');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [source, setSource] = useState(utm.utm_source);
   const [medium, setMedium] = useState(utm.utm_medium);
@@ -453,6 +564,7 @@ function EditUtmModal({
       send_count: sendCount === '' ? null : Number(sendCount),
       campaign_cost: cost === '' ? null : Number(cost),
       notes: notes || null,
+      group_label: group.trim() || null,
     };
     if (showAdvanced) {
       input.utm_source = source;
@@ -506,6 +618,19 @@ function EditUtmModal({
               />
             </Field>
           </div>
+
+          <Field
+            label="Group"
+            hint="Optional label to collapse related UTMs together. Clear to ungroup."
+          >
+            <input
+              type="text"
+              value={group}
+              onChange={(e) => setGroup(e.target.value)}
+              placeholder="e.g. Spring Reminder Email"
+              className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+            />
+          </Field>
 
           <Field label="Notes" hint="Internal — not shown anywhere public.">
             <textarea

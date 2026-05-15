@@ -8,6 +8,7 @@ const UTM_CSV_COLUMNS = [
   'target_url',
   'full_url',
   'campaign',
+  'shortcode',
   'clicks',
 ] as const;
 
@@ -28,6 +29,7 @@ export function buildUtmCsv(utms: Utm[]): string {
       u.base_url,
       u.full_url,
       u.utm_campaign,
+      u.primary_link_slug ?? '',
       u.click_count ?? 0,
     ]
       .map(csvField)
