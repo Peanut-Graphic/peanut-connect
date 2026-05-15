@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.27] - 2026-05-15
+
+### Changed
+- Maintenance release. No functional changes since 3.7.26 — version bump so the update is re-offered to sites already on 3.7.26 (e.g. dominionptr.com) and the auto-updater serves a fresh package. All 3.7.26 UTMs multi-select / bulk archive-restore-delete / CSV export functionality is unchanged.
+
 ## [3.7.26] - 2026-05-15
 
 ### Added
