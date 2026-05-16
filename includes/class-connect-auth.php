@@ -131,6 +131,7 @@ class Peanut_Connect_Auth {
             'list_updates' => true,
             'perform_updates' => true,
             'access_analytics' => true,
+            'publish_content' => true,
         ]);
     }
 
