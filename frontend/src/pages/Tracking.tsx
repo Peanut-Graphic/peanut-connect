@@ -3,6 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, CardHeader, Alert } from '@/components/common';
 import { marketingApi } from '@/api';
+import {
+  buildTrackerSnippet,
+  buildFormTrackSnippet,
+  buildConversionSnippet,
+} from '@/utils/trackingSnippets';
 import { Copy, Check } from 'lucide-react';
 
 export default function Tracking() {
@@ -11,31 +16,12 @@ export default function Tracking() {
     queryFn: () => marketingApi.trackingSetup(),
   });
 
-  const trackerSnippet = useMemo(() => {
-    const hub = data?.hub_url ?? 'https://hub.peanutgraphic.com';
-    const key = data?.site_key && data.site_key !== '—'
-      ? data.site_key
-      : '<<your Site Key from Hub → Sites → Tracking>>';
-    return [
-      '<script>',
-      "(function(w,d,s,k,h){w.phub=w.phub||function(){(w.phub.q=w.phub.q||[]).push(arguments)};",
-      "w.phub.k=k;w.phub.h=h;var f=d.getElementsByTagName(s)[0],j=d.createElement(s);",
-      "j.async=true;j.src=h+'/js/tracker.min.js';f.parentNode.insertBefore(j,f);",
-      `})(window,document,'script','${key}','${hub}');`,
-      "phub('pageview');",
-      '</script>',
-    ].join('\n');
-  }, [data]);
-
-  const conversionSnippet = [
-    '<script>',
-    '(function checkPnut() {',
-    "  if (typeof phub === 'function') {",
-    "    phub('conversion', 'enrollment', 0);",
-    '  } else { setTimeout(checkPnut, 100); }',
-    '})();',
-    '</script>',
-  ].join('\n');
+  const trackerSnippet = useMemo(
+    () => buildTrackerSnippet(data?.hub_url, data?.site_key),
+    [data]
+  );
+  const formTrackSnippet = buildFormTrackSnippet();
+  const conversionSnippet = buildConversionSnippet();
 
   return (
     <Layout
@@ -78,16 +64,18 @@ export default function Tracking() {
 
         <Card>
           <CardHeader
-            title="Tag 2 — Fire conversion"
-            description="GTM tag, fires on form submission or thank-you page load."
+            title="Tag 2 — Track the enrollment form"
+            description="GTM tag, fires on the enrollment page (DOM Ready). Auto-captures form start / field / abandon so you can see which step people drop out on. Tighten the 'form' selector to your form's id if the page has more than one form."
+          />
+          <Snippet code={formTrackSnippet} />
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Tag 3 — Fire enrollment + identity"
+            description="GTM tag, fires on form submission or thank-you page load. enroll() records the conversion AND identifies the visitor by email (this is what powers per-account timelines). Wire {{Form Email}} / {{Form Name}} to GTM variables mapped to your form fields — without a real email the visitor stays anonymous."
           />
           <Snippet code={conversionSnippet} />
-          <p className="text-sm text-slate-500 mt-3">
-            For richer reporting, add customer info:
-          </p>
-          <Snippet
-            code={"phub('conversion', 'enrollment', 0, { email: {{Form Email}}, name: {{Form Name}} });"}
-          />
         </Card>
 
         <Card>

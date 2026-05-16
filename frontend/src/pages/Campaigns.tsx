@@ -11,6 +11,11 @@ import {
   type CampaignResult,
   type TrackingSetup,
 } from '@/api';
+import {
+  buildTrackerSnippet,
+  buildFormTrackSnippet,
+  buildConversionSnippet,
+} from '@/utils/trackingSnippets';
 import { Copy, Check, ExternalLink, ArrowLeft, ArrowRight, RotateCcw, Download } from 'lucide-react';
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -611,31 +616,12 @@ function TrackingStep({
   onSubmit: () => void;
   submitting: boolean;
 }) {
-  const trackerSnippet = useMemo(() => {
-    const hub = tracking?.hub_url || 'https://hub.peanutgraphic.com';
-    const key = tracking?.site_key && tracking.site_key !== '—'
-      ? tracking.site_key
-      : '<<your Site Key from Hub → Sites → Tracking>>';
-    return [
-      '<script>',
-      "(function(w,d,s,k,h){w.phub=w.phub||function(){(w.phub.q=w.phub.q||[]).push(arguments)};",
-      "w.phub.k=k;w.phub.h=h;var f=d.getElementsByTagName(s)[0],j=d.createElement(s);",
-      "j.async=true;j.src=h+'/js/tracker.min.js';f.parentNode.insertBefore(j,f);",
-      `})(window,document,'script','${key}','${hub}');`,
-      "phub('pageview');",
-      '</script>',
-    ].join('\n');
-  }, [tracking]);
-
-  const conversionSnippet = [
-    '<script>',
-    '(function checkPnut() {',
-    "  if (typeof phub === 'function') {",
-    "    phub('conversion', 'enrollment', 0);",
-    '  } else { setTimeout(checkPnut, 100); }',
-    '})();',
-    '</script>',
-  ].join('\n');
+  const trackerSnippet = useMemo(
+    () => buildTrackerSnippet(tracking?.hub_url, tracking?.site_key),
+    [tracking]
+  );
+  const formTrackSnippet = buildFormTrackSnippet();
+  const conversionSnippet = buildConversionSnippet();
 
   return (
     <Card>
@@ -657,9 +643,28 @@ function TrackingStep({
 
         <div>
           <div className="text-sm font-medium text-slate-700 mb-2">
-            Tag 2 — Conversion fire (on the thank-you page or form submit)
+            Tag 2 — Track the enrollment form (enrollment page, DOM Ready)
+          </div>
+          <Snippet code={formTrackSnippet} />
+          <p className="text-xs text-slate-500 mt-1">
+            Captures form start / field / abandon so you can see which step
+            people drop out on. Tighten the <code>'form'</code> selector to
+            your form's id if the page has more than one form.
+          </p>
+        </div>
+
+        <div>
+          <div className="text-sm font-medium text-slate-700 mb-2">
+            Tag 3 — Enrollment + identity (thank-you page or form submit)
           </div>
           <Snippet code={conversionSnippet} />
+          <p className="text-xs text-slate-500 mt-1">
+            <code>enroll()</code> records the conversion <em>and</em> identifies
+            the visitor by email — this is what powers per-person timelines.
+            Wire <code>{'{{Form Email}}'}</code> / <code>{'{{Form Name}}'}</code>{' '}
+            to GTM variables mapped to your form fields; without a real email
+            the enrollee stays anonymous.
+          </p>
         </div>
 
         <p className="text-xs text-slate-500">

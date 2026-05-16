@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.29] - 2026-05-15
+
+### Changed
+- **Tracking snippet generator now ships identity + form-step tracking by default.** The campaign-builder Step 3 and the Tracking page previously emitted only a tracker loader + a bare `phub('conversion','enrollment',0)` — no visitor identity and no form instrumentation, so per-account timelines and enrollment-step drop-off never populated. Now three tags are generated from a single shared, unit-tested builder (`utils/trackingSnippets.ts`): **Tag 1** loader (unchanged), **Tag 2** `phub('form','track', …)` to auto-capture form start/field/abandon, and **Tag 3** `phub('enroll', { email: {{Form Email}}, name: {{Form Name}} })` which records the conversion *and* identifies the visitor by email. UI copy explains wiring the `{{Form Email}}` GTM variable. Existing installed tags keep working; this only changes what new copies generate.
+
 ## [3.7.28] - 2026-05-15
 
 ### Added
