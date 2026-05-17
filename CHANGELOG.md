@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.31] - 2026-05-16
+
+### Fixed
+- Podcast publish endpoint now authenticates via the Hub Bearer path (`hub_permission_callback_for` -> `peanut_connect_hub_api_key`) instead of the site-key path; the Hullabaloo bridge was getting 401 invalid_key. Caught by the dry-run verify gate before any write.
+
 ## [3.7.30] - 2026-05-16
 
 ### Added

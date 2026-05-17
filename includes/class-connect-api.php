@@ -107,7 +107,7 @@ class Peanut_Connect_API {
         register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/podcast/publish', [
             'methods' => WP_REST_Server::CREATABLE,
             'callback' => [$this, 'publish_podcast_episode'],
-            'permission_callback' => Peanut_Connect_Auth::permission_callback_for('publish_content'),
+            'permission_callback' => Peanut_Connect_Auth::hub_permission_callback_for('publish_content'),
             'args' => [
                 'guid' => ['required' => true, 'type' => 'string'],
                 'title' => ['required' => true, 'type' => 'string'],
