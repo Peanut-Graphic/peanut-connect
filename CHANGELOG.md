@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.30] - 2026-05-16
+
+### Added
+- Podcast publish endpoint: `POST /wp-json/peanut-connect/v1/podcast/publish` (Bearer + `publish_content` permission). Idempotent upsert of a PowerPress episode post keyed by upstream GUID (`peanut_episode_guid` meta) — writes the exact PowerPress 11.16.5 `enclosure` meta contract (4 newline-delimited fields, serialized settings). Supports `dry_run`. Powers the Hullabaloo → WordPress publish bridge.
+
 ## [3.7.29] - 2026-05-15
 
 ### Changed

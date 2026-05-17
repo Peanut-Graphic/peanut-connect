@@ -102,6 +102,19 @@ class Peanut_Connect_API {
             'permission_callback' => [$this, 'admin_permission_check'],
         ]);
 
+        // Podcast publish — Hub-driven (Bearer + publish_content). Idempotent
+        // upsert of a PowerPress episode post keyed by the upstream GUID.
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/podcast/publish', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'publish_podcast_episode'],
+            'permission_callback' => Peanut_Connect_Auth::permission_callback_for('publish_content'),
+            'args' => [
+                'guid' => ['required' => true, 'type' => 'string'],
+                'title' => ['required' => true, 'type' => 'string'],
+                'enclosure_url' => ['required' => true, 'type' => 'string'],
+            ],
+        ]);
+
         // Admin health endpoint (no Bearer token required)
         register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/admin/health', [
             'methods' => WP_REST_Server::READABLE,
@@ -1926,6 +1939,141 @@ class Peanut_Connect_API {
             'active' => count(array_filter($plugins, fn($p) => $p['active'])),
             'updates_available' => count(array_filter($plugins, fn($p) => $p['has_update'])),
         ], 200);
+    }
+
+    /**
+     * Build the PowerPress `enclosure` postmeta value.
+     *
+     * Classic PowerPress format = 4 newline-delimited fields:
+     *   <media URL>\n<length bytes>\n<mime>\n<PHP-serialized settings array>
+     * Verified against PowerPress 11.16.5 on nattybumpercar.com. Pure +
+     * static so it is unit-testable without WordPress.
+     */
+    public static function build_powerpress_enclosure_meta(array $f): string {
+        return implode("\n", [
+            (string) ($f['url'] ?? ''),
+            (string) ((int) ($f['bytes'] ?? 0)),
+            (string) ($f['mime'] ?? 'audio/mpeg'),
+            serialize($f['settings'] ?? []),
+        ]);
+    }
+
+    /**
+     * Publish (idempotent upsert) a PowerPress episode post from the Hub.
+     *
+     * Dedupe order: explicit wp_post_id -> post carrying peanut_episode_guid
+     * meta == guid -> create new. Always (re)writes a CLEAN full meta set so
+     * a re-publish never duplicates and never inherits drifted meta from a
+     * duplicated post. `dry_run` returns the resolved target + computed meta
+     * without writing (boardroom gate).
+     */
+    public function publish_podcast_episode(WP_REST_Request $request): WP_REST_Response {
+        $p = $request->get_json_params() ?: $request->get_params();
+
+        $guid = sanitize_text_field($p['guid'] ?? '');
+        if ($guid === '') {
+            return new WP_REST_Response(['success' => false, 'message' => 'guid is required'], 400);
+        }
+        if (empty($p['enclosure_url']) || empty($p['title'])) {
+            return new WP_REST_Response(['success' => false, 'message' => 'title and enclosure_url are required'], 400);
+        }
+        $dry_run = ! empty($p['dry_run']);
+
+        // Resolve target post.
+        $post_id = 0;
+        if (! empty($p['wp_post_id']) && get_post((int) $p['wp_post_id'])) {
+            $post_id = (int) $p['wp_post_id'];
+        } else {
+            $found = get_posts([
+                'post_type' => 'post',
+                'post_status' => 'any',
+                'numberposts' => 1,
+                'fields' => 'ids',
+                'meta_key' => 'peanut_episode_guid',
+                'meta_value' => $guid,
+            ]);
+            if (! empty($found)) {
+                $post_id = (int) $found[0];
+            }
+        }
+        $action = $post_id ? 'update' : 'create';
+
+        $explicit_in = (string) ($p['explicit'] ?? 'clean');
+        $type_in = (string) ($p['episode_type'] ?? 'full');
+        $settings = [
+            'location' => [],
+            'credits' => [],
+            'copyright' => sanitize_text_field($p['author'] ?? ''),
+            'copyright_url' => '',
+            'duration' => sanitize_text_field($p['duration'] ?? '0:00:00'),
+            'set_duration' => '0',
+            'set_size' => '0',
+            'author' => sanitize_text_field($p['author'] ?? ''),
+            'explicit' => in_array($explicit_in, ['1', 'explicit', 'yes', 'true'], true) ? '1' : '2',
+            'itunes_image' => esc_url_raw($p['itunes_image'] ?? ''),
+            'episode_title' => sanitize_text_field($p['episode_title'] ?? $p['title']),
+            'episode_no' => (int) ($p['episode_no'] ?? 0),
+            'episode_no_display' => sanitize_text_field($p['episode_no_display'] ?? ''),
+            'show_notes' => sanitize_textarea_field($p['show_notes'] ?? ''),
+            'season' => (string) ($p['season'] ?? ''),
+            'episode_type' => in_array($type_in, ['full', 'trailer', 'bonus'], true) ? $type_in : 'full',
+            'feed_title' => sanitize_text_field($p['episode_title'] ?? $p['title']),
+            'pci_transcript' => ! empty($p['pci_transcript_url']) ? 1 : 0,
+            'pci_transcript_url' => esc_url_raw($p['pci_transcript_url'] ?? ''),
+            'podcast_id' => '',
+        ];
+        $enclosure_meta = self::build_powerpress_enclosure_meta([
+            'url' => $p['enclosure_url'],
+            'bytes' => (int) ($p['enclosure_bytes'] ?? 0),
+            'mime' => sanitize_text_field($p['enclosure_mime'] ?? 'audio/mpeg'),
+            'settings' => $settings,
+        ]);
+
+        if ($dry_run) {
+            return new WP_REST_Response(['success' => true, 'dry_run' => true, 'data' => [
+                'action' => $action,
+                'wp_post_id' => $post_id ?: null,
+                'guid' => $guid,
+                'enclosure_meta' => $enclosure_meta,
+                'settings' => $settings,
+            ]], 200);
+        }
+
+        $status_in = (string) ($p['status'] ?? 'publish');
+        $postarr = [
+            'post_title' => sanitize_text_field($p['title']),
+            'post_content' => wp_kses_post($p['content'] ?? ''),
+            'post_status' => in_array($status_in, ['publish', 'draft', 'pending', 'private'], true) ? $status_in : 'publish',
+            'post_type' => 'post',
+        ];
+        if ($post_id) {
+            $postarr['ID'] = $post_id;
+            $res = wp_update_post($postarr, true);
+        } else {
+            $res = wp_insert_post($postarr, true);
+        }
+        if (is_wp_error($res)) {
+            return new WP_REST_Response(['success' => false, 'message' => $res->get_error_message()], 500);
+        }
+        $post_id = (int) $res;
+
+        update_post_meta($post_id, 'enclosure', $enclosure_meta);
+        update_post_meta($post_id, 'peanut_episode_guid', $guid);
+
+        if (class_exists('Peanut_Connect_Activity_Log')) {
+            Peanut_Connect_Activity_Log::log('podcast_published', 'success', sanitize_text_field($p['title']), [
+                'guid' => $guid,
+                'post_id' => $post_id,
+                'action' => $action,
+            ]);
+        }
+
+        return new WP_REST_Response(['success' => true, 'data' => [
+            'wp_post_id' => $post_id,
+            'permalink' => get_permalink($post_id),
+            'guid' => $guid,
+            'action' => $action,
+        ]], 200);
     }
 
     /**
