@@ -111,4 +111,44 @@ class Peanut_Connect_Videos {
 
         return new WP_REST_Response($data, $status > 0 ? $status : 502);
     }
+
+    public static function init(): void {
+        add_shortcode('peanut_video', [self::class, 'shortcode']);
+    }
+
+    public static function shortcode($atts): string {
+        $atts = shortcode_atts(['slug' => '', 'max_width' => '', 'autoplay' => ''], $atts, 'peanut_video');
+        $slug = sanitize_title((string) $atts['slug']);
+        if ($slug === '') {
+            return '<!-- Peanut Video: No slug specified -->';
+        }
+
+        $hub_url = (string) get_option('peanut_connect_hub_url', '');
+        if ($hub_url === '') {
+            $msg = '<!-- Peanut Video: site not connected to a Hub install -->';
+            if (current_user_can('manage_options')) {
+                $msg .= '<p style="font-size:12px;color:#a00">Peanut Video: this site is not connected to a Hub install.</p>';
+            }
+            return $msg;
+        }
+
+        $src = trailingslashit($hub_url) . 'video/' . rawurlencode($slug) . '/embed';
+        if ($atts['autoplay'] !== '') {
+            $src = add_query_arg('autoplay', '1', $src);
+        }
+
+        $style_wrap = 'position:relative;width:100%;padding-top:56.25%;';
+        if ($atts['max_width'] !== '') {
+            $mw = preg_replace('/[^0-9]/', '', (string) $atts['max_width']);
+            if ($mw !== '') {
+                $style_wrap = 'max-width:' . $mw . 'px;margin:0 auto;' . $style_wrap;
+            }
+        }
+
+        return sprintf(
+            '<div class="peanut-video" style="%s"><iframe src="%s" title="Video" loading="lazy" style="position:absolute;inset:0;width:100%%;height:100%%;border:0" allowfullscreen></iframe></div>',
+            esc_attr($style_wrap),
+            esc_url($src)
+        );
+    }
 }

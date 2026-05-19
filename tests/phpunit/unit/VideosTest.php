@@ -79,4 +79,24 @@ class VideosTest extends TestCase {
         $this->assertStringContainsString('days=30', $peanut_last_http['url']);
         $this->assertSame('Bearer k', $peanut_last_http['args']['headers']['Authorization']);
     }
+
+    public function test_shortcode_without_slug_renders_comment(): void {
+        $out = Peanut_Connect_Videos::shortcode([]);
+        $this->assertStringContainsString('Peanut Video: No slug', $out);
+    }
+
+    public function test_shortcode_renders_responsive_hub_iframe(): void {
+        global $peanut_test_options;
+        $peanut_test_options['peanut_connect_hub_url'] = 'https://hub.example.com/';
+        $out = Peanut_Connect_Videos::shortcode(['slug' => 'promo-abc']);
+        $this->assertStringContainsString('https://hub.example.com/video/promo-abc/embed', $out);
+        $this->assertStringContainsString('<iframe', $out);
+        $this->assertStringContainsString('padding-top:56.25%', $out);
+    }
+
+    public function test_shortcode_not_connected_renders_nothing_visible(): void {
+        $out = Peanut_Connect_Videos::shortcode(['slug' => 'x']);
+        $this->assertStringContainsString('not connected', strtolower($out));
+        $this->assertStringNotContainsString('<iframe', $out);
+    }
 }

@@ -120,6 +120,9 @@ final class Peanut_Connect {
         // Initialize forms integration
         Peanut_Connect_Forms::init();
 
+        // Initialize videos integration ([peanut_video] shortcode)
+        Peanut_Connect_Videos::init();
+
         // Initialize self-updater early so update check filter is registered
         new Peanut_Connect_Self_Updater();
     }
