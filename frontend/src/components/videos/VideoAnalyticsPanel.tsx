@@ -28,10 +28,13 @@ export function VideoAnalyticsPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2 text-xs">
+      <div role="group" aria-label="Analytics window" className="flex gap-2 text-xs">
         {[7, 30, 90].map((d) => (
           <button
             key={d}
+            type="button"
+            aria-pressed={days === d}
+            aria-label={`Last ${d} days`}
             onClick={() => setDays(d as 7 | 30 | 90)}
             className={`px-2 py-1 border rounded ${days === d ? 'bg-black text-white' : ''}`}
           >
@@ -48,7 +51,7 @@ export function VideoAnalyticsPanel({
       </div>
       <div>
         <div className="text-xs font-medium mb-1">Drop-off (all-time)</div>
-        <div className="flex items-end gap-1 h-24">
+        <div role="img" aria-label="Drop-off chart (all-time)" className="flex items-end gap-1 h-24">
           {buckets.map(([pct, n]) => (
             <div
               key={pct}
@@ -56,15 +59,17 @@ export function VideoAnalyticsPanel({
             >
               <div
                 data-testid="dropoff-bar"
+                aria-label={`${pct}: ${n} viewers`}
                 className="w-full bg-amber-500 rounded-t"
                 style={{ height: `${(n / max) * 100}%` }}
                 title={`${pct}: ${n}`}
               />
-              <span className="mt-1 text-[10px] text-gray-500">{pct}</span>
+              <span className="mt-1 text-[10px] text-gray-500" aria-hidden="true">{pct}</span>
             </div>
           ))}
         </div>
       </div>
+      {/* hubEmbedUrl is always '{hubOrigin}/video/{slug}/embed' per API contract; stripping /video/... → Hub analytics root */}
       <a
         href={hubEmbedUrl.replace(/\/video\/.*$/, '')}
         target="_blank"
