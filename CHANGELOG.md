@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-05-19
+
+### Added
+- **Videos module.** New Connect → Videos screen registers a WP-media or external-URL video with Hub (poster + captions optional), inserts it via the `[peanut_video slug="…"]` shortcode or the "Peanut Video" block, and shows engagement analytics (plays, unique viewers, avg watch, completion, drop-off curve) without leaving WordPress. Proxies the Hub videos API; media stays WP/CDN-hosted.
+
 ## [3.7.31] - 2026-05-16
 
 ### Fixed
