@@ -69,9 +69,9 @@ export function VideoAnalyticsPanel({
           ))}
         </div>
       </div>
-      {/* hubEmbedUrl is always '{hubOrigin}/video/{slug}/embed' per API contract; stripping /video/... → Hub analytics root */}
+      {/* hubEmbedUrl is always '{hubOrigin}/video/{slug}/embed' per API contract; strip /video/... and append /videos/{videoId} → Hub per-video analytics page */}
       <a
-        href={hubEmbedUrl.replace(/\/video\/.*$/, '')}
+        href={`${hubEmbedUrl.replace(/\/video\/.*$/, '')}/videos/${videoId}`}
         target="_blank"
         rel="noreferrer"
         className="text-xs text-blue-600 underline"

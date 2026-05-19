@@ -8,7 +8,7 @@ describe('videosApi', () => {
   beforeEach(() => vi.resetAllMocks());
 
   it('list() GETs /videos and returns the unwrapped array', async () => {
-    (api.get as any).mockResolvedValue({ data: [{ id: 1, slug: 's', title: 'T' }] });
+    (api.get as any).mockResolvedValue({ data: { data: [{ id: 1, slug: 's', title: 'T' }], success: true } });
     const out = await videosApi.list();
     expect(api.get).toHaveBeenCalledWith('/videos');
     expect(out).toEqual([{ id: 1, slug: 's', title: 'T' }]);

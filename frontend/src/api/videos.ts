@@ -35,7 +35,9 @@ export interface VideoAnalytics {
 export const videosApi = {
   list: async (): Promise<Video[]> => {
     const res = await api.get('/videos');
-    return res.data as Video[];
+    // Hub returns {success,data:[...]}; the client interceptor keeps an array
+    // payload addressable under `.data` (it only spreads plain-object payloads).
+    return ((res.data?.data ?? res.data) as Video[]) ?? [];
   },
   create: async (input: VideoInput): Promise<Video> => {
     const res = await api.post('/videos', input);
