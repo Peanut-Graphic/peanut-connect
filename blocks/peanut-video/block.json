@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "peanut-connect/video",
+  "title": "Peanut Video",
+  "category": "embed",
+  "icon": "video-alt3",
+  "description": "Insert a Hub-tracked video by slug.",
+  "attributes": { "slug": { "type": "string", "default": "" } },
+  "editorScript": "file:../../assets/dist/js/peanut-video-block.js",
+  "supports": { "html": false }
+}

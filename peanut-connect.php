@@ -132,6 +132,11 @@ final class Peanut_Connect {
      */
     private function init_hooks(): void {
         add_action('rest_api_init', [$this, 'register_api_routes']);
+        // Register the Peanut Video Gutenberg block (delegates render to the
+        // [peanut_video] shortcode). register_block_type() must run on init;
+        // init_hooks() itself runs from the priority-0 init bootstrap, so this
+        // default-priority handler fires after the plugin has loaded.
+        add_action('init', ['Peanut_Connect_Videos', 'register_block']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
