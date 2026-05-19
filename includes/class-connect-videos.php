@@ -132,6 +132,8 @@ class Peanut_Connect_Videos {
 
     public static function shortcode($atts): string {
         $atts = shortcode_atts(['slug' => '', 'max_width' => '', 'autoplay' => ''], $atts, 'peanut_video');
+        // Case-preserving on purpose: Hub slugs end in a mixed-case Str::random(6) suffix.
+        // Do NOT switch to sanitize_title()/sanitize_key() — they lowercase and 404 the embed.
         $slug = (string) preg_replace('/[^A-Za-z0-9_-]/', '', (string) $atts['slug']);
         if ($slug === '') {
             return '<!-- Peanut Video: No slug specified -->';
@@ -160,7 +162,7 @@ class Peanut_Connect_Videos {
         }
 
         return sprintf(
-            '<div class="peanut-video" style="%s"><iframe src="%s" title="Video" loading="lazy" style="position:absolute;inset:0;width:100%%;height:100%%;border:0" allowfullscreen></iframe></div>',
+            '<div class="peanut-video" style="%s"><iframe src="%s" title="Video" loading="lazy" allow="fullscreen; encrypted-media" style="position:absolute;inset:0;width:100%%;height:100%%;border:0" allowfullscreen></iframe></div>',
             esc_attr($style_wrap),
             esc_url($src)
         );
