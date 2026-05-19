@@ -118,7 +118,7 @@ class Peanut_Connect_Videos {
 
     public static function shortcode($atts): string {
         $atts = shortcode_atts(['slug' => '', 'max_width' => '', 'autoplay' => ''], $atts, 'peanut_video');
-        $slug = sanitize_title((string) $atts['slug']);
+        $slug = (string) preg_replace('/[^A-Za-z0-9_-]/', '', (string) $atts['slug']);
         if ($slug === '') {
             return '<!-- Peanut Video: No slug specified -->';
         }

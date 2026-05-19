@@ -99,4 +99,12 @@ class VideosTest extends TestCase {
         $this->assertStringContainsString('not connected', strtolower($out));
         $this->assertStringNotContainsString('<iframe', $out);
     }
+
+    public function test_shortcode_preserves_mixed_case_slug(): void {
+        global $peanut_test_options;
+        $peanut_test_options['peanut_connect_hub_url'] = 'https://hub.example.com/';
+        $out = Peanut_Connect_Videos::shortcode(['slug' => 'dominion-energy-ptr-aB3xZ9']);
+        $this->assertStringContainsString('https://hub.example.com/video/dominion-energy-ptr-aB3xZ9/embed', $out);
+        $this->assertStringNotContainsString('ab3xz9', $out); // not lowercased
+    }
 }
