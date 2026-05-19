@@ -116,6 +116,20 @@ class Peanut_Connect_Videos {
         add_shortcode('peanut_video', [self::class, 'shortcode']);
     }
 
+    public static function register_block(): void {
+        if (!function_exists('register_block_type')) {
+            return;
+        }
+        register_block_type(PEANUT_CONNECT_PLUGIN_DIR . 'blocks/peanut-video', [
+            'render_callback' => [self::class, 'render_block'],
+        ]);
+    }
+
+    public static function render_block($attributes, $content): string {
+        $slug = isset($attributes['slug']) ? (string) $attributes['slug'] : '';
+        return self::shortcode(['slug' => $slug]);
+    }
+
     public static function shortcode($atts): string {
         $atts = shortcode_atts(['slug' => '', 'max_width' => '', 'autoplay' => ''], $atts, 'peanut_video');
         $slug = (string) preg_replace('/[^A-Za-z0-9_-]/', '', (string) $atts['slug']);
