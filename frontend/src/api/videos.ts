@@ -10,6 +10,7 @@ export interface Video {
   caption_url: string | null;
   status: string;
   created_at: string | null;
+  // Always present — Hub's present() returns url('/video/{slug}/embed') (never null).
   embed_url: string;
 }
 
@@ -34,7 +35,7 @@ export interface VideoAnalytics {
 export const videosApi = {
   list: async (): Promise<Video[]> => {
     const res = await api.get('/videos');
-    return (res.data as Video[]) ?? [];
+    return res.data as Video[];
   },
   create: async (input: VideoInput): Promise<Video> => {
     const res = await api.post('/videos', input);

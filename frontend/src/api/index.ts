@@ -22,3 +22,5 @@ export type {
   Paginated,
   FunnelStage,
 } from './marketing';
+export { videosApi } from './videos';
+export type { Video, VideoInput, VideoAnalytics } from './videos';
