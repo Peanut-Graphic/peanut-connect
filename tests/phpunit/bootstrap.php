@@ -811,3 +811,84 @@ spl_autoload_register(function (string $class): void {
         }
     }
 });
+
+// ==========================================
+// Stubs for Videos module (wp_remote_request, esc_*, shortcode, block)
+// ==========================================
+
+if (!function_exists('wp_remote_request')) {
+    function wp_remote_request(string $url, array $args = []) {
+        global $mock_remote_response, $peanut_last_http;
+        $peanut_last_http = ['url' => $url, 'args' => $args];
+        if (isset($mock_remote_response)) {
+            return is_callable($mock_remote_response)
+                ? ($mock_remote_response)($url, $args)
+                : $mock_remote_response;
+        }
+        return new WP_Error('http_request_failed', 'Mock: No response configured');
+    }
+}
+if (!function_exists('wp_remote_retrieve_response_code')) {
+    function wp_remote_retrieve_response_code($response): int {
+        if (is_array($response) && isset($response['response']['code'])) {
+            return (int) $response['response']['code'];
+        }
+        return 0;
+    }
+}
+if (!function_exists('trailingslashit')) {
+    function trailingslashit(string $s): string { return rtrim($s, "/\\") . '/'; }
+}
+if (!function_exists('add_query_arg')) {
+    function add_query_arg(...$a) {
+        if (is_array($a[0])) { $args = $a[0]; $url = (string) $a[1]; }
+        else { $args = [$a[0] => $a[1]]; $url = (string) $a[2]; }
+        $sep = (strpos($url, '?') === false) ? '?' : '&';
+        return $url . $sep . http_build_query($args);
+    }
+}
+if (!function_exists('wp_json_encode')) {
+    function wp_json_encode($data, int $options = 0, int $depth = 512) {
+        return json_encode($data, $options, $depth);
+    }
+}
+if (!function_exists('sanitize_title')) {
+    function sanitize_title(string $t): string {
+        $t = strtolower(trim($t));
+        $t = preg_replace('/[^a-z0-9_\-]+/', '-', $t);
+        return trim((string) $t, '-');
+    }
+}
+if (!function_exists('esc_url')) {
+    function esc_url(string $u): string { return htmlspecialchars($u, ENT_QUOTES); }
+}
+if (!function_exists('esc_attr')) {
+    function esc_attr(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
+}
+if (!function_exists('esc_html')) {
+    function esc_html(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
+}
+if (!function_exists('shortcode_atts')) {
+    function shortcode_atts(array $defaults, $atts, string $shortcode = ''): array {
+        $atts = (array) $atts;
+        $out = [];
+        foreach ($defaults as $k => $d) {
+            $out[$k] = array_key_exists($k, $atts) ? $atts[$k] : $d;
+        }
+        return $out;
+    }
+}
+if (!function_exists('add_shortcode')) {
+    function add_shortcode(string $tag, $cb): void {
+        global $peanut_test_shortcodes;
+        $peanut_test_shortcodes[$tag] = $cb;
+    }
+}
+if (!function_exists('register_block_type')) {
+    function register_block_type($name, array $args = []) {
+        global $peanut_test_blocks;
+        $key = is_string($name) ? $name : 'block';
+        $peanut_test_blocks[$key] = $args;
+        return true;
+    }
+}
