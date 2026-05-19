@@ -47,11 +47,113 @@ All under HUB `/api/v1`, site-key Bearer auth, `{success:bool,data:...}` envelop
 
 ## Conventions
 
-- **PHP test run:** `cd <worktree> && composer test` (or `./vendor/bin/phpunit -c phpunit.xml`) — confirm the exact command in Task 1 Step 0 and use it verbatim thereafter.
-- **Frontend test run:** `cd frontend && npm run test:run` (vitest). **Frontend build:** `cd frontend && npm run build` (tsc + vite → `assets/dist/`).
+- **PHP test run (VERIFIED — use verbatim):** from the worktree root:
+  `vendor/bin/phpunit --bootstrap tests/phpunit/bootstrap.php --no-configuration tests/phpunit/unit/VideosTest.php`
+  Run ONLY `VideosTest.php` (or the unit dir filtered to it). DO NOT use `composer test` — that targets a legacy WP-integration `./tests/` suite that cannot load standalone ("No tests executed"). The pre-existing `tests/phpunit/unit/ApiTest.php` has **baseline red unrelated to Plan B** (31 errors/5 failures on `origin/main`) — never treat ApiTest red as a Plan B regression; always scope PHP runs to `VideosTest.php`.
+- **Frontend test run (scoped):** `cd frontend && npm run test:run -- <name>` (vitest, filter to the new file, e.g. `videos` / `VideoAnalyticsPanel`). **Baseline:** the full frontend suite is `~370 passed / ~10 failed` on `origin/main` (2 pre-existing broken files unrelated to Plan B) — always filter to the new test; never treat pre-existing failures as a Plan B regression. **Frontend build:** `cd frontend && npm run build` (tsc + vite → `assets/dist/`).
 - PHP REST handlers return `WP_REST_Response`/`WP_Error`; admin gate is `check_admin_permission()` → `current_user_can('manage_options')`. The `forward()` helper already maps not-connected → 412 and Hub errors → 502.
 - SPA: axios instance `frontend/src/api/client.ts` already unwraps `{success,data}` (so `res.data` IS the inner data). Pages use `@tanstack/react-query` `useQuery`/`useMutation`, `Layout`, `useToast`, `useConfirm` — copy `pages/Links.tsx` idioms.
 - Commit after every task. There is no secret-scanning pre-commit assumed; keep commits scoped to the listed files.
+
+---
+
+### Task 0: Extend the PHPUnit bootstrap with the WP stubs this module needs
+
+The unit harness `tests/phpunit/bootstrap.php` stubs WP functions via the guarded `if (!function_exists(...))` pattern. It currently stubs `get_option`/`update_option` (`$peanut_test_options`), `current_user_can` (`$mock_user_caps`), `wp_remote_get` (`$mock_remote_response`), `wp_remote_retrieve_body`, `WP_Error`, `WP_REST_Request`, `WP_REST_Response`, `register_rest_route`, `__`. It does **NOT** stub `wp_remote_request`, `wp_remote_retrieve_response_code`, `trailingslashit`, `add_query_arg`, `wp_json_encode`, `sanitize_title`, `esc_url`, `esc_attr`, `esc_html`, `shortcode_atts`, `add_shortcode`, or `register_block_type` — all of which `class-connect-videos.php` (Tasks 1/5/7) needs. The Hub-proxy `forward()` path was never unit-tested before, so these never existed. Add them once, here.
+
+**Files:**
+- Modify: `tests/phpunit/bootstrap.php`
+
+- [ ] **Step 1: Append these guarded stubs to `tests/phpunit/bootstrap.php`** (at end of file, before any final closing logic — match the file's existing `if (!function_exists())` style; do NOT alter existing stubs):
+
+```php
+if (!function_exists('wp_remote_request')) {
+    function wp_remote_request(string $url, array $args = []) {
+        global $mock_remote_response, $peanut_last_http;
+        $peanut_last_http = ['url' => $url, 'args' => $args];
+        if (isset($mock_remote_response)) {
+            return is_callable($mock_remote_response)
+                ? ($mock_remote_response)($url, $args)
+                : $mock_remote_response;
+        }
+        return new WP_Error('http_request_failed', 'Mock: No response configured');
+    }
+}
+if (!function_exists('wp_remote_retrieve_response_code')) {
+    function wp_remote_retrieve_response_code($response): int {
+        if (is_array($response) && isset($response['response']['code'])) {
+            return (int) $response['response']['code'];
+        }
+        return 0;
+    }
+}
+if (!function_exists('trailingslashit')) {
+    function trailingslashit(string $s): string { return rtrim($s, "/\\") . '/'; }
+}
+if (!function_exists('add_query_arg')) {
+    function add_query_arg(...$a) {
+        if (is_array($a[0])) { $args = $a[0]; $url = (string) $a[1]; }
+        else { $args = [$a[0] => $a[1]]; $url = (string) $a[2]; }
+        $sep = (strpos($url, '?') === false) ? '?' : '&';
+        return $url . $sep . http_build_query($args);
+    }
+}
+if (!function_exists('wp_json_encode')) {
+    function wp_json_encode($data, int $options = 0, int $depth = 512) {
+        return json_encode($data, $options, $depth);
+    }
+}
+if (!function_exists('sanitize_title')) {
+    function sanitize_title(string $t): string {
+        $t = strtolower(trim($t));
+        $t = preg_replace('/[^a-z0-9_\-]+/', '-', $t);
+        return trim((string) $t, '-');
+    }
+}
+if (!function_exists('esc_url')) {
+    function esc_url(string $u): string { return htmlspecialchars($u, ENT_QUOTES); }
+}
+if (!function_exists('esc_attr')) {
+    function esc_attr(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
+}
+if (!function_exists('esc_html')) {
+    function esc_html(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
+}
+if (!function_exists('shortcode_atts')) {
+    function shortcode_atts(array $defaults, $atts, string $shortcode = ''): array {
+        $atts = (array) $atts;
+        $out = [];
+        foreach ($defaults as $k => $d) {
+            $out[$k] = array_key_exists($k, $atts) ? $atts[$k] : $d;
+        }
+        return $out;
+    }
+}
+if (!function_exists('add_shortcode')) {
+    function add_shortcode(string $tag, $cb): void {
+        global $peanut_test_shortcodes;
+        $peanut_test_shortcodes[$tag] = $cb;
+    }
+}
+if (!function_exists('register_block_type')) {
+    function register_block_type($name, array $args = []) {
+        global $peanut_test_blocks;
+        $key = is_string($name) ? $name : 'block';
+        $peanut_test_blocks[$key] = $args;
+        return true;
+    }
+}
+```
+
+- [ ] **Step 2: Sanity-check the bootstrap still loads.** Run:
+  `vendor/bin/phpunit --bootstrap tests/phpunit/bootstrap.php --no-configuration tests/phpunit/unit/ApiTest.php 2>&1 | tail -3`
+  Expected: ApiTest still runs (its pre-existing baseline failures are unchanged — you are only confirming the new stubs didn't introduce a parse/redeclare error; the test COUNT/PASS for ApiTest is irrelevant here).
+
+- [ ] **Step 3: Commit.**
+```bash
+git add tests/phpunit/bootstrap.php
+git commit -m "test(videos): add WP function stubs (wp_remote_request, esc_*, shortcode, block) to unit bootstrap"
+```
 
 ---
 
@@ -62,7 +164,7 @@ All under HUB `/api/v1`, site-key Bearer auth, `{success:bool,data:...}` envelop
 - Modify: `peanut-connect.php`
 - Test: `tests/phpunit/unit/VideosTest.php`
 
-- [ ] **Step 0: Confirm the PHP test command.** Run `cat composer.json | grep -A3 '"scripts"'` and `ls phpunit.xml tests/phpunit/bootstrap.php`. Use the discovered command (likely `composer test` or `vendor/bin/phpunit`) for all later PHP test steps. If no composer test script, use `vendor/bin/phpunit -c phpunit.xml`.
+- [ ] **Step 0: Use the verified PHP test command** (from Conventions): `vendor/bin/phpunit --bootstrap tests/phpunit/bootstrap.php --no-configuration tests/phpunit/unit/VideosTest.php`. Task 0 (bootstrap stubs) MUST be committed before this task. Never use `composer test`.
 
 - [ ] **Step 1: Write the failing test** — `tests/phpunit/unit/VideosTest.php`:
 
@@ -79,9 +181,11 @@ use WP_Error;
 class VideosTest extends TestCase {
     protected function setUp(): void {
         parent::setUp();
-        global $peanut_test_options, $mock_user_caps;
+        global $peanut_test_options, $mock_user_caps, $mock_remote_response, $peanut_last_http;
         $peanut_test_options = [];
         $mock_user_caps = [];
+        $mock_remote_response = null;
+        $peanut_last_http = null;
     }
 
     public function test_admin_permission_blocks_non_admins(): void {
@@ -257,27 +361,23 @@ git commit -m "feat(videos): proxy module for Hub videos API (list/create/update
 **Files:**
 - Test: `tests/phpunit/unit/VideosTest.php`
 
-The unit harness stubs `wp_remote_request`. Confirm how `ApiTest.php`/the bootstrap mocks HTTP (look for a `$peanut_mock_http` global or a filter in `tests/phpunit/bootstrap.php`). Use the SAME mechanism.
+**HTTP mock mechanism (VERIFIED):** the Task 0 `wp_remote_request` stub honors `global $mock_remote_response` (a value OR a `function($url,$args)` callable) and records the outbound call into `global $peanut_last_http = ['url'=>..., 'args'=>...]`. `wp_remote_retrieve_response_code` reads `$response['response']['code']`; `wp_remote_retrieve_body` reads `$response['body']`. Use exactly these globals — do NOT invent `$GLOBALS['peanut_mock_http']`.
 
-- [ ] **Step 1: Add failing tests** to `VideosTest.php` (adjust the mock-injection line to match the harness mechanism discovered above; the assertions stay):
+- [ ] **Step 1: Add failing tests** to `VideosTest.php`:
 
 ```php
     public function test_create_video_forwards_post_to_hub_and_passes_envelope(): void {
-        global $peanut_test_options;
+        global $peanut_test_options, $mock_remote_response, $peanut_last_http;
         $peanut_test_options['peanut_connect_hub_url'] = 'https://hub.example.com';
         $peanut_test_options['peanut_connect_hub_api_key'] = 'k';
-
-        // Arrange the harness HTTP stub to return a Hub 201 envelope and capture the request:
-        $GLOBALS['peanut_mock_http'] = function (string $url, array $args) {
-            $GLOBALS['peanut_last_http'] = ['url' => $url, 'args' => $args];
-            return [
-                'response' => ['code' => 201],
-                'body' => json_encode(['success' => true, 'data' => [
-                    'id' => 9, 'slug' => 'promo-abc', 'title' => 'Promo',
-                    'embed_url' => 'https://hub.example.com/video/promo-abc/embed',
-                ]]),
-            ];
-        };
+        $peanut_last_http = null;
+        $mock_remote_response = [
+            'response' => ['code' => 201],
+            'body' => json_encode(['success' => true, 'data' => [
+                'id' => 9, 'slug' => 'promo-abc', 'title' => 'Promo',
+                'embed_url' => 'https://hub.example.com/video/promo-abc/embed',
+            ]]),
+        ];
 
         $req = new WP_REST_Request('POST', '/videos');
         $req->set_body(json_encode(['title' => 'Promo', 'source_url' => 'https://wp.example.com/v.mp4']));
@@ -287,32 +387,34 @@ The unit harness stubs `wp_remote_request`. Confirm how `ApiTest.php`/the bootst
         $this->assertInstanceOf(WP_REST_Response::class, $res);
         $this->assertSame(201, $res->get_status());
         $this->assertTrue($res->get_data()['success']);
-        $sent = $GLOBALS['peanut_last_http'];
-        $this->assertSame('https://hub.example.com/api/v1/videos', $sent['url']);
-        $this->assertSame('POST', $sent['args']['method']);
-        $this->assertSame('Bearer k', $sent['args']['headers']['Authorization']);
-        $this->assertStringContainsString('"title":"Promo"', $sent['args']['body']);
+        $this->assertSame('https://hub.example.com/api/v1/videos', $peanut_last_http['url']);
+        $this->assertSame('POST', $peanut_last_http['args']['method']);
+        $this->assertSame('Bearer k', $peanut_last_http['args']['headers']['Authorization']);
+        $this->assertStringContainsString('"title":"Promo"', $peanut_last_http['args']['body']);
     }
 
     public function test_analytics_forwards_days_query(): void {
-        global $peanut_test_options;
+        global $peanut_test_options, $mock_remote_response, $peanut_last_http;
         $peanut_test_options['peanut_connect_hub_url'] = 'https://hub.example.com';
         $peanut_test_options['peanut_connect_hub_api_key'] = 'k';
-        $GLOBALS['peanut_mock_http'] = function (string $url, array $args) {
-            $GLOBALS['peanut_last_http'] = ['url' => $url, 'args' => $args];
-            return ['response' => ['code' => 200], 'body' => json_encode(['success' => true, 'data' => ['total_plays' => 0, 'drop_off_all_time' => []]])];
-        };
+        $peanut_last_http = null;
+        $mock_remote_response = [
+            'response' => ['code' => 200],
+            'body' => json_encode(['success' => true, 'data' => ['total_plays' => 0, 'drop_off_all_time' => []]]),
+        ];
         $req = new WP_REST_Request('GET', '/videos/9/analytics');
         $req->set_query_params(['days' => '30']);
         $req['id'] = 9;
         $res = Peanut_Connect_Videos::video_analytics($req);
         $this->assertSame(200, $res->get_status());
-        $this->assertStringContainsString('/api/v1/videos/9/analytics', $GLOBALS['peanut_last_http']['url']);
-        $this->assertStringContainsString('days=30', $GLOBALS['peanut_last_http']['url']);
+        $this->assertStringContainsString('/api/v1/videos/9/analytics', $peanut_last_http['url']);
+        $this->assertStringContainsString('days=30', $peanut_last_http['url']);
     }
 ```
 
-- [ ] **Step 2: Run, expect failure** if the mock-injection global differs from the harness. If `bootstrap.php` uses a different stub hook (e.g. a `pre_http_request`-style filter or a `Peanut_Test_Http::$handler`), rewrite the two `$GLOBALS['peanut_mock_http']` lines to that mechanism BEFORE proceeding. Do not change `class-connect-videos.php` — `forward()` already calls `wp_remote_request`, which the harness intercepts. If you cannot determine the mock mechanism from the bootstrap, STOP and report BLOCKED.
+(Note: the Task 1 not-connected test must `unset($GLOBALS['mock_remote_response'])` or it won't matter — when hub url/key are absent, `forward()` returns 412 before any HTTP call. Add `global $mock_remote_response; $mock_remote_response = null;` to `setUp()` in Task 1's test file so cases don't leak responses into each other.)
+
+- [ ] **Step 2: Run, expect pass** (Task 0 stubs make `wp_remote_request` available). If `wp_remote_request` is somehow still undefined, Task 0 was not committed first — STOP and report BLOCKED. Do not change `class-connect-videos.php`; this task only validates Task 1's `forward()` via the verified mock globals.
 
 - [ ] **Step 3: Run, expect pass** — 2 new tests green (no production code change; this validates Task 1's `forward()`).
 
