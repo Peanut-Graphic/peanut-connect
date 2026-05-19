@@ -329,6 +329,14 @@ if (!class_exists('WP_REST_Response')) {
         public function get_headers(): array {
             return $this->headers;
         }
+
+        public function get_status(): int {
+            return (int) $this->status;
+        }
+
+        public function get_data() {
+            return $this->data;
+        }
     }
 }
 
