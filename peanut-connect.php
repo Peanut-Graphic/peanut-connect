@@ -95,6 +95,7 @@ final class Peanut_Connect {
 
         // Marketing proxy (campaign builder, UTMs, links, analytics) for Hub (v3.7.1+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-marketing.php';
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-videos.php';
 
         // Short-link redirect handler — turns 404 hits on /<slug> into a 302 to Hub's /go/<slug> (v3.7.24+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-short-links.php';
@@ -345,6 +346,7 @@ final class Peanut_Connect {
         $api->register_routes();
 
         Peanut_Connect_Marketing::register_routes();
+        Peanut_Connect_Videos::register_routes();
     }
 
     /**
