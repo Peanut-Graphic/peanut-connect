@@ -9,6 +9,7 @@ import ErrorLog from './pages/ErrorLog';
 import Campaigns from './pages/Campaigns';
 import Utms from './pages/Utms';
 import Links from './pages/Links';
+import Videos from './pages/Videos';
 import Analytics from './pages/Analytics';
 import Tracking from './pages/Tracking';
 import Settings from './pages/Settings';
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/utms" element={<Utms />} />
             <Route path="/links" element={<Links />} />
+            <Route path="/videos" element={<Videos />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/tracking" element={<Tracking />} />
             <Route path="/settings" element={<Settings />} />

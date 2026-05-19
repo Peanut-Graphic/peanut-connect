@@ -51,9 +51,13 @@ if (!defined('OBJECT')) {
 }
 
 // Storage for mocked options and transients
-global $peanut_test_options, $peanut_test_transients;
+global $peanut_test_options, $peanut_test_transients, $peanut_test_shortcodes, $peanut_test_blocks, $mock_remote_response, $peanut_last_http;
 $peanut_test_options = [];
 $peanut_test_transients = [];
+$peanut_test_shortcodes = [];
+$peanut_test_blocks = [];
+$mock_remote_response = null;
+$peanut_last_http = null;
 
 /**
  * Mock WordPress get_option function
@@ -228,8 +232,9 @@ if (!function_exists('is_wp_error')) {
 /**
  * Mock WP_REST_Request class
  */
+// Test stub: body/query/url params share one $params bag (NOT isolated like real WP_REST_Request). Fine because handlers under test never read body+query in the same request.
 if (!class_exists('WP_REST_Request')) {
-    class WP_REST_Request {
+    class WP_REST_Request implements ArrayAccess {
         private array $headers = [];
         private array $params = [];
         private string $route = '';
@@ -258,12 +263,49 @@ if (!class_exists('WP_REST_Request')) {
             return $this->params;
         }
 
+        public function get_query_params(): array {
+            return $this->params;
+        }
+
         public function get_route(): string {
             return $this->route;
         }
 
         public function set_route(string $route): void {
             $this->route = $route;
+        }
+
+        public function set_body(string $body): void {
+            // Test stub: non-JSON / scalar bodies are silently ignored (no error).
+            $decoded = json_decode($body, true);
+            if (is_array($decoded)) {
+                $this->params = array_merge($this->params, $decoded);
+            }
+        }
+
+        public function set_query_params(array $params): void {
+            $this->params = array_merge($this->params, $params);
+        }
+
+        public function offsetExists($offset): bool {
+            return isset($this->params[$offset]);
+        }
+
+        #[\ReturnTypeWillChange]
+        public function offsetGet($offset) {
+            return $this->params[$offset] ?? null;
+        }
+
+        public function offsetSet($offset, $value): void {
+            if ($offset === null) {
+                $this->params[] = $value;
+            } else {
+                $this->params[$offset] = $value;
+            }
+        }
+
+        public function offsetUnset($offset): void {
+            unset($this->params[$offset]);
         }
     }
 }
@@ -289,6 +331,14 @@ if (!class_exists('WP_REST_Response')) {
         public function get_headers(): array {
             return $this->headers;
         }
+
+        public function get_status(): int {
+            return (int) $this->status;
+        }
+
+        public function get_data() {
+            return $this->data;
+        }
     }
 }
 
@@ -296,9 +346,11 @@ if (!class_exists('WP_REST_Response')) {
  * Helper function to reset test state
  */
 function peanut_reset_test_state(): void {
-    global $peanut_test_options, $peanut_test_transients;
+    global $peanut_test_options, $peanut_test_transients, $peanut_test_shortcodes, $peanut_test_blocks;
     $peanut_test_options = [];
     $peanut_test_transients = [];
+    $peanut_test_shortcodes = [];
+    $peanut_test_blocks = [];
 }
 
 // ==========================================
@@ -801,6 +853,7 @@ require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-updates.php';
 require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-activity-log.php';
 require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-error-log.php';
 require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-self-updater.php';
+require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-videos.php';
 
 // Autoloader for test cases
 spl_autoload_register(function (string $class): void {
@@ -811,3 +864,92 @@ spl_autoload_register(function (string $class): void {
         }
     }
 });
+
+// ==========================================
+// Stubs for Videos module (wp_remote_request, esc_*, shortcode, block)
+// ==========================================
+
+if (!function_exists('wp_remote_request')) {
+    function wp_remote_request(string $url, array $args = []) {
+        global $mock_remote_response, $peanut_last_http;
+        // Records what the module DISPATCHED (pre-callable). Tests assert the outbound url/args.
+        $peanut_last_http = ['url' => $url, 'args' => $args];
+        if (isset($mock_remote_response)) {
+            return is_callable($mock_remote_response)
+                ? ($mock_remote_response)($url, $args)
+                : $mock_remote_response;
+        }
+        return new WP_Error('http_request_failed', 'Mock: No response configured');
+    }
+}
+if (!function_exists('wp_remote_retrieve_response_code')) {
+    function wp_remote_retrieve_response_code($response): int {
+        if (is_array($response) && isset($response['response']['code'])) {
+            return (int) $response['response']['code'];
+        }
+        return 0;
+    }
+}
+if (!function_exists('trailingslashit')) {
+    function trailingslashit(string $s): string { return rtrim($s, "/\\") . '/'; }
+}
+if (!function_exists('add_query_arg')) {
+    function add_query_arg(...$a) {
+        if (isset($a[0]) && is_array($a[0])) {
+            $args = $a[0];
+            $url  = isset($a[1]) ? (string) $a[1] : '';
+        } elseif (count($a) >= 3) {
+            $args = [$a[0] => $a[1]];
+            $url  = (string) $a[2];
+        } else {
+            return ''; // unsupported single-arg form; fail safe (not used in tests)
+        }
+        $sep = (strpos($url, '?') === false) ? '?' : '&';
+        return $url . $sep . http_build_query($args);
+    }
+}
+if (!function_exists('wp_json_encode')) {
+    function wp_json_encode($data, int $options = 0, int $depth = 512) {
+        return json_encode($data, $options, $depth);
+    }
+}
+if (!function_exists('sanitize_title')) {
+    function sanitize_title(string $t): string {
+        $t = strtolower(trim($t));
+        $t = preg_replace('/[^a-z0-9_\-]+/', '-', $t);
+        return trim((string) $t, '-');
+    }
+}
+if (!function_exists('esc_url')) {
+    function esc_url(string $u): string { return filter_var($u, FILTER_SANITIZE_URL) ?: ''; }
+}
+if (!function_exists('esc_attr')) {
+    function esc_attr(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
+}
+if (!function_exists('esc_html')) {
+    function esc_html(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
+}
+if (!function_exists('shortcode_atts')) {
+    function shortcode_atts(array $defaults, $atts, string $shortcode = ''): array {
+        $atts = (array) $atts;
+        $out = [];
+        foreach ($defaults as $k => $d) {
+            $out[$k] = array_key_exists($k, $atts) ? $atts[$k] : $d;
+        }
+        return $out;
+    }
+}
+if (!function_exists('add_shortcode')) {
+    function add_shortcode(string $tag, $cb): void {
+        global $peanut_test_shortcodes;
+        $peanut_test_shortcodes[$tag] = $cb;
+    }
+}
+if (!function_exists('register_block_type')) {
+    function register_block_type($name, array $args = []) {
+        global $peanut_test_blocks;
+        $key = is_string($name) ? $name : 'block';
+        $peanut_test_blocks[$key] = $args;
+        return true;
+    }
+}

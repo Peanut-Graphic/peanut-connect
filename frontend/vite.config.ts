@@ -18,6 +18,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'src/main.tsx'),
+        'peanut-video-block': path.resolve(__dirname, 'src/blocks/peanut-video.tsx'),
       },
       output: {
         entryFileNames: 'js/[name].js',

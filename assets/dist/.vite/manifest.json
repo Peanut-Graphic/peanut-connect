@@ -1,4 +1,10 @@
 {
+  "src/blocks/peanut-video.tsx": {
+    "file": "js/peanut-video-block.js",
+    "name": "peanut-video-block",
+    "src": "src/blocks/peanut-video.tsx",
+    "isEntry": true
+  },
   "src/main.tsx": {
     "file": "js/main.js",
     "name": "main",

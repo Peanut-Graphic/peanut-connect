@@ -3,7 +3,7 @@
  * Plugin Name: End-to-End
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: End-to-end campaign and site platform for WordPress — runs campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all wired to a central Peanut Hub.
- * Version: 3.7.31
+ * Version: 3.8.0
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.7.31');
+define('PEANUT_CONNECT_VERSION', '3.8.0');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -95,6 +95,7 @@ final class Peanut_Connect {
 
         // Marketing proxy (campaign builder, UTMs, links, analytics) for Hub (v3.7.1+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-marketing.php';
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-videos.php';
 
         // Short-link redirect handler — turns 404 hits on /<slug> into a 302 to Hub's /go/<slug> (v3.7.24+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-short-links.php';
@@ -119,6 +120,9 @@ final class Peanut_Connect {
         // Initialize forms integration
         Peanut_Connect_Forms::init();
 
+        // Initialize videos integration ([peanut_video] shortcode)
+        Peanut_Connect_Videos::init();
+
         // Initialize self-updater early so update check filter is registered
         new Peanut_Connect_Self_Updater();
     }
@@ -128,6 +132,11 @@ final class Peanut_Connect {
      */
     private function init_hooks(): void {
         add_action('rest_api_init', [$this, 'register_api_routes']);
+        // Register the Peanut Video Gutenberg block (delegates render to the
+        // [peanut_video] shortcode). register_block_type() must run on init;
+        // init_hooks() itself runs from the priority-0 init bootstrap, so this
+        // default-priority handler fires after the plugin has loaded.
+        add_action('init', ['Peanut_Connect_Videos', 'register_block']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
@@ -345,6 +354,7 @@ final class Peanut_Connect {
         $api->register_routes();
 
         Peanut_Connect_Marketing::register_routes();
+        Peanut_Connect_Videos::register_routes();
     }
 
     /**
