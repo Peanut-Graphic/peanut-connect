@@ -13,6 +13,7 @@ import {
   LinkIcon,
   BarChart3,
   Code2,
+  Film,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -27,6 +28,7 @@ const navigation = [
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
   { name: 'UTMs', href: '/utms', icon: Tag },
   { name: 'Links', href: '/links', icon: LinkIcon },
+  { name: 'Videos', href: '/videos', icon: Film },
   { name: 'Tracking', href: '/tracking', icon: Code2 },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Health', href: '/health', icon: Activity },
