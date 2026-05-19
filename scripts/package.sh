@@ -75,6 +75,13 @@ cp "$ROOT_DIR/readme.txt" "$BUILD_DIR/"
 cp -r "$ROOT_DIR/includes" "$BUILD_DIR/"
 cp -r "$ROOT_DIR/admin" "$BUILD_DIR/"
 
+# Copy Gutenberg block definitions if present (register_block_type reads
+# blocks/<name>/block.json at the plugin root — omitting this silently
+# breaks block registration on installed sites).
+if [ -d "$ROOT_DIR/blocks" ]; then
+    cp -r "$ROOT_DIR/blocks" "$BUILD_DIR/"
+fi
+
 # Copy built assets if exists
 if [ -d "$ROOT_DIR/assets" ]; then
     cp -r "$ROOT_DIR/assets" "$BUILD_DIR/"
