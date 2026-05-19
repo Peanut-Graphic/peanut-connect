@@ -232,6 +232,7 @@ if (!function_exists('is_wp_error')) {
 /**
  * Mock WP_REST_Request class
  */
+// Test stub: body/query/url params share one $params bag (NOT isolated like real WP_REST_Request). Fine because handlers under test never read body+query in the same request.
 if (!class_exists('WP_REST_Request')) {
     class WP_REST_Request implements ArrayAccess {
         private array $headers = [];
@@ -275,6 +276,7 @@ if (!class_exists('WP_REST_Request')) {
         }
 
         public function set_body(string $body): void {
+            // Test stub: non-JSON / scalar bodies are silently ignored (no error).
             $decoded = json_decode($body, true);
             if (is_array($decoded)) {
                 $this->params = array_merge($this->params, $decoded);

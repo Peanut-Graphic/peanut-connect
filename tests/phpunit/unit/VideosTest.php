@@ -40,7 +40,6 @@ class VideosTest extends TestCase {
         global $peanut_test_options, $mock_remote_response, $peanut_last_http;
         $peanut_test_options['peanut_connect_hub_url'] = 'https://hub.example.com';
         $peanut_test_options['peanut_connect_hub_api_key'] = 'k';
-        $peanut_last_http = null;
         $mock_remote_response = [
             'response' => ['code' => 201],
             'body' => json_encode(['success' => true, 'data' => [
@@ -67,7 +66,6 @@ class VideosTest extends TestCase {
         global $peanut_test_options, $mock_remote_response, $peanut_last_http;
         $peanut_test_options['peanut_connect_hub_url'] = 'https://hub.example.com';
         $peanut_test_options['peanut_connect_hub_api_key'] = 'k';
-        $peanut_last_http = null;
         $mock_remote_response = [
             'response' => ['code' => 200],
             'body' => json_encode(['success' => true, 'data' => ['total_plays' => 0, 'drop_off_all_time' => []]]),
@@ -79,5 +77,6 @@ class VideosTest extends TestCase {
         $this->assertSame(200, $res->get_status());
         $this->assertStringContainsString('/api/v1/videos/9/analytics', $peanut_last_http['url']);
         $this->assertStringContainsString('days=30', $peanut_last_http['url']);
+        $this->assertSame('Bearer k', $peanut_last_http['args']['headers']['Authorization']);
     }
 }
