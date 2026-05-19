@@ -233,7 +233,7 @@ if (!function_exists('is_wp_error')) {
  * Mock WP_REST_Request class
  */
 if (!class_exists('WP_REST_Request')) {
-    class WP_REST_Request {
+    class WP_REST_Request implements ArrayAccess {
         private array $headers = [];
         private array $params = [];
         private string $route = '';
@@ -272,6 +272,38 @@ if (!class_exists('WP_REST_Request')) {
 
         public function set_route(string $route): void {
             $this->route = $route;
+        }
+
+        public function set_body(string $body): void {
+            $decoded = json_decode($body, true);
+            if (is_array($decoded)) {
+                $this->params = array_merge($this->params, $decoded);
+            }
+        }
+
+        public function set_query_params(array $params): void {
+            $this->params = array_merge($this->params, $params);
+        }
+
+        public function offsetExists($offset): bool {
+            return isset($this->params[$offset]);
+        }
+
+        #[\ReturnTypeWillChange]
+        public function offsetGet($offset) {
+            return $this->params[$offset] ?? null;
+        }
+
+        public function offsetSet($offset, $value): void {
+            if ($offset === null) {
+                $this->params[] = $value;
+            } else {
+                $this->params[$offset] = $value;
+            }
+        }
+
+        public function offsetUnset($offset): void {
+            unset($this->params[$offset]);
         }
     }
 }
