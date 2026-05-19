@@ -51,11 +51,13 @@ if (!defined('OBJECT')) {
 }
 
 // Storage for mocked options and transients
-global $peanut_test_options, $peanut_test_transients, $peanut_test_shortcodes, $peanut_test_blocks;
+global $peanut_test_options, $peanut_test_transients, $peanut_test_shortcodes, $peanut_test_blocks, $mock_remote_response, $peanut_last_http;
 $peanut_test_options = [];
 $peanut_test_transients = [];
 $peanut_test_shortcodes = [];
 $peanut_test_blocks = [];
+$mock_remote_response = null;
+$peanut_last_http = null;
 
 /**
  * Mock WordPress get_option function

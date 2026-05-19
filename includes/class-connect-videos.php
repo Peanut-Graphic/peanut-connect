@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 class Peanut_Connect_Videos {
 
     public static function register_routes(): void {
-        $ns = 'peanut-connect/v1';
+        $ns = PEANUT_CONNECT_API_NAMESPACE;
         $perms = [self::class, 'check_admin_permission'];
 
         register_rest_route($ns, '/videos', [
