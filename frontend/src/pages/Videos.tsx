@@ -16,20 +16,21 @@ declare global {
 function pickFromMedia(opts: { title: string; type?: string }): Promise<string | null> {
   return new Promise((resolve) => {
     const wp = window.wp;
-    if (!wp || !wp.media) {
-      resolve(null);
-      return;
-    }
-    const frame = wp.media({
-      title: opts.title,
-      multiple: false,
-      library: opts.type ? { type: opts.type } : undefined,
-    });
+    if (!wp || !wp.media) { resolve(null); return; }
+    const frame = wp.media({ title: opts.title, multiple: false, library: opts.type ? { type: opts.type } : undefined });
+    let settled = false;
+    const settle = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      frame.off('select');
+      frame.off('close');
+      resolve(value);
+    };
     frame.on('select', () => {
       const a = frame.state().get('selection').first().toJSON();
-      resolve(a?.url ?? null);
+      settle(a?.url ?? null);
     });
-    frame.on('close', () => setTimeout(() => resolve(null), 0));
+    frame.on('close', () => setTimeout(() => settle(null), 0));
     frame.open();
   });
 }
@@ -96,6 +97,7 @@ export default function Videos() {
         <h3 className="text-sm font-semibold mb-3">Add a video</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <input
+            aria-label="Video title"
             className="border rounded px-3 py-2 text-sm"
             placeholder="Title"
             value={form.title}
@@ -103,6 +105,7 @@ export default function Videos() {
           />
           <div className="flex gap-2">
             <input
+              aria-label="Video file URL"
               className="border rounded px-3 py-2 text-sm flex-1"
               placeholder="Video URL (.mp4) or pick"
               value={form.source_url}
@@ -121,6 +124,7 @@ export default function Videos() {
           </div>
           <div className="flex gap-2">
             <input
+              aria-label="Poster image URL"
               className="border rounded px-3 py-2 text-sm flex-1"
               placeholder="Poster image URL (optional)"
               value={poster}
@@ -139,6 +143,7 @@ export default function Videos() {
           </div>
           <div className="flex gap-2">
             <input
+              aria-label="Captions VTT URL"
               className="border rounded px-3 py-2 text-sm flex-1"
               placeholder="Captions .vtt URL (optional)"
               value={caption}
@@ -167,9 +172,6 @@ export default function Videos() {
 
       <Card padding="none" className="mt-4">
         {isLoading && <div className="p-4 text-sm text-slate-500">Loading…</div>}
-        {error && (
-          <div className="p-4 text-sm text-red-600">{(error as Error).message}</div>
-        )}
         {!isLoading && !error && videos.length === 0 && (
           <div className="p-4 text-sm text-slate-500">No videos yet.</div>
         )}
