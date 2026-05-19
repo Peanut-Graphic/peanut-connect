@@ -260,6 +260,10 @@ if (!class_exists('WP_REST_Request')) {
             return $this->params;
         }
 
+        public function get_query_params(): array {
+            return $this->params;
+        }
+
         public function get_route(): string {
             return $this->route;
         }
@@ -805,6 +809,7 @@ require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-updates.php';
 require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-activity-log.php';
 require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-error-log.php';
 require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-self-updater.php';
+require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-videos.php';
 
 // Autoloader for test cases
 spl_autoload_register(function (string $class): void {
