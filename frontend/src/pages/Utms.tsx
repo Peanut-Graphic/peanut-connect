@@ -33,8 +33,13 @@ export default function Utms() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['marketing', 'utms', { archived: showArchived }],
-    queryFn: () => marketingApi.listUtms({ archived: showArchived, per_page: 50 }),
+    queryFn: () => marketingApi.listUtms({ archived: showArchived, per_page: 500 }),
   });
+
+  const [search, setSearch] = useState('');
+  const [yearFilter, setYearFilter] = useState<string>(''); // '' = all
+  const [monthFilter, setMonthFilter] = useState<string>(''); // '' = all (1-12 as string)
+  const [groupBy, setGroupBy] = useState<'label' | 'campaign'>('label');
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ['marketing', 'utms'] });
@@ -68,7 +73,46 @@ export default function Utms() {
     onError: onMutationError('update'),
   });
 
-  const utms = data?.data ?? [];
+  const allUtms = data?.data ?? [];
+
+  // Year/month options derived from the loaded UTMs' created_at.
+  const { yearOptions, monthOptions } = useMemo(() => {
+    const years = new Set<string>();
+    const months = new Set<string>();
+    for (const u of allUtms) {
+      const d = u.created_at ? new Date(u.created_at) : null;
+      if (!d || isNaN(d.getTime())) continue;
+      const y = String(d.getFullYear());
+      years.add(y);
+      if (yearFilter === '' || yearFilter === y) {
+        months.add(String(d.getMonth() + 1));
+      }
+    }
+    return {
+      yearOptions: Array.from(years).sort().reverse(),
+      monthOptions: Array.from(months).sort((a, b) => Number(a) - Number(b)),
+    };
+  }, [allUtms, yearFilter]);
+
+  // Client-side filter: search + year/month. Server already filters by archived.
+  const utms = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allUtms.filter((u) => {
+      if (q) {
+        const hay = [u.name, u.utm_campaign, u.utm_source, u.utm_medium, u.base_url ?? '']
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (yearFilter || monthFilter) {
+        const d = u.created_at ? new Date(u.created_at) : null;
+        if (!d || isNaN(d.getTime())) return false;
+        if (yearFilter && String(d.getFullYear()) !== yearFilter) return false;
+        if (monthFilter && String(d.getMonth() + 1) !== monthFilter) return false;
+      }
+      return true;
+    });
+  }, [allUtms, search, yearFilter, monthFilter]);
 
   const selection = useRowSelection();
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -80,8 +124,15 @@ export default function Utms() {
     !allVisibleSelected && visibleIds.some((id) => selection.isSelected(id));
   const selectedUtms = utms.filter((u) => selection.isSelected(u.id));
 
-  const groups = useMemo(() => groupUtms(utms), [utms]);
-  const hasLabelledGroups = groups.some((g) => g.label !== null);
+  const groups = useMemo(
+    () =>
+      groupBy === 'campaign'
+        ? groupUtms(utms, (u) => u.utm_campaign ?? '')
+        : groupUtms(utms),
+    [utms, groupBy]
+  );
+  const hasLabelledGroups =
+    groupBy === 'campaign' ? groups.length > 0 : groups.some((g) => g.label !== null);
   const knownLabels = useMemo(
     () =>
       Array.from(
@@ -182,6 +233,87 @@ export default function Utms() {
           {(error as Error).message}
         </Alert>
       )}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name, campaign, source, URL…"
+          className="flex-1 min-w-[240px] rounded border border-slate-300 px-3 py-1.5 text-sm"
+          aria-label="Search UTMs"
+        />
+        <select
+          value={yearFilter}
+          onChange={(e) => {
+            setYearFilter(e.target.value);
+            setMonthFilter('');
+          }}
+          className="rounded border border-slate-300 px-2 py-1.5 text-sm bg-white"
+          aria-label="Filter by year"
+        >
+          <option value="">All years</option>
+          {yearOptions.map((y) => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
+        <select
+          value={monthFilter}
+          onChange={(e) => setMonthFilter(e.target.value)}
+          disabled={monthOptions.length === 0}
+          className="rounded border border-slate-300 px-2 py-1.5 text-sm bg-white disabled:opacity-50"
+          aria-label="Filter by month"
+        >
+          <option value="">All months</option>
+          {monthOptions.map((m) => (
+            <option key={m} value={m}>
+              {new Date(2000, Number(m) - 1, 1).toLocaleString(undefined, { month: 'long' })}
+            </option>
+          ))}
+        </select>
+        <div className="flex items-center gap-1 rounded border border-slate-300 bg-white p-0.5">
+          <button
+            type="button"
+            onClick={() => setGroupBy('label')}
+            className={
+              groupBy === 'label'
+                ? 'px-2.5 py-1 text-xs font-medium rounded bg-slate-200 text-slate-900'
+                : 'px-2.5 py-1 text-xs font-medium rounded text-slate-600 hover:bg-slate-100'
+            }
+            aria-pressed={groupBy === 'label'}
+          >
+            Group: Label
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupBy('campaign')}
+            className={
+              groupBy === 'campaign'
+                ? 'px-2.5 py-1 text-xs font-medium rounded bg-slate-200 text-slate-900'
+                : 'px-2.5 py-1 text-xs font-medium rounded text-slate-600 hover:bg-slate-100'
+            }
+            aria-pressed={groupBy === 'campaign'}
+          >
+            Group: Campaign
+          </button>
+        </div>
+        {(search || yearFilter || monthFilter) && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setYearFilter('');
+              setMonthFilter('');
+            }}
+            className="text-xs text-slate-500 hover:text-slate-700 underline"
+          >
+            Clear filters
+          </button>
+        )}
+        <span className="ml-auto text-xs text-slate-500">
+          {utms.length} of {allUtms.length}
+        </span>
+      </div>
 
       {selection.selectedCount > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5">

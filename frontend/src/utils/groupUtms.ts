@@ -1,23 +1,28 @@
 import type { Utm } from '@/api/marketing';
 
 export interface UtmGroup {
-  /** The group_label, or null for the "ungrouped" bucket. */
+  /** The group key (label or campaign), or null for the "ungrouped" bucket. */
   label: string | null;
   utms: Utm[];
 }
 
-// Group UTMs by their group_label for the collapsible table view.
-// - Empty/whitespace labels are treated as ungrouped (label null).
+export type GroupKeyOf = (utm: Utm) => string;
+
+const defaultKey: GroupKeyOf = (utm) =>
+  typeof utm.group_label === 'string' ? utm.group_label.trim() : '';
+
+// Group UTMs into collapsible buckets. Defaults to `group_label` (legacy);
+// pass a custom keyOf to group by, e.g., `utm_campaign`.
+// - Empty/whitespace keys are treated as ungrouped (label null).
 // - Labelled groups appear in order of first appearance.
 // - The ungrouped bucket (if any) always comes last.
 // - Row order within a group is preserved.
-export function groupUtms(utms: Utm[]): UtmGroup[] {
+export function groupUtms(utms: Utm[], keyOf: GroupKeyOf = defaultKey): UtmGroup[] {
   const labelled = new Map<string, Utm[]>();
   const ungrouped: Utm[] = [];
 
   for (const utm of utms) {
-    const raw = utm.group_label;
-    const label = typeof raw === 'string' ? raw.trim() : '';
+    const label = (keyOf(utm) ?? '').trim();
     if (label === '') {
       ungrouped.push(utm);
       continue;
