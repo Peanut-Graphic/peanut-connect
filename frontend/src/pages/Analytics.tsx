@@ -28,6 +28,19 @@ export default function Analytics() {
     queryFn: () => marketingApi.journeyStats({ from: range.from, to: range.to }),
   });
 
+  // Source the campaign filter dropdown from UTMs defined for this site
+  // (active + archived), not from journey-observed `by_campaign`. Otherwise
+  // the dropdown leaks campaigns from other ad platforms / test traffic /
+  // deleted UTMs that this site never owned.
+  const utmsActiveQuery = useQuery({
+    queryKey: ['marketing', 'utms', 'all', 'active'],
+    queryFn: () => marketingApi.listUtms({ archived: false, per_page: 200 }),
+  });
+  const utmsArchivedQuery = useQuery({
+    queryKey: ['marketing', 'utms', 'all', 'archived'],
+    queryFn: () => marketingApi.listUtms({ archived: true, per_page: 200 }),
+  });
+
   const isCompare = selectedCampaigns.length >= 2;
   const isFiltered = selectedCampaigns.length === 1;
 
@@ -49,8 +62,15 @@ export default function Analytics() {
   const error = allQuery.error || perCampaignQueries.find((q) => q.error)?.error;
 
   const allCampaigns = useMemo(() => {
-    return (allQuery.data?.by_campaign ?? []).map((c) => c.utm_campaign);
-  }, [allQuery.data]);
+    const names = new Set<string>();
+    for (const u of utmsActiveQuery.data?.data ?? []) {
+      if (u.utm_campaign) names.add(u.utm_campaign);
+    }
+    for (const u of utmsArchivedQuery.data?.data ?? []) {
+      if (u.utm_campaign) names.add(u.utm_campaign);
+    }
+    return Array.from(names).sort();
+  }, [utmsActiveQuery.data, utmsArchivedQuery.data]);
 
   function toggleCampaign(c: string) {
     setSelectedCampaigns((prev) =>
