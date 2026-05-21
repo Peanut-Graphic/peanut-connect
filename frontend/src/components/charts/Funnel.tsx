@@ -74,7 +74,10 @@ export function Funnel({ stages, compact = false }: FunnelProps) {
       <ol className="space-y-3">
         {stages.map((s, i) => {
           const c = colorFor(s.stage);
-          const widthPct = Math.max(2, (s.count / top) * 100);
+          // Floor at 2% so a non-zero-but-tiny count still renders a visible
+          // sliver of color. Zero stays zero — a stage with no data should
+          // show only the empty track, no colored bar.
+          const widthPct = s.count === 0 ? 0 : Math.max(2, (s.count / top) * 100);
           const prev = i === 0 ? null : stages[i - 1];
           const dropPct =
             prev && prev.count > 0
