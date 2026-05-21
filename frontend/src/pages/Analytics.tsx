@@ -28,10 +28,15 @@ export default function Analytics() {
     queryFn: () => marketingApi.journeyStats({ from: range.from, to: range.to }),
   });
 
-  // Source the campaign filter dropdown from UTMs defined for this site
-  // (active + archived), not from journey-observed `by_campaign`. Otherwise
-  // the dropdown leaks campaigns from other ad platforms / test traffic /
-  // deleted UTMs that this site never owned.
+  // Source the campaign filter dropdown from BOTH UTMs defined for this site
+  // (active + archived) AND journey-observed `by_campaign`. The UTM list
+  // catches campaigns the operator has set up but not yet driven traffic to;
+  // by_campaign catches "orphan" campaigns — journey rows whose utm_campaign
+  // was set via hardcoded URLs (a marketer pasting `?utm_campaign=foo` into
+  // an email outside the Hub UTM builder, an ad-platform tag, a deleted UTM).
+  // Without the by_campaign source, those journeys appear in the aggregate
+  // funnel but can never be drilled into — exactly the bug
+  // dominionenergyptr.com hit on 2026-05-21.
   const utmsActiveQuery = useQuery({
     queryKey: ['marketing', 'utms', 'all', 'active'],
     queryFn: () => marketingApi.listUtms({ archived: false, per_page: 200 }),
@@ -69,8 +74,15 @@ export default function Analytics() {
     for (const u of utmsArchivedQuery.data?.data ?? []) {
       if (u.utm_campaign) names.add(u.utm_campaign);
     }
+    // Union in journey-observed campaigns so orphan utm_campaign values
+    // (no matching UTM record) are still drillable. Hub caps `by_campaign`
+    // at 100 entries — sites with more distinct campaigns/window than that
+    // need a dedicated /journeys/campaigns endpoint, see peanut-hub#384.
+    for (const c of allQuery.data?.by_campaign ?? []) {
+      if (c.utm_campaign) names.add(c.utm_campaign);
+    }
     return Array.from(names).sort();
-  }, [utmsActiveQuery.data, utmsArchivedQuery.data]);
+  }, [utmsActiveQuery.data, utmsArchivedQuery.data, allQuery.data]);
 
   function toggleCampaign(c: string) {
     setSelectedCampaigns((prev) =>
