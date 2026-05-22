@@ -5,6 +5,12 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.1] - 2026-05-22
+
+### Fixed
+- **Analytics campaign dropdown now lists every campaign with traffic.** The dropdown previously sourced only from registered UTMs, so journeys whose `utm_campaign` arrived via a hardcoded URL (e.g. a tagged link pasted into an email outside the UTM builder) showed in the aggregate funnel but couldn't be drilled into. The dropdown now unions the UTM list with journey-observed campaigns. Pairs with Hub's `byCampaign` limit raise (peanut-hub#395).
+- **Conversion funnel: zero-count stages render no bar.** A stage with a count of 0 (e.g. "Sent" when send tracking isn't wired) previously drew a 2% sliver of color, implying activity. Now an empty stage shows only the grey track.
+
 ## [3.8.0] - 2026-05-19
 
 ### Added
