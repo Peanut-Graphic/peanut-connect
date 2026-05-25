@@ -588,8 +588,8 @@ export default function Settings() {
             {hubConnectMode === 'auto' ? (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Hub URL</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="settings-hub-url">Hub URL</label>
+                  <input id="settings-hub-url"
                     type="url"
                     value={hubUrl}
                     onChange={(e) => setHubUrl(e.target.value)}
@@ -609,8 +609,8 @@ export default function Settings() {
             ) : (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Hub URL</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="settings-hub-url-2">Hub URL</label>
+                  <input id="settings-hub-url-2"
                     type="url"
                     value={hubUrl}
                     onChange={(e) => setHubUrl(e.target.value)}
@@ -619,8 +619,8 @@ export default function Settings() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">API key</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="settings-api-key">API key</label>
+                  <input id="settings-api-key"
                     type="text"
                     value={hubApiKey}
                     onChange={(e) => setHubApiKey(e.target.value)}
