@@ -57,21 +57,24 @@ describe('Modal', () => {
     );
 
     // Close button is identified by the X icon
-    expect(screen.getByRole('button')).toBeInTheDocument();
+    // Two buttons render when showClose is on: the full-screen backdrop
+    // (a <button> that closes on click) and the header X button.
+    expect(screen.getAllByRole('button')).toHaveLength(2);
   });
 
-  it('hides close button when showClose is false', () => {
+  it('renders only the backdrop button when showClose is false', () => {
     render(
       <Modal isOpen={true} onClose={() => {}} title="Title" showClose={false}>
         Content
       </Modal>
     );
 
-    // Should have no buttons
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    // The backdrop is itself a <button>, so even with showClose=false
+    // there's still one button (the backdrop). The header X is what's hidden.
+    expect(screen.getAllByRole('button')).toHaveLength(1);
   });
 
-  it('calls onClose when close button is clicked', () => {
+  it('calls onClose when the header close button is clicked', () => {
     const onClose = vi.fn();
     render(
       <Modal isOpen={true} onClose={onClose} title="Title">
@@ -79,7 +82,9 @@ describe('Modal', () => {
       </Modal>
     );
 
-    fireEvent.click(screen.getByRole('button'));
+    // Header X button is the second one (backdrop is rendered first).
+    const buttons = screen.getAllByRole('button');
+    fireEvent.click(buttons[1]);
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });

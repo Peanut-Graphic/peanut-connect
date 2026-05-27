@@ -15,6 +15,23 @@ vi.mock('@/api', () => ({
     disconnect: vi.fn(),
     updatePermissions: vi.fn(),
   },
+  errorLogApi: {
+    get: vi.fn().mockResolvedValue({ logs: [], total: 0 }),
+    getCounts: vi.fn().mockResolvedValue({ total: 0, unresolved: 0 }),
+    updateSettings: vi.fn().mockResolvedValue({ success: true }),
+  },
+  trackingApi: {
+    updateTrackLoggedIn: vi.fn().mockResolvedValue({ success: true }),
+  },
+  updatesApi: {
+    get: vi.fn().mockResolvedValue({ plugins: [], themes: [], core: null }),
+    update: vi.fn().mockResolvedValue({ success: true }),
+    checkForUpdates: vi.fn().mockResolvedValue({
+      success: true,
+      message: 'Up to date',
+      data: { current_version: '3.9.2', latest_version: '3.9.2', update_available: false },
+    }),
+  },
 }));
 
 // Import the mocked API
