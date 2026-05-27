@@ -67,17 +67,21 @@ describe('Settings Page', () => {
     vi.clearAllMocks();
   });
 
-  // TODO: Requires full Layout component mocking - test manually
-  it.skip('shows loading skeleton while fetching settings', () => {
+  it('shows loading skeleton while fetching settings', () => {
     // Mock a pending request
     (settingsApi.get as ReturnType<typeof vi.fn>).mockImplementation(
       () => new Promise(() => {}) // Never resolves
     );
 
-    render(<Settings />, { wrapper: createTestWrapper() });
+    const { container } = render(<Settings />, { wrapper: createTestWrapper() });
 
-    // Should show skeleton loading state
-    expect(screen.getByText('Settings')).toBeInTheDocument();
+    // The page heading and the sidebar NavLink both render "Settings",
+    // so we can't rely on getByText. The loading branch in Settings.tsx
+    // wraps a <SettingsSkeleton /> inside <Layout title="Settings" ...>;
+    // the skeleton is just a stack of animate-pulse blocks. Confirm a
+    // skeleton is rendered (no other render path on this page uses
+    // animate-pulse outside of mutation loading states).
+    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
   });
 
   it('shows error state when settings fetch fails', async () => {
@@ -110,8 +114,7 @@ describe('Settings Page', () => {
     peanut_suite: null,
   };
 
-  // TODO: Requires full Layout component mocking - test manually
-  it.skip('shows not connected state when no hub is connected', async () => {
+  it('shows not connected state when no hub is connected', async () => {
     (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue(notConnectedSettings);
 
     render(<Settings />, { wrapper: createTestWrapper() });
