@@ -21,6 +21,13 @@ export default function Analytics() {
 
   const range = rangeFromDays(days);
 
+  // Hub URL — used to deep-link to the funnel editor when a campaign is selected.
+  const trackingQuery = useQuery({
+    queryKey: ['marketing', 'tracking-setup'],
+    queryFn: () => marketingApi.trackingSetup(),
+  });
+  const hubUrl = trackingQuery.data?.hub_url ?? null;
+
   // Always fetch the unfiltered view — used for KPI cards (when nothing selected)
   // and for populating the campaign list in the filter dropdown.
   const allQuery = useQuery({
@@ -171,6 +178,18 @@ export default function Analytics() {
             <CardHeader
               title={isFiltered ? `Funnel — ${selectedCampaigns[0]}` : 'Conversion funnel'}
               description="Stages from campaign send to enrollment, with drop-off between each."
+              action={
+                isFiltered && hubUrl ? (
+                  <a
+                    href={`${hubUrl.replace(/\/$/, '')}/campaigns/${encodeURIComponent(selectedCampaigns[0])}/funnel/edit`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-sky-600 hover:underline"
+                  >
+                    Edit funnel in Hub →
+                  </a>
+                ) : undefined
+              }
             />
             {isLoading ? (
               <div className="text-sm text-slate-500">Loading…</div>
