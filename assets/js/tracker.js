@@ -226,6 +226,20 @@
                     cta_type: ctaType,
                     is_cta: !!ctaType,
                 });
+
+                // Funnel-stage event: Hub's "Clicked enroll" stage matches a
+                // custom event named click_to_portal. Emit it for any primary
+                // CTA (Enroll / Apply / Register / Sign-up / Get-started / …)
+                // so the campaign funnel ticks without per-site wiring.
+                if (ctaType === 'primary') {
+                    trackEvent('custom', 'click_to_portal', {
+                        element: 'button',
+                        text: buttonText,
+                        identifier: getElementIdentifier(button),
+                        source: location.pathname,
+                    });
+                }
+
                 engagement.interactions++;
                 return;
             }
@@ -280,6 +294,22 @@
                     is_email: isEmail,
                     is_download: isDownload,
                 });
+
+                // Funnel-stage event: Hub's "Clicked enroll" stage matches a
+                // custom event named click_to_portal. Emit it for any primary
+                // CTA (Enroll / Apply / Register / Sign-up / Get-started / …)
+                // so the campaign funnel ticks without per-site wiring.
+                // Skip phone/email/download — those aren't conversion intent.
+                if (ctaType === 'primary' && !isPhone && !isEmail && !isDownload) {
+                    trackEvent('custom', 'click_to_portal', {
+                        element: 'link',
+                        text: linkText,
+                        href: href.substring(0, 200),
+                        identifier: getElementIdentifier(link),
+                        source: location.pathname,
+                    });
+                }
+
                 engagement.interactions++;
             }
         }, true);

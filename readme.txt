@@ -4,7 +4,7 @@ Tags: campaigns, marketing, utm, popups, monitoring, updates, analytics, forms, 
 Requires at least: 6.0
 Tested up to: 6.4
 Requires PHP: 8.0
-Stable tag: 3.9.2
+Stable tag: 3.9.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,9 @@ Yes. Peanut End to End works on any WordPress site. If Peanut Suite is also inst
 No. The plugin only loads what each page needs — the tracker is a small first-party script, popups and banners are conditional, and admin endpoints only respond to authenticated API requests from your paired Hub.
 
 == Changelog ==
+
+= 3.9.3 =
+* Added: tracker auto-emits a `click_to_portal` custom event on primary-CTA clicks (Enroll / Apply / Register / Sign-up / Get-started / etc.). Hub's campaign funnel can now count the "Clicked enroll" stage automatically — no per-site wiring required.
 
 = 3.9.2 =
 * Added: "Edit funnel in Hub →" deep-link from Analytics campaign view
