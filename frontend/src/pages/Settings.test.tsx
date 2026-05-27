@@ -94,23 +94,25 @@ describe('Settings Page', () => {
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
 
+  // A "not connected" Settings payload — every test reuses this shape and
+  // overrides only what it needs. Matches the current Settings type:
+  //   { hub: HubStatus, peanut_suite: PeanutSuiteInfo | null }
+  const notConnectedSettings = {
+    hub: {
+      connected: false,
+      url: '',
+      api_key_set: false,
+      last_sync: null as string | null,
+      mode: 'standard' as const,
+      tracking_enabled: false,
+      track_logged_in: false,
+    },
+    peanut_suite: null,
+  };
+
   // TODO: Requires full Layout component mocking - test manually
-  it.skip('shows not connected state when no site key exists', async () => {
-    (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      connection: {
-        connected: false,
-        manager_url: null,
-        last_sync: null,
-        site_key: null,
-      },
-      permissions: {
-        health_check: true,
-        list_updates: true,
-        perform_updates: true,
-        access_analytics: true,
-      },
-      peanut_suite: null,
-    });
+  it.skip('shows not connected state when no hub is connected', async () => {
+    (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue(notConnectedSettings);
 
     render(<Settings />, { wrapper: createTestWrapper() });
 
@@ -118,80 +120,37 @@ describe('Settings Page', () => {
       expect(screen.getByText('Not Connected')).toBeInTheDocument();
     }, { timeout: 3000 });
 
-    expect(screen.getByRole('button', { name: /generate site key/i })).toBeInTheDocument();
+    expect(screen.getByText('Not Connected to Hub')).toBeInTheDocument();
   });
 
   it('shows connected state when connected', async () => {
     (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      connection: {
+      ...notConnectedSettings,
+      hub: {
+        ...notConnectedSettings.hub,
         connected: true,
-        manager_url: 'https://manager.example.com',
+        url: 'https://hub.example.com',
+        api_key_set: true,
         last_sync: new Date().toISOString(),
-        site_key: 'test-key-12345',
       },
-      permissions: {
-        health_check: true,
-        list_updates: true,
-        perform_updates: true,
-        access_analytics: true,
-      },
-      peanut_suite: null,
     });
 
     render(<Settings />, { wrapper: createTestWrapper() });
 
     await waitFor(() => {
-      expect(screen.getByText('Connected')).toBeInTheDocument();
+      expect(screen.getByText('Connected to Hub')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Connected to Manager')).toBeInTheDocument();
-    expect(screen.getByText('https://manager.example.com')).toBeInTheDocument();
+    // Status badge in the card header
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+    // The hub URL is rendered inline under "Connected to Hub"
+    expect(screen.getByText('https://hub.example.com')).toBeInTheDocument();
   });
 
-  it('displays site key when it exists', async () => {
-    const testKey = 'abcd1234efgh5678ijkl9012mnop3456';
-
+  it('shows Peanut Suite block when installed', async () => {
     (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      connection: {
-        connected: false,
-        manager_url: null,
-        last_sync: null,
-        site_key: testKey,
-      },
-      permissions: {
-        health_check: true,
-        list_updates: true,
-        perform_updates: true,
-        access_analytics: true,
-      },
-      peanut_suite: null,
-    });
-
-    render(<Settings />, { wrapper: createTestWrapper() });
-
-    await waitFor(() => {
-      expect(screen.getByText(testKey)).toBeInTheDocument();
-    });
-
-    // Should have copy buttons (one for key, one for URL)
-    const copyButtons = screen.getAllByRole('button', { name: /copy/i });
-    expect(copyButtons.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('shows Peanut Suite detected when installed', async () => {
-    (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      connection: {
-        connected: false,
-        manager_url: null,
-        last_sync: null,
-        site_key: 'test-key',
-      },
-      permissions: {
-        health_check: true,
-        list_updates: true,
-        perform_updates: true,
-        access_analytics: true,
-      },
+      ...notConnectedSettings,
+      hub: { ...notConnectedSettings.hub, connected: true, url: 'https://hub.example.com', api_key_set: true },
       peanut_suite: {
         installed: true,
         version: '4.2.0',
@@ -202,91 +161,54 @@ describe('Settings Page', () => {
     render(<Settings />, { wrapper: createTestWrapper() });
 
     await waitFor(() => {
-      expect(screen.getByText(/Peanut Suite v4.2.0 Detected/)).toBeInTheDocument();
+      // Heading is "Peanut Suite v{version}" — no longer says "Detected"
+      expect(screen.getByText(/Peanut Suite v4\.2\.0/)).toBeInTheDocument();
     });
 
-    // Should show active modules
+    // Active modules render as Badge components
+    expect(screen.getByText('Active Modules')).toBeInTheDocument();
     expect(screen.getByText('links')).toBeInTheDocument();
     expect(screen.getByText('contacts')).toBeInTheDocument();
     expect(screen.getByText('utm')).toBeInTheDocument();
   });
 
-  it('shows Peanut Suite not installed state', async () => {
+  it('does not render Peanut Suite block when not installed', async () => {
     (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      connection: {
-        connected: false,
-        manager_url: null,
-        last_sync: null,
-        site_key: null,
-      },
-      permissions: {
-        health_check: true,
-        list_updates: true,
-        perform_updates: true,
-        access_analytics: true,
-      },
+      ...notConnectedSettings,
+      hub: { ...notConnectedSettings.hub, connected: true, url: 'https://hub.example.com', api_key_set: true },
       peanut_suite: null,
     });
 
     render(<Settings />, { wrapper: createTestWrapper() });
 
+    // Wait for the page to settle (Hub card renders)
     await waitFor(() => {
-      expect(screen.getByText('Peanut Suite Not Installed')).toBeInTheDocument();
+      expect(screen.getByText('Connected to Hub')).toBeInTheDocument();
     });
+
+    // Peanut Suite section is conditionally rendered only when peanut_suite is
+    // truthy. With peanut_suite=null, nothing related to Peanut Suite should
+    // appear in the connected-hub card. (Note: "Hide Suite Menu" and similar
+    // labels exist in the Hub-mode picker, so we look specifically for the
+    // detection-block phrasing.)
+    expect(screen.queryByText(/Peanut Suite v/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Active Modules')).not.toBeInTheDocument();
   });
 
-  it('shows permission switches', async () => {
+  it('shows the Disconnect from Hub panel when connected', async () => {
     (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      connection: {
-        connected: true,
-        manager_url: 'https://manager.example.com',
-        last_sync: new Date().toISOString(),
-        site_key: 'test-key',
-      },
-      permissions: {
-        health_check: true,
-        list_updates: true,
-        perform_updates: true,
-        access_analytics: false,
-      },
-      peanut_suite: null,
+      ...notConnectedSettings,
+      hub: { ...notConnectedSettings.hub, connected: true, url: 'https://hub.example.com', api_key_set: true },
     });
 
     render(<Settings />, { wrapper: createTestWrapper() });
 
+    // Disconnect panel lives inside the Hub Connection card; only renders when connected.
     await waitFor(() => {
-      expect(screen.getByText('Perform Updates')).toBeInTheDocument();
+      expect(screen.getByText('Disconnect from Hub')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Access Analytics')).toBeInTheDocument();
-    expect(screen.getByText('Health Checks')).toBeInTheDocument();
-    expect(screen.getByText('List Updates')).toBeInTheDocument();
-  });
-
-  it('shows danger zone when site key exists', async () => {
-    (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      connection: {
-        connected: true,
-        manager_url: 'https://manager.example.com',
-        last_sync: new Date().toISOString(),
-        site_key: 'test-key',
-      },
-      permissions: {
-        health_check: true,
-        list_updates: true,
-        perform_updates: true,
-        access_analytics: true,
-      },
-      peanut_suite: null,
-    });
-
-    render(<Settings />, { wrapper: createTestWrapper() });
-
-    await waitFor(() => {
-      expect(screen.getByText('Danger Zone')).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('Regenerate Site Key')).toBeInTheDocument();
-    expect(screen.getByText('Disconnect from Manager')).toBeInTheDocument();
+    // The Disconnect button itself
+    expect(screen.getByRole('button', { name: /^disconnect$/i })).toBeInTheDocument();
   });
 });
