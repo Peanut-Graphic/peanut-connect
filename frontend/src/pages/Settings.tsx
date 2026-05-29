@@ -122,6 +122,21 @@ export default function Settings() {
     },
   });
 
+  // 3.9.5 — Resync click_to_portal events to Hub (one-shot historical backfill)
+  const resyncClickToPortalMutation = useMutation({
+    mutationFn: settingsApi.resyncClickToPortal,
+    onSuccess: (data) => {
+      if (data.flipped > 0) {
+        toast.success(data.message);
+      } else {
+        toast.info(data.message);
+      }
+    },
+    onError: (err) => {
+      toast.error((err as Error).message || 'Failed to queue resync');
+    },
+  });
+
   const updateHubModeMutation = useMutation({
     mutationFn: (mode: 'standard' | 'hide_suite' | 'disable_suite') =>
       settingsApi.updateHubMode(mode),
@@ -277,6 +292,17 @@ export default function Settings() {
                   icon={<RefreshCw className="w-4 h-4" />}
                 >
                   Test Connection
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => resyncClickToPortalMutation.mutate()}
+                  loading={resyncClickToPortalMutation.isPending}
+                  disabled={resyncClickToPortalMutation.isPending}
+                  icon={<RefreshCw className="w-4 h-4" />}
+                  title="One-shot: re-send historical click_to_portal events to Hub so the funnel can classify them. After this, run Sync Now."
+                >
+                  Resync click events
                 </Button>
               </div>
 
