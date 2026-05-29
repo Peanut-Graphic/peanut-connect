@@ -196,9 +196,33 @@ class Peanut_Connect_Tracker {
 
     /**
      * Record an event
+     *
+     * @param string $visitor_id Visitor identifier.
+     * @param string $event_type Event type — pageview, click, custom, etc.
+     * @param array  $data       Optional payload. Recognized keys:
+     *   - event_name: distinguishes one custom event from another
+     *                  (e.g. `click_to_portal` vs `video_play`). Required
+     *                  for Hub funnel classification on `event_type=custom`
+     *                  rows; ignored for canonical types like `pageview`.
+     *   - page_url, page_title, referrer
+     *   - click_id (falls back to URL ?click_id= param)
+     *   - metadata: arbitrary JSON-serializable hash
+     *
+     * Canonicalizes `page_view` (camelCase variant historically emitted
+     * by older tracker.js) to `pageview` (snake-case, the schema's
+     * canonical form). The dual emission was splitting funnel counts.
      */
     public static function record_event(string $visitor_id, string $event_type, array $data = []): int {
         global $wpdb;
+
+        // Canonicalize event_type aliases.
+        if ($event_type === 'page_view') {
+            $event_type = 'pageview';
+        }
+
+        $event_name = isset($data['event_name']) && $data['event_name'] !== ''
+            ? substr((string) $data['event_name'], 0, 64)
+            : null;
 
         $table = Peanut_Connect_Database::table('events');
         $utm = self::get_utm_params();
@@ -209,6 +233,7 @@ class Peanut_Connect_Tracker {
             [
                 'visitor_id' => $visitor_id,
                 'event_type' => $event_type,
+                'event_name' => $event_name,
                 'page_url' => $data['page_url'] ?? self::get_current_url(),
                 'page_title' => $data['page_title'] ?? null,
                 'referrer' => $data['referrer'] ?? null,
@@ -222,7 +247,7 @@ class Peanut_Connect_Tracker {
                 'occurred_at' => current_time('mysql', true),
                 'synced' => 0,
             ],
-            ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d']
+            ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d']
         );
 
         return (int) $wpdb->insert_id;

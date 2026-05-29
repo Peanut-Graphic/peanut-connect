@@ -10,6 +10,12 @@
 	<testsuites>
 		<testsuite name="Peanut Connect Test Suite">
 			<directory prefix="test-" suffix=".php">./tests/</directory>
+			<!-- 3.9.4: also discover files named Test_Foo.php (matching
+			     their class name) so PHPUnit 10's strict file/class
+			     matcher can find them. The existing test-foo.php files
+			     silently don't run because of the same mismatch — that's
+			     a separate cleanup. -->
+			<directory prefix="Test_" suffix=".php">./tests/</directory>
 		</testsuite>
 	</testsuites>
 	<filter>

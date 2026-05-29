@@ -718,8 +718,10 @@
             clickId = detectedClickId;
         }
 
-        // Track page view with context
-        trackEvent('page_view', `Viewed: ${document.title}`, {
+        // Track page view with context. Use the canonical event_type
+        // 'pageview' (server-side normalizes 'page_view' → 'pageview'
+        // for older clients, but emit canonical from this version on).
+        trackEvent('pageview', `Viewed: ${document.title}`, {
             entry_page: document.referrer ? false : true,
             referrer_domain: document.referrer ? new URL(document.referrer).hostname : null,
         });
