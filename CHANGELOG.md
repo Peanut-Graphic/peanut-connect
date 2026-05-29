@@ -5,6 +5,16 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.8] - 2026-05-29
+
+### Changed
+- **Journeys is now a section under Analytics, not a top-level nav entry.** Routes: `/analytics/journeys` (list) and `/analytics/journeys/:clickId` (timeline). The old `/journeys` and `/journeys/:clickId` routes still work as legacy aliases so bookmarks dont break.
+- **Campaign filter on Journeys is now a populated dropdown**, not a free-text input. Sources the same union Analytics uses (active UTMs + archived UTMs + journey-observed by_campaign) so orphan campaigns set via hardcoded URLs are still drillable.
+
+### Added
+- **Custom date range on Analytics.** New start + end date inputs alongside the existing 7 / 30 / 90 day presets; when both are set they override the preset window for every aggregate on the page.
+- **Journeys card on Analytics** (after the Sankey) — shows total journeys + conversions in the current window and an "Open journeys list →" CTA. Inherits the active campaign filter when one is selected.
+
 ## [3.9.7] - 2026-05-29
 
 ### Added

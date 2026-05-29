@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { marketingApi, type JourneyRow } from '@/api/marketing';
@@ -25,6 +25,39 @@ export default function Journeys() {
   const page = Number(params.get('page') ?? '1');
 
   const [searchDraft, setSearchDraft] = useState(search);
+
+  // Populate the campaign dropdown from the same sources Analytics uses:
+  // configured UTMs (active + archived) UNION journey-observed by_campaign.
+  // Picking up archived + orphan campaigns matters so the operator can still
+  // drill into journeys for campaigns that were never set up via the UTM
+  // builder (see the dominionenergyptr.com 2026-05-21 incident note in
+  // Analytics.tsx).
+  const utmsActiveQuery = useQuery({
+    queryKey: ['marketing', 'utms', 'all', 'active'],
+    queryFn: () => marketingApi.listUtms({ archived: false, per_page: 200 }),
+  });
+  const utmsArchivedQuery = useQuery({
+    queryKey: ['marketing', 'utms', 'all', 'archived'],
+    queryFn: () => marketingApi.listUtms({ archived: true, per_page: 200 }),
+  });
+  const statsQuery = useQuery({
+    queryKey: ['marketing', 'journeys', 'stats', 'campaigns-pool'],
+    queryFn: () => marketingApi.journeyStats({}),
+  });
+
+  const campaignOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const u of utmsActiveQuery.data?.data ?? []) {
+      if (u.utm_campaign) names.add(u.utm_campaign);
+    }
+    for (const u of utmsArchivedQuery.data?.data ?? []) {
+      if (u.utm_campaign) names.add(u.utm_campaign);
+    }
+    for (const c of statsQuery.data?.by_campaign ?? []) {
+      if (c.utm_campaign) names.add(c.utm_campaign);
+    }
+    return Array.from(names).sort();
+  }, [utmsActiveQuery.data, utmsArchivedQuery.data, statsQuery.data]);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['plugin-journeys', { status, campaign, startDate, endDate, eventName, search, page }],
@@ -94,13 +127,18 @@ export default function Journeys() {
             <option value="abandoned">Abandoned</option>
           </select>
 
-          <input
-            type="text"
+          <select
             value={campaign}
             onChange={(e) => setFilter('campaign', e.target.value)}
-            placeholder="utm_campaign"
-            className="border border-slate-300 rounded-lg text-sm py-2 px-3 w-48"
-          />
+            className="border border-slate-300 rounded-lg text-sm py-2 pl-3 pr-8 max-w-[14rem]"
+          >
+            <option value="">All campaigns</option>
+            {campaignOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
 
           <input
             type="date"
@@ -235,7 +273,7 @@ function JourneyRowDisplay({ row }: { row: JourneyRow }) {
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50">
       <td className="px-4 py-3 font-mono text-xs text-slate-700">
-        <Link to={`/journeys/${row.click_id}`} className="hover:underline text-indigo-600">
+        <Link to={`/analytics/journeys/${row.click_id}`} className="hover:underline text-indigo-600">
           {row.click_id.slice(0, 12)}…
         </Link>
       </td>
@@ -249,7 +287,7 @@ function JourneyRowDisplay({ row }: { row: JourneyRow }) {
       <td className="px-4 py-3 text-slate-600">{duration}</td>
       <td className="px-4 py-3 text-right">
         <Link
-          to={`/journeys/${row.click_id}`}
+          to={`/analytics/journeys/${row.click_id}`}
           className="text-sm text-indigo-600 hover:underline"
         >
           View Timeline

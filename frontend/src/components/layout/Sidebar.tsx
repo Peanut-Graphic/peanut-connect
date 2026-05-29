@@ -14,7 +14,6 @@ import {
   Tag,
   BarChart3,
   Code2,
-  Footprints,
 } from 'lucide-react';
 import { getVersion } from '@/api';
 
@@ -36,7 +35,6 @@ const navigation: NavItem[] = [
   { name: 'Links', href: '/links', icon: Link2 },
   { name: 'Tracking', href: '/tracking', icon: Code2 },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Journeys', href: '/journeys', icon: Footprints },
   { name: 'Health', href: '/health', icon: Activity },
   { name: 'Updates', href: '/updates', icon: Download },
   { name: 'Activity', href: '/activity', icon: History },
