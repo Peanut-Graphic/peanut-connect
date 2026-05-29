@@ -114,7 +114,7 @@ export interface JourneyStats {
   cost_total?: number;
   cost_per_acquisition?: number | null;
   click_through_rate?: number | null;
-  time_series?: Array<{ date: string; journeys: number; conversions: number }>;
+  time_series?: Array<{ date: string; journeys: number; conversions: number; clicked_enroll?: number }>;
   devices?: Array<{ device_type: string; count: number }>;
   regions?: Array<{ country: string; region: string | null; count: number }>;
   sankey?: {
@@ -129,6 +129,47 @@ export interface TrackingSetup {
   tracker_js: string;
   site_key: string;
   site_key_masked?: string;
+}
+
+export interface JourneyRow {
+  id: number;
+  click_id: string;
+  status: 'in_progress' | 'converted' | 'abandoned';
+  utm_campaign: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  started_at: string;
+  duration_seconds: number | null;
+  link?: { id: number; slug: string; title: string | null };
+  site?: { id: number; name: string };
+}
+
+export interface JourneyListResponse {
+  data: JourneyRow[];
+  current_page?: number;
+  last_page?: number;
+  per_page?: number;
+  total?: number;
+}
+
+export interface JourneyEventRow {
+  id: number;
+  event_type: string;
+  event_name: string | null;
+  page_url: string | null;
+  page_title: string | null;
+  event_at: string;
+  event_data?: Record<string, unknown> | null;
+}
+
+export interface JourneyDetailResponse {
+  journey: JourneyRow & {
+    converted_at: string | null;
+    last_event_at: string | null;
+    pages_viewed: number | null;
+    events_count: number | null;
+  };
+  events: JourneyEventRow[];
 }
 
 export const marketingApi = {
@@ -186,6 +227,27 @@ export const marketingApi = {
   journeyStats: async (params: { from?: string; to?: string; campaign?: string } = {}): Promise<JourneyStats> => {
     const res = await api.get('/marketing/journeys/stats', { params });
     return res.data as JourneyStats;
+  },
+
+  listJourneys: async (
+    params: {
+      page?: number;
+      per_page?: number;
+      campaign?: string;
+      status?: string;
+      start_date?: string;
+      end_date?: string;
+      event_name?: string;
+      search?: string;
+    } = {},
+  ): Promise<JourneyListResponse> => {
+    const res = await api.get('/marketing/journeys', { params });
+    return res.data as JourneyListResponse;
+  },
+
+  journeyDetail: async (clickId: string): Promise<JourneyDetailResponse> => {
+    const res = await api.get(`/marketing/journeys/${encodeURIComponent(clickId)}`);
+    return res.data as JourneyDetailResponse;
   },
 
   trackingSetup: async (): Promise<TrackingSetup> => {
