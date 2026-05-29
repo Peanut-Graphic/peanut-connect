@@ -80,6 +80,16 @@ class Peanut_Connect_API {
             'permission_callback' => [$this, 'admin_permission_check'],
         ]);
 
+        // 3.9.5 — Resync click_to_portal events. Flips synced=0 on rows the
+        // 3.9.4 backfill identified locally so they replay through Hub and
+        // populate event_name + metadata on the existing Hub rows (Hub's
+        // upsert path lands those fills without duplicating).
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/settings/hub/resync-click-to-portal', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'resync_click_to_portal'],
+            'permission_callback' => [$this, 'admin_permission_check'],
+        ]);
+
         // Hub settings - update mode (v2.6.0+)
         register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/settings/hub/mode', [
             'methods' => WP_REST_Server::CREATABLE,
@@ -1197,6 +1207,55 @@ class Peanut_Connect_API {
         return new WP_REST_Response([
             'success' => true,
             'message' => __('Disconnected from Hub.', 'peanut-connect'),
+        ], 200);
+    }
+
+    /**
+     * Resync click_to_portal events to Hub.
+     *
+     * The 3.9.4 backfill set event_name='click_to_portal' + metadata locally
+     * on historical primary-CTA click rows, but those rows were already
+     * synced=1 so the next normal sync didn't re-send them — Hub stayed on
+     * the lossy snapshot. This one-shot endpoint flips them back to
+     * synced=0 so the next sync replays them with their now-complete
+     * payload. Hub's resync-collision upsert path (peanut-hub#419) fills
+     * in the missing fields on the existing Hub rows without duplicating.
+     *
+     * Idempotent for the no-op direction: re-running after rows are
+     * resynced sets nothing.
+     *
+     * @since 3.9.5
+     */
+    public function resync_click_to_portal(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $table = Peanut_Connect_Database::table('events');
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $eligible = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM $table WHERE event_name = 'click_to_portal' AND synced = 1"
+        );
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $flipped = (int) $wpdb->query(
+            "UPDATE $table SET synced = 0, synced_at = NULL WHERE event_name = 'click_to_portal' AND synced = 1"
+        );
+
+        Peanut_Connect_Activity_Log::log('hub_sync', 'resync_click_to_portal', $flipped, [
+            'eligible' => $eligible,
+            'flipped' => $flipped,
+        ]);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'eligible' => $eligible,
+            'flipped' => $flipped,
+            'message' => $flipped > 0
+                ? sprintf(
+                    /* translators: %d = number of events queued for resync */
+                    __('Queued %d click_to_portal events for resync. Run "Sync to Hub" to replay them.', 'peanut-connect'),
+                    $flipped
+                )
+                : __('No click_to_portal events need resync.', 'peanut-connect'),
         ], 200);
     }
 

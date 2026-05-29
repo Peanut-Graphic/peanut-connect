@@ -38,6 +38,22 @@ if [[ -n $(git status --porcelain 2>/dev/null) ]] && [[ -z "$PEANUT_PACKAGE_FORC
     exit 1
 fi
 
+# Fatal-references sweep — refuse to ship a zip with broken require/include
+# paths. This is the gate that would have caught FormFlow Pro 3.3.0
+# (2026-05-28), whose two stale `require_once` lines pointing at deleted ML
+# files took dominionenergyptr.com down. Standard pre-ship procedure across
+# the fleet (Peanut Graphic creed §4: "Sweep before you ship").
+SWEEP="/Users/nattyb/Documents/Peanut/scripts/fatal-references-sweep.py"
+if [[ -f "$SWEEP" ]]; then
+    echo "▸ Running fatal-references sweep…"
+    if ! /usr/bin/python3 "$SWEEP" "$ROOT_DIR"; then
+        echo ""
+        echo "❌ package.sh refuses to build: missing require/include targets."
+        echo "   Fix the references above, or remove the dead require_once lines."
+        exit 1
+    fi
+fi
+
 # Sanity check: the version constant should match what HEAD claims to be.
 # If someone hand-edits the version without going through release.sh, this
 # catches the divergence before a zip ships under a fake version stamp.

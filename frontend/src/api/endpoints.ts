@@ -69,6 +69,17 @@ export const settingsApi = {
     return response.data;
   },
 
+  // Hub settings - resync click_to_portal events (3.9.5)
+  resyncClickToPortal: async (): Promise<{
+    success: boolean;
+    message: string;
+    eligible: number;
+    flipped: number;
+  }> => {
+    const response = await api.post('/settings/hub/resync-click-to-portal');
+    return response.data;
+  },
+
   // Hub settings - update hub mode
   updateHubMode: async (mode: 'standard' | 'hide_suite' | 'disable_suite'): Promise<{
     success: boolean;

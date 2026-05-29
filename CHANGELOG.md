@@ -5,6 +5,16 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.5] - 2026-05-29
+
+### Added
+- **"Resync click events" button on the Hub Settings page** (`Settings → Hub Connection`). One-shot historical backfill: flips `synced=0` on all rows where `event_name='click_to_portal'` AND `synced=1`. The next "Sync to Hub" run replays those rows with their now-complete `event_name` + `metadata` payload (set by the 3.9.4 backfill), and Hub's resync-collision upsert path (peanut-hub PR #419) fills in the missing fields on the existing Hub rows without duplicating. Idempotent.
+  - Backing REST endpoint: `POST /wp-json/peanut-connect/v1/settings/hub/resync-click-to-portal`. Returns `{ success, eligible, flipped, message }`. Requires `manage_options`.
+  - Why a separate button: the 3.9.4 backfill set the correct `event_name` + `metadata` on the local WP DB, but those rows were already `synced=1` so the next normal sync didn't re-send them. Without this, Hub stays on the pre-3.9.4 lossy snapshot (`event_type='custom'`, no `event_name`, no `event_data`) for every historical row.
+
+### Build
+- `scripts/package.sh` now runs the ecosystem-level `fatal-references-sweep.py` before zipping. Refuses to package if any `require[_once]` / `include[_once]` points at a missing file. Born from the FormFlow Pro 3.3.0 incident. See Peanut Graphic creed §4 ("Sweep before you ship").
+
 ## [3.9.4] - 2026-05-29
 
 ### Fixed
