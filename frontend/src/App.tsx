@@ -52,6 +52,11 @@ export default function App() {
             <Route path="/links" element={<Links />} />
             <Route path="/videos" element={<Videos />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/analytics/journeys" element={<Journeys />} />
+            <Route path="/analytics/journeys/:clickId" element={<JourneyDetail />} />
+            {/* Legacy aliases (3.9.6) — keep working until next major to
+                avoid breaking any bookmarks. The active routes above are
+                under /analytics so Journeys reads as a section of Analytics. */}
             <Route path="/journeys" element={<Journeys />} />
             <Route path="/journeys/:clickId" element={<JourneyDetail />} />
             <Route path="/tracking" element={<Tracking />} />

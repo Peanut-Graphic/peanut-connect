@@ -17,9 +17,15 @@ const RANGES = [
 
 export default function Analytics() {
   const [days, setDays] = useState<(typeof RANGES)[number]['value']>(30);
+  const [customFrom, setCustomFrom] = useState<string>('');
+  const [customTo, setCustomTo] = useState<string>('');
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
 
-  const range = rangeFromDays(days);
+  // If both custom dates are set, they override the preset window.
+  const isCustomRange = customFrom !== '' && customTo !== '';
+  const range = isCustomRange
+    ? { from: customFrom, to: customTo }
+    : rangeFromDays(days);
 
   // Hub URL — used to deep-link to the funnel editor when a campaign is selected.
   const trackingQuery = useQuery({
@@ -106,21 +112,59 @@ export default function Analytics() {
       title="Campaign Analytics"
       description="Click-through and conversion data from journeys that started with one of your tracked links."
       action={
-        <div className="flex items-center gap-1">
-          {RANGES.map((r) => (
-            <button
-              key={r.value}
-              type="button"
-              onClick={() => setDays(r.value)}
-              className={
-                days === r.value
-                  ? 'px-3 py-1.5 text-sm font-medium rounded bg-primary-600 text-white'
-                  : 'px-3 py-1.5 text-sm font-medium rounded text-slate-600 hover:bg-slate-100'
-              }
-            >
-              {r.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1">
+            {RANGES.map((r) => (
+              <button
+                key={r.value}
+                type="button"
+                onClick={() => {
+                  setDays(r.value);
+                  setCustomFrom('');
+                  setCustomTo('');
+                }}
+                className={
+                  !isCustomRange && days === r.value
+                    ? 'px-3 py-1.5 text-sm font-medium rounded bg-primary-600 text-white'
+                    : 'px-3 py-1.5 text-sm font-medium rounded text-slate-600 hover:bg-slate-100'
+                }
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 pl-2 border-l border-slate-200">
+            <input
+              type="date"
+              value={customFrom}
+              max={customTo || undefined}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              aria-label="Custom range start"
+              className="border border-slate-300 rounded text-xs py-1 px-2"
+            />
+            <span className="text-xs text-slate-400">→</span>
+            <input
+              type="date"
+              value={customTo}
+              min={customFrom || undefined}
+              onChange={(e) => setCustomTo(e.target.value)}
+              aria-label="Custom range end"
+              className="border border-slate-300 rounded text-xs py-1 px-2"
+            />
+            {isCustomRange && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomFrom('');
+                  setCustomTo('');
+                }}
+                className="ml-1 text-xs text-slate-500 hover:text-slate-700"
+                aria-label="Clear custom range"
+              >
+                ×
+              </button>
+            )}
+          </div>
         </div>
       }
     >
@@ -233,6 +277,41 @@ export default function Analytics() {
                 links={currentData?.sankey?.links ?? []}
               />
             )}
+          </Card>
+
+          {/* Journeys section — drill-in entry point */}
+          <Card className="mt-4">
+            <CardHeader
+              title="Journeys"
+              description="The row-by-row list of every visitor session. Filter, search, and click a row for the full event timeline."
+              action={
+                <a
+                  href={
+                    isFiltered
+                      ? `#/analytics/journeys?campaign=${encodeURIComponent(selectedCampaigns[0])}`
+                      : '#/analytics/journeys'
+                  }
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+                >
+                  Open journeys list →
+                </a>
+              }
+            />
+            <p className="text-sm text-slate-500">
+              Total in this window:{' '}
+              <span className="font-semibold text-slate-700">
+                {(currentData?.total_journeys ?? 0).toLocaleString()}
+              </span>
+              {currentData?.conversions !== undefined && (
+                <>
+                  {' '}
+                  · Converted:{' '}
+                  <span className="font-semibold text-emerald-600">
+                    {(currentData.conversions ?? 0).toLocaleString()}
+                  </span>
+                </>
+              )}
+            </p>
           </Card>
         </>
       )}

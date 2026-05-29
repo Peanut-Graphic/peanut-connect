@@ -25,7 +25,7 @@ export default function JourneyDetail() {
       description={clickId ? `Click ID ${clickId}` : 'Click ID —'}
       action={
         <Link
-          to="/journeys"
+          to="/analytics/journeys"
           className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
         >
           ← Back to journeys
