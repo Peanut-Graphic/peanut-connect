@@ -3,7 +3,7 @@
  * Plugin Name: End-to-End
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: End-to-end campaign and site platform for WordPress — runs campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all wired to a central Peanut Hub.
- * Version: 3.9.9
+ * Version: 3.9.10
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.9.9');
+define('PEANUT_CONNECT_VERSION', '3.9.10');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 

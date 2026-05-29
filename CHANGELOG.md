@@ -5,6 +5,13 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.10] - 2026-05-29
+
+### Fixed
+- **`/analytics/journeys` was rendering empty** because the plugin was parsing the wrong response shape. Hub's API returns `{ success, journeys: [...], meta: {...} }` but the plugin treated `res.data.data` as the row array. Same bug on the detail endpoint where `events` is nested under `journey` (not top-level). Both shapes now normalize correctly.
+- **"Open journeys list" + "Open video analytics" buttons rendered with invisible text** in wp-admin because the global `a { color: #2271b1 }` rule overrode Tailwind's `text-white`. Forced `color: #ffffff` via inline style to win the cascade.
+- **`event_name=click_to_portal` and `search` filters on Journeys now actually filter** — these existed only on the web controller; this release pairs with peanut-hub PR #423 which adds them to the API controller so the plugin proxy round-trips them through.
+
 ## [3.9.9] - 2026-05-29
 
 ### Changed

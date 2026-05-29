@@ -291,7 +291,8 @@ export default function Analytics() {
                       ? `#/analytics/journeys?campaign=${encodeURIComponent(selectedCampaigns[0])}`
                       : '#/analytics/journeys'
                   }
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary-600 rounded-lg hover:bg-primary-700"
+                  style={{ color: '#ffffff' }}
                 >
                   Open journeys list →
                 </a>
@@ -322,7 +323,8 @@ export default function Analytics() {
               action={
                 <a
                   href="#/analytics/videos"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary-600 rounded-lg hover:bg-primary-700"
+                  style={{ color: '#ffffff' }}
                 >
                   Open video analytics →
                 </a>

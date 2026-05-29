@@ -242,12 +242,52 @@ export const marketingApi = {
     } = {},
   ): Promise<JourneyListResponse> => {
     const res = await api.get('/marketing/journeys', { params });
-    return res.data as JourneyListResponse;
+    // Hub API returns { success, journeys: [...], meta: { current_page, last_page, per_page, total } }.
+    // Normalize to JourneyListResponse regardless of how the WP client
+    // interceptor unwraps the envelope.
+    const payload = (res.data?.data ?? res.data) as {
+      journeys?: JourneyRow[];
+      data?: JourneyRow[];
+      meta?: { current_page?: number; last_page?: number; per_page?: number; total?: number };
+    };
+    return {
+      data: payload.journeys ?? payload.data ?? [],
+      current_page: payload.meta?.current_page,
+      last_page: payload.meta?.last_page,
+      per_page: payload.meta?.per_page,
+      total: payload.meta?.total,
+    };
   },
 
   journeyDetail: async (clickId: string): Promise<JourneyDetailResponse> => {
     const res = await api.get(`/marketing/journeys/${encodeURIComponent(clickId)}`);
-    return res.data as JourneyDetailResponse;
+    // Hub API returns { success, journey: { ..., events: [...] } } — events
+    // are nested under `journey`, not top-level. Flatten so JourneyDetail's
+    // existing render shape (journey + events siblings) keeps working.
+    const payload = (res.data?.data ?? res.data) as {
+      journey?: Record<string, unknown> & { events?: JourneyEventRow[] };
+    };
+    const j = (payload.journey ?? {}) as Record<string, unknown>;
+    const rawEvents = (payload.journey?.events ?? []) as Array<Omit<JourneyEventRow, 'id'> & { id?: number }>;
+    const events: JourneyEventRow[] = rawEvents.map((e, idx) => ({ ...e, id: e.id ?? idx }));
+    return {
+      journey: {
+        id: 0, // Hub API uses click_id; no numeric id surfaced. Used only for legacy props.
+        click_id: (j.click_id as string) ?? clickId,
+        status:
+          (j.status as 'in_progress' | 'converted' | 'abandoned') ?? 'in_progress',
+        utm_campaign: (j.utm_campaign as string | null) ?? null,
+        utm_source: (j.utm_source as string | null) ?? null,
+        utm_medium: (j.utm_medium as string | null) ?? null,
+        started_at: (j.started_at as string) ?? '',
+        duration_seconds: (j.duration_seconds as number | null) ?? null,
+        converted_at: (j.converted_at as string | null) ?? null,
+        last_event_at: (j.last_event_at as string | null) ?? null,
+        pages_viewed: (j.pages_viewed as number | null) ?? null,
+        events_count: (j.events_count as number | null) ?? null,
+      },
+      events,
+    };
   },
 
   trackingSetup: async (): Promise<TrackingSetup> => {
