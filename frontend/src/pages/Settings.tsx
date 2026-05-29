@@ -129,7 +129,7 @@ export default function Settings() {
       if (data.flipped > 0) {
         toast.success(data.message);
       } else {
-        toast(data.message);
+        toast.info(data.message);
       }
     },
     onError: (err) => {
