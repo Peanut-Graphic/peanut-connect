@@ -5,6 +5,15 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.6] - 2026-05-29
+
+### Added
+- **Journeys page inside the plugin** (`End-to-End → Journeys`). Per-visitor journey list with status / campaign / date filters and a "Clicked enroll" toggle pill that filters to journeys whose visitor reached the enroll CTA. Each row links to a new in-plugin Journey Detail page with the full event timeline (event_type, event_name, page_url, metadata payload). Mirrors Hub's `/journeys` UI inside wp-admin so operators don't need to leave the plugin to drill into a single click.
+- **"Clicked enroll" line on the Volume over time chart** (Analytics page). Third series alongside Journeys + Conversions; renders only when there are non-zero clicked_enroll counts in the window. Pairs with `peanut-hub` PR #422 which added the daily aggregate to the `time_series` response.
+
+### Changed
+- `marketingApi.listJourneys` and `marketingApi.journeyDetail` are new client methods. Backend proxy routes already exist; this wires the SPA against them.
+
 ## [3.9.5] - 2026-05-29
 
 ### Added

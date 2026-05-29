@@ -4,6 +4,7 @@ interface TimeSeriesPoint {
   date: string;
   journeys: number;
   conversions: number;
+  clicked_enroll?: number;
 }
 
 interface TimeSeriesProps {
@@ -12,11 +13,24 @@ interface TimeSeriesProps {
 }
 
 /**
- * Two-line area chart for journey + conversion volume over time.
- * Hand-rolled SVG so no chart-lib bloat. Y-axis auto-scales to max value.
+ * Three-line area chart for journey + clicked-enroll + conversion volume
+ * over time. Hand-rolled SVG so no chart-lib bloat. Y-axis auto-scales to
+ * max value across all rendered series. `clicked_enroll` is optional —
+ * older Hub builds that don't send the field render only journeys +
+ * conversions (legend collapses too).
  */
 export function TimeSeries({ data, height = 220 }: TimeSeriesProps) {
-  const { width, padding, journeyPath, conversionPath, journeyArea, ticks, max } = useMemo(() => {
+  const {
+    width,
+    padding,
+    journeyPath,
+    conversionPath,
+    enrollPath,
+    journeyArea,
+    ticks,
+    max,
+    hasEnroll,
+  } = useMemo(() => {
     const w = 800;
     const pad = { top: 10, right: 12, bottom: 28, left: 36 };
     const innerW = w - pad.left - pad.right;
@@ -28,19 +42,33 @@ export function TimeSeries({ data, height = 220 }: TimeSeriesProps) {
         padding: pad,
         journeyPath: '',
         conversionPath: '',
+        enrollPath: '',
         journeyArea: '',
         ticks: [] as Array<{ x: number; label: string }>,
         max: 1,
+        hasEnroll: false,
       };
     }
 
-    const m = Math.max(1, ...data.map((d) => Math.max(d.journeys, d.conversions)));
+    const hasEnroll = data.some((d) => (d.clicked_enroll ?? 0) > 0);
+
+    const m = Math.max(
+      1,
+      ...data.map((d) =>
+        Math.max(d.journeys, d.conversions, d.clicked_enroll ?? 0),
+      ),
+    );
     const x = (i: number) =>
       pad.left + (data.length === 1 ? innerW / 2 : (i / (data.length - 1)) * innerW);
     const y = (v: number) => pad.top + innerH - (v / m) * innerH;
 
-    const line = (key: 'journeys' | 'conversions') =>
-      data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(d[key])}`).join(' ');
+    const line = (key: 'journeys' | 'conversions' | 'clicked_enroll') =>
+      data
+        .map(
+          (d, i) =>
+            `${i === 0 ? 'M' : 'L'} ${x(i)} ${y((d[key] ?? 0) as number)}`,
+        )
+        .join(' ');
 
     const area =
       `M ${x(0)} ${pad.top + innerH} ` +
@@ -64,9 +92,11 @@ export function TimeSeries({ data, height = 220 }: TimeSeriesProps) {
       padding: pad,
       journeyPath: line('journeys'),
       conversionPath: line('conversions'),
+      enrollPath: line('clicked_enroll'),
       journeyArea: area,
       ticks: tickList,
       max: m,
+      hasEnroll,
     };
   }, [data, height]);
 
@@ -87,6 +117,12 @@ export function TimeSeries({ data, height = 220 }: TimeSeriesProps) {
           <span className="inline-block w-3 h-3 rounded-sm bg-indigo-500/60" />
           <span className="text-slate-600">Journeys</span>
         </span>
+        {hasEnroll && (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-amber-500" />
+            <span className="text-slate-600">Clicked enroll</span>
+          </span>
+        )}
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block w-3 h-3 rounded-sm bg-emerald-500" />
           <span className="text-slate-600">Conversions</span>
@@ -97,7 +133,11 @@ export function TimeSeries({ data, height = 220 }: TimeSeriesProps) {
         preserveAspectRatio="xMidYMid meet"
         className="w-full"
         role="img"
-        aria-label="Journeys and conversions over time"
+        aria-label={
+          hasEnroll
+            ? 'Journeys, clicked-enroll, and conversions over time'
+            : 'Journeys and conversions over time'
+        }
       >
         {/* Y-axis gridlines + labels */}
         {yLabels.map((l, i) => (
@@ -139,7 +179,12 @@ export function TimeSeries({ data, height = 220 }: TimeSeriesProps) {
         <path d={journeyArea} fill="#6366f1" fillOpacity="0.15" />
         <path d={journeyPath} fill="none" stroke="#6366f1" strokeWidth="2" />
 
-        {/* Conversions: line + dots */}
+        {/* Clicked enroll: line only */}
+        {hasEnroll && (
+          <path d={enrollPath} fill="none" stroke="#f59e0b" strokeWidth="2" />
+        )}
+
+        {/* Conversions: line */}
         <path d={conversionPath} fill="none" stroke="#10b981" strokeWidth="2" />
       </svg>
     </div>
