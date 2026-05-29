@@ -13,6 +13,8 @@ import Videos from './pages/Videos';
 import Analytics from './pages/Analytics';
 import Journeys from './pages/Journeys';
 import JourneyDetail from './pages/JourneyDetail';
+import VideoAnalytics from './pages/VideoAnalytics';
+import VideoAnalyticsDetail from './pages/VideoAnalyticsDetail';
 import Tracking from './pages/Tracking';
 import Settings from './pages/Settings';
 
@@ -54,6 +56,8 @@ export default function App() {
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/analytics/journeys" element={<Journeys />} />
             <Route path="/analytics/journeys/:clickId" element={<JourneyDetail />} />
+            <Route path="/analytics/videos" element={<VideoAnalytics />} />
+            <Route path="/analytics/videos/:id" element={<VideoAnalyticsDetail />} />
             {/* Legacy aliases (3.9.6) — keep working until next major to
                 avoid breaking any bookmarks. The active routes above are
                 under /analytics so Journeys reads as a section of Analytics. */}
