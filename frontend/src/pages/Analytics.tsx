@@ -313,6 +313,29 @@ export default function Analytics() {
               )}
             </p>
           </Card>
+
+          {/* Videos section — drill-in to per-video analytics */}
+          <Card className="mt-4">
+            <CardHeader
+              title="Videos"
+              description="Plays, watch time, and completion rates across every video on this site. Click a row for the full timeline + funnel."
+              action={
+                <a
+                  href="#/analytics/videos"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+                >
+                  Open video analytics →
+                </a>
+              }
+            />
+            <p className="text-sm text-slate-500">
+              Manage + register videos under{' '}
+              <a href="#/videos" className="text-indigo-600 hover:underline">
+                Videos
+              </a>
+              . The analytics live here.
+            </p>
+          </Card>
         </>
       )}
 

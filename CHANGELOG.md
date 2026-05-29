@@ -5,6 +5,12 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.9] - 2026-05-29
+
+### Changed
+- **Video analytics moved under Analytics.** New routes: `/analytics/videos` (aggregate list across every video with plays / unique viewers / avg watch / completion for a 7 / 30 / 90d window) and `/analytics/videos/:id` (per-video detail page that wraps the same VideoAnalyticsPanel used inline on Videos). The Videos top-level page stays for video management (register / edit / embed); analytics now live under the Analytics IA — same pattern as 3.9.8 did for Journeys.
+- **New Videos card on the Analytics page**, sibling of the Journeys card, with an "Open video analytics →" CTA.
+
 ## [3.9.8] - 2026-05-29
 
 ### Changed
