@@ -5,6 +5,14 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.7] - 2026-05-29
+
+### Added
+- **Daily views chart + completion funnel inside the plugin's per-video analytics panel** (`End-to-End → Videos → Analytics`). Mirrors the Hub `/videos/{id}` page so operators get the full picture inside wp-admin: headline metrics, daily views over the selected window (7 / 30 / 90d), drop-off curve, and a 25 / 50 / 75 / 100% completion funnel. "Open full analytics in Hub →" stays as the deep-link escape.
+
+### Fixed
+- **`PEANUT_CONNECT_VERSION` constant was stuck at `3.9.5`** while the plugin header read `3.9.6`. WordPress used the header (so the plugin listing + updater were correct), but asset URLs included `?ver=3.9.5`, which meant browsers with the 3.9.5 bundle cached could serve stale JS/CSS after upgrading. Constant now tracks the header.
+
 ## [3.9.6] - 2026-05-29
 
 ### Added
