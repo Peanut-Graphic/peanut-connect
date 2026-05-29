@@ -592,6 +592,11 @@ class Peanut_Connect_API {
                     'type' => 'string',
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
+                'event_name' => [
+                    'required' => false,
+                    'type' => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
             ],
         ]);
 
@@ -1687,10 +1692,16 @@ class Peanut_Connect_API {
         $event_type = $request->get_param('event_type');
 
         $data = [
-            'page_url' => $request->get_param('page_url'),
+            // event_name distinguishes custom events from each other
+            // (e.g. click_to_portal vs video_play). Required for Hub
+            // funnel classification when event_type='custom'. The 3.9.4
+            // release added this — every release before 3.9.4 silently
+            // dropped event_name on the floor here.
+            'event_name' => $request->get_param('event_name'),
+            'page_url'   => $request->get_param('page_url'),
             'page_title' => $request->get_param('page_title'),
-            'referrer' => $request->get_param('referrer'),
-            'metadata' => $request->get_param('metadata'),
+            'referrer'   => $request->get_param('referrer'),
+            'metadata'   => $request->get_param('metadata'),
         ];
 
         $event_id = Peanut_Connect_Tracker::record_event($visitor_id, $event_type, $data);

@@ -5,6 +5,24 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.4] - 2026-05-29
+
+### Fixed
+- **Hub campaign funnel's "Clicked enroll" stage stayed at 0 even with thousands of qualifying clicks.** Tracker.js was sending an `event_name` field on every event (e.g. `click_to_portal`) so Hub could classify custom events into funnel stages — but the REST `/track` ingest at `class-connect-api.php:1689-1693` only captured `event_type`, `page_url`, `page_title`, `referrer`, and `metadata`, silently dropping `event_name` on the floor. The events table had no `event_name` column either. Result: every `click_to_portal` reached the server as an anonymous `event_type='custom'` row and Hub couldn't tell it apart from any other custom event. On dominionenergyptr.com the funnel had recorded 878 qualifying button clicks over 30 days while reporting 0 in the "Clicked enroll" stage.
+  - Schema: added `event_name VARCHAR(64) DEFAULT NULL` to the events table with an index (Hub aggregation queries filter by it). `DB_VERSION` bumped to `1.3.0` so existing installs run the dbDelta column-add on next plugin load.
+  - API ingest now reads `event_name` from the request and forwards it to `Peanut_Connect_Tracker::record_event()`. `record_event()` accepts `event_name` in its `$data` array, truncates to 64 chars, and persists.
+  - Backfill: on upgrade from a pre-1.3.0 install, a one-shot migration identifies existing rows whose metadata shape and text match the `click_to_portal` emission pattern from tracker.js (`element/text/href/identifier/source` keys + text matching the primary-CTA regex anchored to `^(enroll|apply|register|sign-up|get-started|…)`) and backfills `event_name='click_to_portal'`. Rows that don't match are left as `event_name=NULL` — better to under-classify than mislabel.
+
+### Changed
+- **`page_view` event type canonicalized to `pageview`.** Two emitters were running side-by-side: tracker.js was emitting `page_view` while `Peanut_Connect_Tracker::record_event()` server-side calls emitted `pageview`. Over 30 days on dominionenergyptr.com this had accumulated 8,287 `pageview` + 2,706 `page_view` rows, splitting the journey count across two event_type values. Server now canonicalizes `page_view` → `pageview` at write time; tracker.js emits `pageview` going forward; the 1.3.0 backfill rewrites existing `page_view` rows to `pageview`.
+
+### Added
+- **`Test_Event_Name_Persistence` unit test** pins the contracts of this fix: events schema declares `event_name` column with index, `DB_VERSION` is at least `1.3.0`, `record_event` persists `event_name` and canonicalizes `page_view`, `/track` route forwards `event_name`, backfill runs once on pre-1.3.0 upgrades, backfill SQL matches click_to_portal-shaped rows and normalizes `page_view`, and tracker.js emits canonical `pageview`. Eleven tests, 25 assertions.
+- **`phpunit.xml`** secondary testsuite glob (`Test_*.php`) so PHPUnit 10's strict file/class matcher can discover the new test file. The pre-existing `test-*.php` files have the same class/file mismatch and never actually ran — separate cleanup; this PR doesn't touch them.
+
+### Migration notes
+After install, the next plugin load triggers `Peanut_Connect_Database::check_db_version()`. The dbDelta runs, the `event_name` column is added in-place (no data loss), and the backfill runs exactly once. For dominionenergyptr.com specifically, the backfill should rewrite ~878 existing rows from anonymous `event_type=custom` to `event_type=custom, event_name=click_to_portal` and normalize ~2,706 `page_view` rows to `pageview`. Press "Sync to Hub" once after the upgrade to push the rewritten rows up to Hub, and the funnel should populate.
+
 ## [3.9.1] - 2026-05-22
 
 ### Fixed

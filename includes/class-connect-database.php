@@ -19,8 +19,14 @@ class Peanut_Connect_Database {
 
     /**
      * Database version
+     *
+     * 1.3.0 (3.9.4) — Adds `event_name` column to the events table. Until
+     * now `trackEvent(type, name, data)` in tracker.js was sending the
+     * `event_name` field but the API ingest dropped it and the column
+     * didn't exist. Result: Hub couldn't distinguish `click_to_portal`
+     * from any other custom event and funnel stages stayed at 0.
      */
-    const DB_VERSION = '1.2.0';
+    const DB_VERSION = '1.3.0';
 
     /**
      * Option name for DB version
@@ -42,8 +48,72 @@ class Peanut_Connect_Database {
 
         if ($installed_version !== self::DB_VERSION) {
             self::create_tables();
+            self::backfill_event_names($installed_version);
             update_option(self::DB_VERSION_OPTION, self::DB_VERSION);
         }
+    }
+
+    /**
+     * Backfill `event_name` on rows that existed before the column did.
+     *
+     * Runs once when an existing install upgrades to DB 1.3.0+. The
+     * heuristic mirrors how tracker.js shapes `click_to_portal` payloads:
+     * event_type='custom' AND metadata has element/text/href/identifier
+     * keys AND the text matches the primary-CTA regex. Anything not
+     * matching is left as event_name=NULL — better to under-classify
+     * than to mislabel.
+     *
+     * Also normalizes `page_view` (camelCase variant from tracker.js)
+     * to `pageview` (canonical, server-side variant). The two were
+     * accumulating side-by-side in production, splitting the journey
+     * count between two event_type values.
+     *
+     * @param string|false $previous_db_version The DB version recorded
+     *                                           BEFORE this upgrade.
+     */
+    private static function backfill_event_names($previous_db_version): void {
+        if (!$previous_db_version || version_compare((string) $previous_db_version, '1.3.0', '>=')) {
+            return;
+        }
+
+        global $wpdb;
+        $events = $wpdb->prefix . 'peanut_connect_events';
+
+        // Confirm the column actually exists before writing to it.
+        $column_exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = 'event_name'",
+            $wpdb->dbname,
+            $events
+        ));
+        if (!$column_exists) {
+            return; // dbDelta didn't add it — abort rather than crash.
+        }
+
+        // Normalize page_view → pageview so existing duplicate counts
+        // collapse to the canonical event_type.
+        $wpdb->query(
+            "UPDATE {$events} SET event_type = 'pageview' WHERE event_type = 'page_view'"
+        );
+
+        // Backfill click_to_portal on custom events whose metadata shape
+        // matches what tracker.js emits for primary-CTA clicks. Tight
+        // regex on text — anchored, case-insensitive — mirrors the JS.
+        // We use a JSON_EXTRACT path that's safe on MySQL 5.7+ and
+        // MariaDB 10.2+ (every WP install we ship to is well above
+        // those baselines).
+        $primary_re = 'enroll|apply|register|sign.?up|get.?started|buy|purchase|order|subscribe|download|contact|call|request|book|schedule|reserve|join|start|try|demo|quote';
+        $like = "%\"element\":%";
+        $wpdb->query($wpdb->prepare(
+            "UPDATE {$events}
+                SET event_name = 'click_to_portal'
+              WHERE event_type = 'custom'
+                AND event_name IS NULL
+                AND metadata LIKE %s
+                AND LOWER(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.text'))) REGEXP %s",
+            $like,
+            '^(' . $primary_re . ')'
+        ));
     }
 
     /**
@@ -87,6 +157,7 @@ class Peanut_Connect_Database {
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
             visitor_id varchar(64) NOT NULL,
             event_type varchar(50) NOT NULL,
+            event_name varchar(64) DEFAULT NULL,
             page_url text DEFAULT NULL,
             page_title varchar(255) DEFAULT NULL,
             referrer text DEFAULT NULL,
@@ -103,6 +174,7 @@ class Peanut_Connect_Database {
             PRIMARY KEY (id),
             KEY visitor_id (visitor_id),
             KEY event_type (event_type),
+            KEY event_name (event_name),
             KEY synced (synced),
             KEY occurred_at (occurred_at),
             KEY click_id (click_id),
