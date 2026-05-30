@@ -5,6 +5,13 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.11] - 2026-05-29
+
+### Changed
+- **Journeys list is now embedded inline on the Analytics page**, scoped to the same date range and (when filtered to one) the same campaign that drive the rest of the page. No more bouncing to a standalone page for the row-by-row view.
+- **"Journeys" returned to the top nav**, but its href is `/analytics?focus=journeys` — clicking scrolls the Analytics page to the new inline Journeys section instead of a separate route.
+- The `/analytics/journeys` and `/analytics/journeys/:clickId` standalone pages stay as deep-link aliases.
+
 ## [3.9.10] - 2026-05-29
 
 ### Fixed
