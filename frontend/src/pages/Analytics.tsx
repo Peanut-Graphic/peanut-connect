@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, CardHeader, StatCard, Alert } from '@/components/common';
@@ -6,7 +7,7 @@ import { Funnel } from '@/components/charts/Funnel';
 import { TimeSeries } from '@/components/charts/TimeSeries';
 import { Donut } from '@/components/charts/Donut';
 import { Sankey } from '@/components/charts/Sankey';
-import { marketingApi, type JourneyStats } from '@/api';
+import { marketingApi, type JourneyStats, type JourneyRow } from '@/api';
 import { ChevronDown, X } from 'lucide-react';
 
 const RANGES = [
@@ -16,10 +17,27 @@ const RANGES = [
 ] as const;
 
 export default function Analytics() {
+  const [searchParams] = useSearchParams();
   const [days, setDays] = useState<(typeof RANGES)[number]['value']>(30);
   const [customFrom, setCustomFrom] = useState<string>('');
   const [customTo, setCustomTo] = useState<string>('');
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
+  const [journeysPage, setJourneysPage] = useState(1);
+  const [showOnlyEnrollClicks, setShowOnlyEnrollClicks] = useState(false);
+  const journeysSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // Anchor-scroll into the Journeys section when the top-nav Journeys link
+  // is clicked (it sets ?focus=journeys). Keeps the user inside Analytics
+  // instead of jumping to a standalone page.
+  useEffect(() => {
+    if (searchParams.get('focus') === 'journeys') {
+      // Defer to next tick so the section is mounted before scroll.
+      const t = window.setTimeout(() => {
+        journeysSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+      return () => window.clearTimeout(t);
+    }
+  }, [searchParams]);
 
   // If both custom dates are set, they override the preset window.
   const isCustomRange = customFrom !== '' && customTo !== '';
@@ -279,41 +297,22 @@ export default function Analytics() {
             )}
           </Card>
 
-          {/* Journeys section — drill-in entry point */}
-          <Card className="mt-4">
-            <CardHeader
-              title="Journeys"
-              description="The row-by-row list of every visitor session. Filter, search, and click a row for the full event timeline."
-              action={
-                <a
-                  href={
-                    isFiltered
-                      ? `#/analytics/journeys?campaign=${encodeURIComponent(selectedCampaigns[0])}`
-                      : '#/analytics/journeys'
-                  }
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary-600 rounded-lg hover:bg-primary-700"
-                  style={{ color: '#ffffff' }}
-                >
-                  Open journeys list →
-                </a>
-              }
+          {/* Journeys section — inline list scoped to the page's date range
+              + (when filtered to one) the selected campaign. The top-nav
+              Journeys link scrolls here via ?focus=journeys. */}
+          <div ref={journeysSectionRef} id="journeys-section">
+            <InlineJourneysCard
+              from={range.from}
+              to={range.to}
+              campaign={isFiltered ? selectedCampaigns[0] : undefined}
+              onlyEnrollClicks={showOnlyEnrollClicks}
+              onToggleEnrollClicks={() => setShowOnlyEnrollClicks((v) => !v)}
+              page={journeysPage}
+              onPage={setJourneysPage}
+              totalInWindow={currentData?.total_journeys}
+              conversions={currentData?.conversions}
             />
-            <p className="text-sm text-slate-500">
-              Total in this window:{' '}
-              <span className="font-semibold text-slate-700">
-                {(currentData?.total_journeys ?? 0).toLocaleString()}
-              </span>
-              {currentData?.conversions !== undefined && (
-                <>
-                  {' '}
-                  · Converted:{' '}
-                  <span className="font-semibold text-emerald-600">
-                    {(currentData.conversions ?? 0).toLocaleString()}
-                  </span>
-                </>
-              )}
-            </p>
-          </Card>
+          </div>
 
           {/* Videos section — drill-in to per-video analytics */}
           <Card className="mt-4">
@@ -660,6 +659,199 @@ function RegionsCard({ data, loading }: { data: JourneyStats | undefined; loadin
         </ul>
       )}
     </Card>
+  );
+}
+
+function InlineJourneysCard({
+  from,
+  to,
+  campaign,
+  onlyEnrollClicks,
+  onToggleEnrollClicks,
+  page,
+  onPage,
+  totalInWindow,
+  conversions,
+}: {
+  from: string;
+  to: string;
+  campaign?: string;
+  onlyEnrollClicks: boolean;
+  onToggleEnrollClicks: () => void;
+  page: number;
+  onPage: (n: number) => void;
+  totalInWindow?: number;
+  conversions?: number;
+}) {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['analytics-inline-journeys', { from, to, campaign, onlyEnrollClicks, page }],
+    queryFn: () =>
+      marketingApi.listJourneys({
+        start_date: from,
+        end_date: to,
+        campaign: campaign || undefined,
+        event_name: onlyEnrollClicks ? 'click_to_portal' : undefined,
+        page,
+        per_page: 25,
+      }),
+  });
+
+  const rows = data?.data ?? [];
+  const lastPage = data?.last_page ?? 1;
+  const totalMatches = data?.total ?? rows.length;
+
+  return (
+    <Card className="mt-4">
+      <CardHeader
+        title="Journeys"
+        description="Per-visitor journeys in the selected window. Click a row for the full event timeline."
+        action={
+          <button
+            type="button"
+            onClick={onToggleEnrollClicks}
+            className={
+              'inline-flex items-center gap-1.5 border rounded-lg text-sm py-1.5 px-3 transition-colors ' +
+              (onlyEnrollClicks
+                ? 'bg-amber-100 border-amber-300 text-amber-800'
+                : 'border-slate-300 text-slate-700 hover:bg-slate-50')
+            }
+            title="Show only journeys whose visitor clicked the enroll / primary CTA"
+          >
+            <span aria-hidden="true">⇥</span>
+            Clicked enroll
+            {onlyEnrollClicks && <span aria-hidden="true">·×</span>}
+          </button>
+        }
+      />
+      <p className="text-sm text-slate-500 mb-3">
+        Total in this window:{' '}
+        <span className="font-semibold text-slate-700">
+          {(totalInWindow ?? 0).toLocaleString()}
+        </span>
+        {conversions !== undefined && (
+          <>
+            {' '}
+            · Converted:{' '}
+            <span className="font-semibold text-emerald-600">
+              {(conversions ?? 0).toLocaleString()}
+            </span>
+          </>
+        )}
+        {onlyEnrollClicks && (
+          <>
+            {' '}
+            · Showing{' '}
+            <span className="font-semibold text-amber-700">
+              {totalMatches.toLocaleString()}
+            </span>{' '}
+            with Clicked enroll
+          </>
+        )}
+      </p>
+
+      {isLoading && <div className="p-4 text-sm text-slate-500">Loading journeys…</div>}
+      {isError && (
+        <div className="p-4 text-sm text-red-600">
+          {(error as Error)?.message || 'Failed to load journeys.'}
+        </div>
+      )}
+      {!isLoading && !isError && rows.length === 0 && (
+        <div className="p-8 text-center text-sm text-slate-500">
+          No journeys match the current filters.
+        </div>
+      )}
+      {!isLoading && !isError && rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200">
+              <tr>
+                <th className="px-3 py-2">Click ID</th>
+                <th className="px-3 py-2">Campaign</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Started</th>
+                <th className="px-3 py-2 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <InlineJourneyRow key={row.click_id} row={row} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!isLoading && rows.length > 0 && lastPage > 1 && (
+        <div className="flex items-center justify-between p-3 border-t border-slate-200 text-sm">
+          <div className="text-slate-500">
+            Page {page} of {lastPage} · {totalMatches.toLocaleString()} total
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => onPage(page - 1)}
+              className="px-3 py-1 border border-slate-300 rounded disabled:opacity-50"
+            >
+              ← Prev
+            </button>
+            <button
+              type="button"
+              disabled={page >= lastPage}
+              onClick={() => onPage(page + 1)}
+              className="px-3 py-1 border border-slate-300 rounded disabled:opacity-50"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function InlineJourneyRow({ row }: { row: JourneyRow }) {
+  const statusColor =
+    row.status === 'converted'
+      ? 'bg-emerald-100 text-emerald-800'
+      : row.status === 'abandoned'
+        ? 'bg-slate-100 text-slate-600'
+        : 'bg-indigo-100 text-indigo-800';
+  const started = new Date(row.started_at);
+  const startedLabel = started.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return (
+    <tr className="border-b border-slate-100 hover:bg-slate-50">
+      <td className="px-3 py-2 font-mono text-xs">
+        <Link
+          to={`/analytics/journeys/${row.click_id}`}
+          className="hover:underline"
+          style={{ color: '#4f46e5' }}
+        >
+          {row.click_id.slice(0, 12)}…
+        </Link>
+      </td>
+      <td className="px-3 py-2">{row.utm_campaign ?? '—'}</td>
+      <td className="px-3 py-2">
+        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${statusColor}`}>
+          {row.status.replace('_', ' ')}
+        </span>
+      </td>
+      <td className="px-3 py-2 text-slate-600">{startedLabel}</td>
+      <td className="px-3 py-2 text-right">
+        <Link
+          to={`/analytics/journeys/${row.click_id}`}
+          className="text-sm hover:underline"
+          style={{ color: '#4f46e5' }}
+        >
+          View Timeline
+        </Link>
+      </td>
+    </tr>
   );
 }
 
