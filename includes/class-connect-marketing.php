@@ -127,6 +127,15 @@ class Peanut_Connect_Marketing {
             'callback'            => [self::class, 'tracking_setup'],
             'permission_callback' => $perms,
         ]);
+
+        // GTM container coverage — proxies to Hub's site-scoped endpoint
+        // which only returns captures for containers paired with this
+        // site under Hub → Sites → Tracked GTM Containers.
+        register_rest_route($ns, '/marketing/gtm-coverage', [
+            'methods'             => 'GET',
+            'callback'            => [self::class, 'gtm_coverage'],
+            'permission_callback' => $perms,
+        ]);
     }
 
     public static function check_admin_permission(): bool {
@@ -219,6 +228,10 @@ class Peanut_Connect_Marketing {
     public static function journey_detail(WP_REST_Request $request) {
         $click_id = sanitize_text_field((string) $request['click_id']);
         return self::forward('GET', "/journeys/{$click_id}");
+    }
+
+    public static function gtm_coverage(WP_REST_Request $request) {
+        return self::forward('GET', '/marketing/gtm-coverage', null, $request->get_query_params());
     }
 
     // ===== Tracking setup =====

@@ -337,6 +337,28 @@ export default function Analytics() {
               . The analytics live here.
             </p>
           </Card>
+
+          {/* GTM Coverage — where the paired GTM containers are firing */}
+          <Card className="mt-4">
+            <CardHeader
+              title="GTM Coverage"
+              description="Every page where the GTM containers paired with this site are firing their Hub beacon. Deterministic proof of where each container is actually deployed."
+              action={
+                <a
+                  href="#/analytics/gtm-coverage"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary-600 rounded-lg hover:bg-primary-700"
+                  style={{ color: '#ffffff' }}
+                >
+                  Open GTM coverage →
+                </a>
+              }
+            />
+            <p className="text-sm text-slate-500">
+              Pair containers in Hub → Sites → this site → Tracked GTM
+              Containers. Then install the beacon tag inside each container
+              and publish. Captures land within a minute.
+            </p>
+          </Card>
         </>
       )}
 

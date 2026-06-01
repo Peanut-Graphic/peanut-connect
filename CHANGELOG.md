@@ -5,6 +5,18 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.12] - 2026-05-29
+
+### Added
+- **GTM Coverage page inside the plugin** (`End-to-End → Analytics → Open GTM coverage`). Mirrors Hub's /analytics/gtm-beacon but scoped to the GTM containers paired with this site (configured in Hub → Sites → this site → Tracked GTM Containers). The plugin only ever sees this site's container data — never another site's, even on a multi-tenant Hub.
+- New REST proxy: `/wp-json/peanut-connect/v1/marketing/gtm-coverage` → Hub `/api/v1/marketing/gtm-coverage` (ValidateSiteApiKey middleware).
+- New Analytics page card "GTM Coverage" alongside Journeys / Videos with an "Open GTM coverage →" CTA.
+
+### Onboarding
+- Pair containers in Hub → Sites → Tracked GTM Containers.
+- Install the Hub beacon Custom HTML tag inside each GTM container (All Pages + History Change triggers). See ~/Documents/Peanut-meta/gtm-beacon-setup-walkthrough.html for the full walkthrough.
+- Captures land in the plugin's GTM Coverage page within a minute of any page load on any site running the container.
+
 ## [3.9.11] - 2026-05-29
 
 ### Changed

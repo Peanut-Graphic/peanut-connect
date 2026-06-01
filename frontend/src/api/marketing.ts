@@ -172,6 +172,41 @@ export interface JourneyDetailResponse {
   events: JourneyEventRow[];
 }
 
+export interface GtmCapture {
+  id: number;
+  container_id: string;
+  page_url: string | null;
+  page_title: string | null;
+  referrer: string | null;
+  gtm_event_id: string | null;
+  ua: string | null;
+  signature_valid: boolean;
+  captured_at: string;
+}
+
+export interface GtmHostRow {
+  host: string;
+  load_count: number;
+  unique_urls: number;
+  last_seen: string | null;
+}
+
+export interface GtmTotals {
+  total_captures: number;
+  unique_urls: number;
+  unique_hosts: number;
+  spoofed: number;
+}
+
+export interface GtmCoverageResponse {
+  captures: GtmCapture[];
+  hosts: GtmHostRow[];
+  totals: GtmTotals;
+  containers: string[];
+  meta: { current_page?: number; last_page?: number; per_page?: number; total?: number };
+  message?: string;
+}
+
 export const marketingApi = {
   buildCampaign: async (input: CampaignBuildInput): Promise<CampaignResult> => {
     const res = await api.post('/marketing/campaigns', input);
@@ -293,5 +328,45 @@ export const marketingApi = {
   trackingSetup: async (): Promise<TrackingSetup> => {
     const res = await api.get('/marketing/tracking-setup');
     return res.data as TrackingSetup;
+  },
+
+  gtmCoverage: async (
+    params: {
+      page?: number;
+      per_page?: number;
+      search?: string;
+      host?: string;
+      valid_only?: boolean;
+    } = {},
+  ): Promise<GtmCoverageResponse> => {
+    const res = await api.get('/marketing/gtm-coverage', { params });
+    const payload = (res.data?.data ?? res.data) as {
+      data?: {
+        captures?: GtmCapture[];
+        hosts?: GtmHostRow[];
+        totals?: GtmTotals;
+        containers?: string[];
+      };
+      captures?: GtmCapture[];
+      hosts?: GtmHostRow[];
+      totals?: GtmTotals;
+      containers?: string[];
+      meta?: { current_page?: number; last_page?: number; per_page?: number; total?: number };
+      message?: string;
+    };
+    const inner = payload.data ?? payload;
+    return {
+      captures: inner.captures ?? [],
+      hosts: inner.hosts ?? [],
+      totals: inner.totals ?? {
+        total_captures: 0,
+        unique_urls: 0,
+        unique_hosts: 0,
+        spoofed: 0,
+      },
+      containers: inner.containers ?? [],
+      meta: payload.meta ?? { current_page: 1, last_page: 1, per_page: 0, total: 0 },
+      message: payload.message,
+    };
   },
 };
