@@ -41,16 +41,69 @@ class Peanut_Connect_Database {
     }
 
     /**
-     * Check if database needs updating
+     * Check if database needs updating.
+     *
+     * Two conditions trigger a migration:
+     *   1. The stored version differs from DB_VERSION (normal case).
+     *   2. The stored version MATCHES DB_VERSION but the schema is
+     *      actually out of sync — i.e., a column we expect doesn't
+     *      exist (drift / partial-migration case).
+     *
+     * Drift detection was added in 3.9.13 after dominionenergyptr.com
+     * got stuck in a state where the option was set to '1.3.0' but
+     * dbDelta had never actually added the `event_name` column — so
+     * every event INSERT failed with `Unknown column 'event_name'`
+     * forever, and the migration never re-ran because the option
+     * said it had. Trusting an option without verifying the schema
+     * is a one-way trap: once you're wrong, you stay wrong.
      */
     public static function check_db_version(): void {
         $installed_version = get_option(self::DB_VERSION_OPTION);
 
-        if ($installed_version !== self::DB_VERSION) {
+        $needs_migration = ($installed_version !== self::DB_VERSION)
+            || !self::schema_matches_current_version();
+
+        if ($needs_migration) {
             self::create_tables();
             self::backfill_event_names($installed_version);
             update_option(self::DB_VERSION_OPTION, self::DB_VERSION);
         }
+    }
+
+    /**
+     * Verify that the columns we expect for the current DB_VERSION
+     * actually exist. Returns false if any expected column is missing
+     * (drift) — caller treats that as a migration trigger.
+     *
+     * Cheap (one INFORMATION_SCHEMA query per check). Runs on every
+     * `plugins_loaded` but only after the version-mismatch check
+     * passes; once the schema matches, no further work happens.
+     */
+    private static function schema_matches_current_version(): bool {
+        global $wpdb;
+
+        // Columns introduced in each DB_VERSION bump. Keep this map
+        // in sync with create_tables() — every new column added by a
+        // version bump must be listed here.
+        $expected = [
+            $wpdb->prefix . 'peanut_connect_events' => ['event_name'],
+        ];
+
+        foreach ($expected as $table => $columns) {
+            foreach ($columns as $column) {
+                $exists = $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                     WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+                    $wpdb->dbname,
+                    $table,
+                    $column
+                ));
+                if (!$exists) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**

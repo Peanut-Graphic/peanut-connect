@@ -5,6 +5,14 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.13] - 2026-06-02
+
+### Fixed
+- **DB migration trap: `check_db_version()` now verifies the schema, not just the option.** If `peanut_connect_db_version` says `1.3.0` but the `event_name` column is actually missing (drift / partial-migration), the migration re-fires automatically on the next page load. Previously the check trusted the option blindly — once it was wrong, the site was stuck forever. Hit on `dominionenergyptr.com`: every event INSERT was failing with `Unknown column 'event_name'`, and no amount of "reinstall the plugin" would fix it because the option said the migration had already run.
+
+### Added
+- `Peanut_Connect_Database::schema_matches_current_version()` — single INFORMATION_SCHEMA query that confirms every column the current DB_VERSION introduced is actually present. Keep its `$expected` map in sync with `create_tables()` when bumping `DB_VERSION`.
+
 ## [3.9.12] - 2026-05-29
 
 ### Added
