@@ -207,6 +207,60 @@ export interface GtmCoverageResponse {
   message?: string;
 }
 
+export interface CampaignStoryResponse {
+  campaign: {
+    name: string;
+    utm_count: number;
+    utms: Array<{
+      id: number;
+      name: string;
+      utm_source: string | null;
+      utm_medium: string | null;
+      utm_content: string | null;
+      utm_term: string | null;
+      send_count: number | null;
+      campaign_cost: number | null;
+    }>;
+    spend: number;
+    sends: number;
+  };
+  window: { start: string; end: string };
+  kpis: {
+    journeys: number;
+    engaged: number;
+    enrolled: number;
+    abandoned: number;
+    in_progress: number;
+    conversion_rate: number;
+    avg_duration_seconds: number | null;
+    cpa: number | null;
+    ctr: number | null;
+    gtm_coverage: number;
+  };
+  funnel: Array<{ stage: string; label: string; count: number }>;
+  time_series: Array<{ date: string; journeys: number; conversions: number; clicked_enroll: number }>;
+  top_links: Array<{
+    link_id: number;
+    slug: string | null;
+    title: string | null;
+    destination: string | null;
+    journeys: number;
+    conversions: number;
+    conversion_rate: number;
+  }>;
+  by_channel: Array<{ medium: string; journeys: number; conversions: number }>;
+  sample_journeys: Array<{
+    id: number;
+    click_id: string;
+    status: 'in_progress' | 'converted' | 'abandoned';
+    utm_source: string | null;
+    utm_medium: string | null;
+    utm_content: string | null;
+    started_at: string;
+    duration_seconds: number | null;
+  }>;
+}
+
 export const marketingApi = {
   buildCampaign: async (input: CampaignBuildInput): Promise<CampaignResult> => {
     const res = await api.post('/marketing/campaigns', input);
@@ -368,5 +422,11 @@ export const marketingApi = {
       meta: payload.meta ?? { current_page: 1, last_page: 1, per_page: 0, total: 0 },
       message: payload.message,
     };
+  },
+
+  campaignStory: async (campaign: string): Promise<CampaignStoryResponse> => {
+    const res = await api.get(`/marketing/campaign/${encodeURIComponent(campaign)}/story`);
+    const payload = (res.data?.data ?? res.data) as CampaignStoryResponse;
+    return payload;
   },
 };

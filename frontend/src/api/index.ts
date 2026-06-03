@@ -26,6 +26,7 @@ export type {
   GtmHostRow,
   GtmTotals,
   GtmCoverageResponse,
+  CampaignStoryResponse,
   TrackingSetup,
   Paginated,
   FunnelStage,

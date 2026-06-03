@@ -573,8 +573,15 @@ function ByCampaignCard({ data, loading }: { data: JourneyStats | undefined; loa
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((row) => (
-              <tr key={row.utm_campaign}>
-                <td className="py-2 text-slate-900">{row.utm_campaign}</td>
+              <tr key={row.utm_campaign} className="hover:bg-slate-50">
+                <td className="py-2 text-slate-900">
+                  <Link
+                    to={`/analytics/campaign/${encodeURIComponent(row.utm_campaign)}`}
+                    className="hover:underline text-indigo-600"
+                  >
+                    {row.utm_campaign}
+                  </Link>
+                </td>
                 <td className="py-2 text-right tabular-nums">{row.journeys.toLocaleString()}</td>
                 <td className="py-2 text-right tabular-nums">{row.conversions.toLocaleString()}</td>
               </tr>

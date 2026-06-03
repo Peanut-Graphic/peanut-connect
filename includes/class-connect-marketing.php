@@ -136,6 +136,14 @@ class Peanut_Connect_Marketing {
             'callback'            => [self::class, 'gtm_coverage'],
             'permission_callback' => $perms,
         ]);
+
+        // Campaign lifecycle story — proxies to Hub's
+        // /api/v1/marketing/campaign/{campaign}/story.
+        register_rest_route($ns, '/marketing/campaign/(?P<campaign>[A-Za-z0-9_.\-]+)/story', [
+            'methods'             => 'GET',
+            'callback'            => [self::class, 'campaign_story'],
+            'permission_callback' => $perms,
+        ]);
     }
 
     public static function check_admin_permission(): bool {
@@ -232,6 +240,11 @@ class Peanut_Connect_Marketing {
 
     public static function gtm_coverage(WP_REST_Request $request) {
         return self::forward('GET', '/marketing/gtm-coverage', null, $request->get_query_params());
+    }
+
+    public static function campaign_story(WP_REST_Request $request) {
+        $campaign = sanitize_text_field((string) $request['campaign']);
+        return self::forward('GET', "/marketing/campaign/{$campaign}/story", null, $request->get_query_params());
     }
 
     // ===== Tracking setup =====
