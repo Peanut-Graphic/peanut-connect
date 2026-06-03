@@ -5,6 +5,13 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.14] - 2026-06-01
+
+### Added
+- **Campaign lifecycle story page inside the plugin** (`End-to-End → Analytics → Top campaigns → click any campaign name` → /analytics/campaign/{name}). Single canonical view bringing together UTMs, sends, journeys, on-site CTA engagement (click_to_portal), conversions, top short links, channel breakdown, and a sample of recent journeys. Mirrors Hub's /analytics/campaign/{name} page. Auto-generated narrative summary at the top.
+- Top Campaigns table on Analytics now links each row to its story page.
+- New REST proxy: `/wp-json/peanut-connect/v1/marketing/campaign/{campaign}/story` → Hub `/api/v1/marketing/campaign/{campaign}/story` (ValidateSiteApiKey middleware, site-scoped).
+
 ## [3.9.13] - 2026-06-02
 
 ### Fixed
