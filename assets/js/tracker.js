@@ -81,6 +81,40 @@
         return match ? match[2] : null;
     }
 
+    // Read click_id from any known cookie. The Hub tracker writes `_pnut_cid`;
+    // this plugin writes the configured `clickIdCookie` (default `peanut_click_id`).
+    // Both are checked so href-rewrite works regardless of which one populated first.
+    function readPersistedClickId() {
+        const cookieNames = ['_pnut_cid'];
+        if (config.clickIdCookie && cookieNames.indexOf(config.clickIdCookie) === -1) {
+            cookieNames.push(config.clickIdCookie);
+        }
+        for (const name of cookieNames) {
+            const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-.+*]/g, '\\$&') + '=([^;]*)'));
+            if (match && match[1]) {
+                try { return decodeURIComponent(match[1]); } catch (e) { return match[1]; }
+            }
+        }
+        return null;
+    }
+
+    // Mutate a CTA link's href to include click_id before the browser navigates.
+    // Runs inside the capture-phase click handler so the rewrite is visible to
+    // the upcoming navigation. Skips tel:/mailto:/javascript:/anchor-only,
+    // and skips links that already carry click_id.
+    function appendClickIdToHref(link) {
+        try {
+            const cid = readPersistedClickId();
+            if (!cid) return;
+            const raw = link.getAttribute('href');
+            if (!raw) return;
+            if (/^(tel:|mailto:|javascript:|#)/i.test(raw)) return;
+            if (/[?&]click_id=/i.test(raw)) return;
+            const sep = raw.indexOf('?') === -1 ? '?' : '&';
+            link.setAttribute('href', raw + sep + 'click_id=' + encodeURIComponent(cid));
+        } catch (e) { /* noop */ }
+    }
+
     // ==========================================
     // CORE TRACKING
     // ==========================================
@@ -247,11 +281,19 @@
             // Track link clicks
             const link = target.closest('a');
             if (link) {
-                const href = link.getAttribute('href');
-                if (!href) return;
-
                 const linkText = getElementText(link);
                 const ctaType = getCtaType(linkText);
+
+                // Forward click_id to primary CTA destinations so attribution
+                // survives the next page-load (same-domain or external). Done
+                // synchronously, before navigation, so the rewritten href is
+                // what the browser follows.
+                if (ctaType === 'primary') {
+                    appendClickIdToHref(link);
+                }
+
+                const href = link.getAttribute('href');
+                if (!href) return;
 
                 // Check if external
                 let isExternal = false;
