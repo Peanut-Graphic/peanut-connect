@@ -22,7 +22,26 @@ class PodcastPublishTest extends TestCase {
             'episode_type' => 'full',
             'pci_transcript' => 1,
             'pci_transcript_url' => 'https://hullabaloo.peanutgraphic.com/podcast/episodes/541/transcript.srt',
+            'pci_chapters' => 1,
+            'pci_chapters_url' => 'https://hullabaloo.peanutgraphic.com/podcast/episodes/541/chapters.json',
         ];
+    }
+
+    public function test_chapters_settings_round_trip_through_powerpress_meta(): void {
+        $meta = Peanut_Connect_API::build_powerpress_enclosure_meta([
+            'url' => 'https://media.example.com/a.mp3',
+            'bytes' => 123,
+            'mime' => 'audio/mpeg',
+            'settings' => $this->settings(),
+        ]);
+
+        $restored = unserialize(explode("\n", $meta)[3]);
+
+        $this->assertSame(1, $restored['pci_chapters']);
+        $this->assertSame(
+            'https://hullabaloo.peanutgraphic.com/podcast/episodes/541/chapters.json',
+            $restored['pci_chapters_url']
+        );
     }
 
     public function test_enclosure_meta_has_four_newline_delimited_fields(): void {
