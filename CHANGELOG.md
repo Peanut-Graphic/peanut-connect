@@ -5,6 +5,20 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.17] - 2026-06-05
+
+### Added
+- **Same-origin GTM Hub Beacon proxy at `/wp-json/peanut-connect/v1/gtm-beacon`.** The route accepts the HMAC-signed JSON body from the GTM Hub Beacon tag and forwards it server-side to `{hub_url}/api/v1/gtm-beacon`. Pass-through — the body is untouched, so the signature stays valid. Fire-and-forget (`wp_remote_post([..., 'blocking' => false])`) so the visitor's browser doesn't wait on the round-trip.
+- Pair the matching GTM tag update: switch `ENDPOINT` from `https://hub.peanutgraphic.com/api/v1/gtm-beacon` to `<%= peanutConnectTracker.restUrl %>/gtm-beacon` when the WP plugin is present (falls back to the direct Hub URL otherwise — e.g. for the IntelliSource portal where peanut-connect isn't installed).
+
+### Why
+Safari's Intelligent Tracking Prevention silently drops cross-origin `sendBeacon` calls. The GTM Hub Beacon posts to `hub.peanutgraphic.com`, which is cross-origin from the WP-hosted client site (`dominionenergyptr.com`). Chrome lets it through; Safari does not. Real impact: every Mac-Safari and iOS visitor was a GTM-beacon blind spot, even though their journey was being captured correctly by the rest of the chain.
+
+Same-origin proxy puts the POST back into first-party territory — ITP allows it without complaint. Sites that *aren't* peanut-connect-equipped (e.g., Comverge-hosted IntelliSource portal) still post direct to Hub; the GTM tag's runtime check detects plugin presence via `window.peanutConnectTracker` and chooses the endpoint accordingly.
+
+### Diagnosed
+Live Safari trace at 18:11 on dominionenergyptr.com (journey #13782, click_id `b9f60d39-…`): server-side journey + 3 tracker events captured cleanly to Hub via the same-origin `/wp-json/peanut-connect/v1/track` endpoint, but zero `gtm_container_loads` rows — the cross-origin GTM beacon was silently dropped. Chrome users + bot traffic land fine (rows 297, 303, 307, 309 all `sig=1`). The chain works everywhere except where Safari sees a third-party POST.
+
 ## [3.9.16] - 2026-06-05
 
 ### Fixed

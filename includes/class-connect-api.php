@@ -610,6 +610,19 @@ class Peanut_Connect_API {
             ],
         ]);
 
+        // GTM Hub Beacon — same-origin proxy to Hub's signed-beacon endpoint.
+        // The GTM tag posts the (HMAC-signed) payload here instead of directly
+        // to hub.peanutgraphic.com, which Safari's Intelligent Tracking
+        // Prevention blocks as a cross-site sendBeacon. We forward server-side
+        // so Safari sees only a first-party POST. Body is passed through
+        // unmodified — the signature is computed over the JSON the GTM tag
+        // produced, so any mutation here would break HMAC verification.
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/gtm-beacon', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'proxy_gtm_beacon'],
+            'permission_callback' => '__return_true',
+        ]);
+
         // Identify visitor (attach email/name)
         register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/identify', [
             'methods' => WP_REST_Server::CREATABLE,
@@ -1769,6 +1782,35 @@ class Peanut_Connect_API {
             'success' => true,
             'event_id' => $event_id,
         ], 201);
+    }
+
+    /**
+     * Forward an HMAC-signed GTM beacon payload to Hub. Pass-through proxy —
+     * the request body is the JSON the GTM tag built and signed; mutating it
+     * here would invalidate the signature. Fire-and-forget so the browser
+     * doesn't wait on the round-trip. Returns 204 regardless (mirrors Hub).
+     */
+    public function proxy_gtm_beacon(WP_REST_Request $request): WP_REST_Response {
+        $hub_url = get_option('peanut_connect_hub_url');
+        if (empty($hub_url)) {
+            // Not paired with a Hub yet — silently drop, same shape as Hub.
+            return new WP_REST_Response(null, 204);
+        }
+
+        $endpoint = rtrim($hub_url, '/') . '/api/v1/gtm-beacon';
+        $body = $request->get_body();
+
+        if (is_string($body) && $body !== '') {
+            wp_remote_post($endpoint, [
+                'method' => 'POST',
+                'headers' => ['Content-Type' => 'application/json'],
+                'body' => $body,
+                'timeout' => 3,
+                'blocking' => false,
+            ]);
+        }
+
+        return new WP_REST_Response(null, 204);
     }
 
     /**
