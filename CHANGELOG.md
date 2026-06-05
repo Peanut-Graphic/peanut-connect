@@ -5,6 +5,12 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.16] - 2026-06-05
+
+### Fixed
+- **CTA href-rewrite now places `click_id` BEFORE the hash, not after.** 3.9.15 appended `?click_id=<x>` blindly to the end of the href, so a link like `/ptr/residential/#validation` became `/ptr/residential/#validation?click_id=<x>` — which browsers interpret as a hash fragment (`location.search` ends up empty, and the GTM beacon's URL parser can't recover the click_id from `location.hash`). The rewrite now splits the href on `#` first, appends the query to the path/query portion, then re-appends the hash. Net result: `/ptr/residential/?click_id=<x>#validation` — `location.search` is populated, and the beacon picks it up cleanly.
+- Caught immediately after 3.9.15 ship via a live Dominion PTR funnel trace. 3.9.15 still mostly worked because the GTM beacon's `_pnut_cid` cookie fallback (fix #1) covered the same-domain case; the bug was visible on external-domain CTAs where cookies cannot follow.
+
 ## [3.9.15] - 2026-06-05
 
 ### Fixed

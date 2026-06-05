@@ -109,9 +109,17 @@
             const raw = link.getAttribute('href');
             if (!raw) return;
             if (/^(tel:|mailto:|javascript:|#)/i.test(raw)) return;
-            if (/[?&]click_id=/i.test(raw)) return;
-            const sep = raw.indexOf('?') === -1 ? '?' : '&';
-            link.setAttribute('href', raw + sep + 'click_id=' + encodeURIComponent(cid));
+            // Split off any hash fragment FIRST. The query string belongs
+            // before the hash — e.g. /foo/?click_id=X#validation, never
+            // /foo/#validation?click_id=X (browsers treat the latter as a
+            // fragment, so location.search ends up empty downstream and the
+            // GTM beacon's URL parser can't recover the click_id).
+            const hashIdx = raw.indexOf('#');
+            const baseAndQuery = hashIdx === -1 ? raw : raw.substring(0, hashIdx);
+            const hash = hashIdx === -1 ? '' : raw.substring(hashIdx);
+            if (/[?&]click_id=/i.test(baseAndQuery)) return;
+            const sep = baseAndQuery.indexOf('?') === -1 ? '?' : '&';
+            link.setAttribute('href', baseAndQuery + sep + 'click_id=' + encodeURIComponent(cid) + hash);
         } catch (e) { /* noop */ }
     }
 
