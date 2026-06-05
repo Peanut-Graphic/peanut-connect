@@ -5,6 +5,18 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] - 2026-06-05
+
+### Added
+- **Podcast publish: slug, SEO meta description, and chapters.** `publish_podcast_episode()` (`/podcast/publish`) now applies, for **both** live publishes and drafts:
+  - `slug` → the post's `post_name` (`sanitize_title`), only when provided (never clobbers an existing slug with an empty value),
+  - `meta_description` → Yoast `_yoast_wpseo_metadesc` (`sanitize_text_field`), only when provided,
+  - `pci_chapters_url` → PowerPress per-episode chapters meta (`pci_chapters` + `pci_chapters_url` in the enclosure settings), mirroring the existing `pci_transcript_url` write.
+- No DB schema change. Status handling (`publish`/`draft`/`pending`/`private`) is unchanged — the draft path already worked; this makes drafts carry slug/meta/chapters too.
+
+### Why
+Pairs with the Hullabaloo change that sends `slug` + `meta_description` + `pci_chapters_url` in the publish payload, so new episodes (and review drafts) land on WordPress with their permalink, SEO description, and Podcasting 2.0 chapters set automatically instead of by hand.
+
 ## [3.9.17] - 2026-06-05
 
 ### Added

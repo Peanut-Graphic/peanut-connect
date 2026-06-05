@@ -2132,6 +2132,8 @@ class Peanut_Connect_API {
             'feed_title' => sanitize_text_field($p['episode_title'] ?? $p['title']),
             'pci_transcript' => ! empty($p['pci_transcript_url']) ? 1 : 0,
             'pci_transcript_url' => esc_url_raw($p['pci_transcript_url'] ?? ''),
+            'pci_chapters' => ! empty($p['pci_chapters_url']) ? 1 : 0,
+            'pci_chapters_url' => esc_url_raw($p['pci_chapters_url'] ?? ''),
             'podcast_id' => '',
         ];
         $enclosure_meta = self::build_powerpress_enclosure_meta([
@@ -2171,6 +2173,16 @@ class Peanut_Connect_API {
 
         update_post_meta($post_id, 'enclosure', $enclosure_meta);
         update_post_meta($post_id, 'peanut_episode_guid', $guid);
+
+        // Apply slug + SEO meta regardless of post status, so drafts get them
+        // too. Only set when provided — never clobber an existing value with an
+        // empty payload field (older Hullabaloo releases omit these).
+        if (! empty($p['slug'])) {
+            wp_update_post(['ID' => $post_id, 'post_name' => sanitize_title($p['slug'])]);
+        }
+        if (! empty($p['meta_description'])) {
+            update_post_meta($post_id, '_yoast_wpseo_metadesc', sanitize_text_field($p['meta_description']));
+        }
 
         if (class_exists('Peanut_Connect_Activity_Log')) {
             Peanut_Connect_Activity_Log::log('podcast_published', 'success', sanitize_text_field($p['title']), [
