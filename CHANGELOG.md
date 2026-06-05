@@ -5,6 +5,16 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.15] - 2026-06-05
+
+### Fixed
+- **`click_id` now survives the next page-load on primary CTA clicks.** The frontend tracker's `trackSmartClicks()` handler previously only *recorded* link clicks. It now also mutates the link's `href` synchronously, before the browser navigates, to append `?click_id=<persisted>` whenever the link looks like a primary CTA (Enroll / Apply / Register / Sign-up / Get-started / etc.). Same-domain hops keep attribution alive on the next page's GTM beacon; external hops to enrollment portals (e.g. IntelliSource) now carry the click_id across the domain boundary, where cookies cannot follow. Skips `tel:` / `mailto:` / `javascript:` / pure-anchor links, and links that already include `click_id`.
+- **Tracker reads `_pnut_cid` cookie as a click_id fallback.** Hub's `tracker.min.js` writes `_pnut_cid` for every click-through; until now this plugin only read its own `peanut_click_id` cookie, which was rarely populated (the plugin's URL parser requires a strict UUID format, while Hub's tracker is more permissive). The new `readPersistedClickId()` helper checks `_pnut_cid` first, then the configured cookie, so href-rewrite works regardless of which tracker populated first.
+
+### Notes
+- Pair with the matching GTM Hub Beacon tag update (`getCookie('_pnut_cid')` fallback in both `GTM-P7J36DKC` and `GTM-KG937MGX`) so beacons captured on validation/portal pages also recover the click_id when the URL has none.
+- This release was driven by a Dominion Peak Time Rebates funnel trace: Enroll Now (`<a href>`) drops URL params, the validation SPA never forwards `click_id` to its `/api/prospect/validate` call, and the Comverge-built IntelliSource redirect cannot carry an attribution token that the server was never told about. Fix is upstream of all three.
+
 ## [3.9.14] - 2026-06-01
 
 ### Added
