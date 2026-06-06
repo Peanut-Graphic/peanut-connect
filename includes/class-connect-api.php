@@ -125,6 +125,25 @@ class Peanut_Connect_API {
             ],
         ]);
 
+        // Podcast transcript backfill — read index of existing episode posts.
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/podcast/episodes-index', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'get_episodes_index'],
+            'permission_callback' => Peanut_Connect_Auth::hub_permission_callback_for('publish_content'),
+        ]);
+
+        // Podcast transcript backfill — augment an EXISTING post (by id) with a
+        // transcript block + meta, non-destructively (never touches slug/title/
+        // prose; replaces only inside HB-TRANSCRIPT markers).
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/podcast/augment', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'augment_podcast_episode'],
+            'permission_callback' => Peanut_Connect_Auth::hub_permission_callback_for('publish_content'),
+            'args' => [
+                'wp_post_id' => ['required' => true, 'type' => 'integer'],
+            ],
+        ]);
+
         // Admin health endpoint (no Bearer token required)
         register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/admin/health', [
             'methods' => WP_REST_Server::READABLE,
@@ -2197,6 +2216,92 @@ class Peanut_Connect_API {
             'permalink' => get_permalink($post_id),
             'guid' => $guid,
             'action' => $action,
+        ]], 200);
+    }
+
+    /**
+     * Read-only index of published posts that have a PowerPress audio enclosure,
+     * as { id, enclosure_url, slug }. Used by the Hullabaloo backfill to match
+     * episodes to posts by audio filename. The archive is ~500 posts — no cap.
+     */
+    public function get_episodes_index(WP_REST_Request $request): WP_REST_Response {
+        $ids = get_posts([
+            'post_type' => 'post',
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'meta_key' => 'enclosure',
+            'fields' => 'ids',
+        ]);
+
+        $out = [];
+        foreach ($ids as $pid) {
+            $enclosure = (string) get_post_meta($pid, 'enclosure', true);
+            $url = trim((string) strtok($enclosure, "\n")); // enclosure = "URL\nLEN\nMIME\n{serialized}"
+            if ($url === '') {
+                continue;
+            }
+            $out[] = [
+                'id' => (int) $pid,
+                'enclosure_url' => $url,
+                'slug' => (string) get_post_field('post_name', $pid),
+            ];
+        }
+
+        return new WP_REST_Response(['episodes' => $out], 200);
+    }
+
+    /**
+     * Augment an EXISTING post (by id) with a readable transcript block + SEO
+     * meta + PowerPress transcript/chapters URLs, without touching slug, title,
+     * date, status, or any body content outside the HB-TRANSCRIPT markers.
+     * Idempotent — re-runs replace the marker block in place.
+     *
+     * Payload: { wp_post_id, transcript_html, meta_description,
+     *            pci_transcript_url, pci_chapters_url }
+     */
+    public function augment_podcast_episode(WP_REST_Request $request): WP_REST_Response {
+        $p = $request->get_json_params();
+        $post_id = isset($p['wp_post_id']) ? (int) $p['wp_post_id'] : 0;
+
+        $post = $post_id ? get_post($post_id) : null;
+        if (! $post || $post->post_type !== 'post') {
+            return new WP_REST_Response(['ok' => false, 'error' => 'post_not_found', 'wp_post_id' => $post_id], 404);
+        }
+
+        // 1) Transcript block in the body — append/replace inside markers only.
+        if (! empty($p['transcript_html'])) {
+            $new_content = pc_apply_transcript_block($post->post_content, (string) $p['transcript_html']);
+            if ($new_content !== $post->post_content) {
+                wp_update_post(['ID' => $post_id, 'post_content' => $new_content]); // ID + content ONLY
+            }
+        }
+
+        // 2) Yoast SEO meta description.
+        if (! empty($p['meta_description'])) {
+            update_post_meta($post_id, '_yoast_wpseo_metadesc', sanitize_text_field((string) $p['meta_description']));
+        }
+
+        // 3) PowerPress transcript + chapters URLs — merge into existing enclosure.
+        $transcript_url = ! empty($p['pci_transcript_url']) ? esc_url_raw((string) $p['pci_transcript_url']) : '';
+        $chapters_url = ! empty($p['pci_chapters_url']) ? esc_url_raw((string) $p['pci_chapters_url']) : '';
+        if ($transcript_url !== '' || $chapters_url !== '') {
+            $enclosure = (string) get_post_meta($post_id, 'enclosure', true);
+            if ($enclosure !== '') {
+                $merged = pc_merge_powerpress_episode_urls($enclosure, $transcript_url, $chapters_url);
+                if ($merged !== $enclosure) {
+                    update_post_meta($post_id, 'enclosure', $merged);
+                }
+            }
+        }
+
+        clean_post_cache($post_id);
+
+        $content_now = (string) get_post_field('post_content', $post_id);
+
+        return new WP_REST_Response(['ok' => true, 'data' => [
+            'wp_post_id' => $post_id,
+            'edit_url' => get_edit_post_link($post_id, 'raw'),
+            'has_marker' => strpos($content_now, 'HB-TRANSCRIPT:start') !== false,
         ]], 200);
     }
 

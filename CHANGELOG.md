@@ -5,6 +5,16 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.0] - 2026-06-05
+
+### Added
+- **Podcast transcript backfill endpoints** (pairs with the Hullabaloo `podcast:backfill-wordpress` command):
+  - `GET /podcast/episodes-index` — read-only list of published posts with a PowerPress enclosure, as `{ id, enclosure_url, slug }`, so Hullabaloo can match episodes to posts by audio filename.
+  - `POST /podcast/augment` — augments an **existing** post (by `wp_post_id`) with a readable transcript block + Yoast meta + PowerPress transcript/chapters URLs, **non-destructively**: the transcript lives inside `<!-- HB-TRANSCRIPT:start/end -->` markers (re-runs replace in place, never duplicate), and slug, title, date, status, and all body content outside the markers are never touched.
+  - Both use the same `publish_content` Hub permission as `/podcast/publish` (same Bearer token).
+- New helper `includes/helpers/transcript-block.php` (`pc_apply_transcript_block`, `pc_merge_powerpress_episode_urls`) with unit tests.
+- No DB schema change.
+
 ## [3.10.0] - 2026-06-05
 
 ### Added
