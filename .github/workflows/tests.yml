@@ -1,0 +1,45 @@
+# PHP backend tests + coverage gate.
+# Added in Wave 1 of the ecosystem testing scrub — the backend had no PHP CI
+# (only frontend accessibility). Follows
+# DOCUMENTATION/testing-standard/ci-templates/php-plugin-tests.yml.
+name: tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  php-tests:
+    runs-on: ubuntu-latest
+    env:
+      MIN_COVERAGE: "40"   # ratchet up after first green run
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP (pcov for coverage)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          coverage: pcov
+          tools: composer
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Unit tests + coverage (mock-WP bootstrap, no DB)
+        run: vendor/bin/phpunit --testsuite=Unit --coverage-clover=coverage/clover.xml
+
+      - name: Coverage gate
+        run: php "${{ github.workspace }}/coverage-gate.php" coverage/clover.xml "$MIN_COVERAGE"
+
+      - name: Integration tests (non-blocking — needs WP test library)
+        continue-on-error: true
+        run: vendor/bin/phpunit --testsuite=Integration --bootstrap tests/bootstrap.php
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-coverage
+          path: coverage/

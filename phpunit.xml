@@ -1,33 +1,46 @@
-<?xml version="1.0"?>
-<phpunit
-	bootstrap="tests/bootstrap.php"
-	backupGlobals="false"
-	colors="true"
-	convertErrorsToExceptions="true"
-	convertNoticesToExceptions="true"
-	convertWarningsToExceptions="true"
->
-	<testsuites>
-		<testsuite name="Peanut Connect Test Suite">
-			<directory prefix="test-" suffix=".php">./tests/</directory>
-			<!-- 3.9.4: also discover files named Test_Foo.php (matching
-			     their class name) so PHPUnit 10's strict file/class
-			     matcher can find them. The existing test-foo.php files
-			     silently don't run because of the same mismatch — that's
-			     a separate cleanup. -->
-			<directory prefix="Test_" suffix=".php">./tests/</directory>
-		</testsuite>
-	</testsuites>
-	<filter>
-		<whitelist processUncoveredFilesFromWhitelist="true">
-			<directory suffix=".php">./includes/</directory>
-			<exclude>
-				<directory suffix=".php">./vendor/</directory>
-				<directory suffix=".php">./node_modules/</directory>
-			</exclude>
-		</whitelist>
-	</filter>
-	<php>
-		<const name="PEANUT_CONNECT_TEST_MODE" value="true"/>
-	</php>
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PHPUnit 10 configuration (composer requires phpunit ^10).
+
+  Fixed in Wave 1 of the ecosystem testing scrub:
+    - Old <filter><whitelist> + convert* attrs are invalid in PHPUnit 10 ->
+      replaced with <source>.
+    - The old single testsuite (prefix=test-, then a bolted-on prefix=Test_)
+      conflated two different test sets that need different bootstraps:
+        * tests/phpunit/unit/*Test.php  - self-contained UNIT tests (167
+          methods) using the mock-WordPress bootstrap; no DB needed. This is
+          the gated suite.
+        * tests/Test_*.php              - INTEGRATION tests extending
+          Peanut_Connect_TestCase, needing the real WP test library
+          (WP_TESTS_DIR) via tests/bootstrap.php. Run non-blocking in CI with
+          their own bootstrap until that infra is wired.
+  See DOCUMENTATION/testing-standard/ for the shared standard this follows.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/phpunit/bootstrap.php"
+         colors="true"
+         failOnWarning="false"
+         failOnRisky="false"
+         cacheDirectory=".phpunit.cache">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/phpunit/unit</directory>
+        </testsuite>
+        <testsuite name="Integration">
+            <!-- top-level Test_*.php; CI overrides bootstrap for these -->
+            <directory prefix="Test_" suffix=".php">tests</directory>
+        </testsuite>
+    </testsuites>
+
+    <!-- Coverage source (replaces the removed <whitelist>). -->
+    <source>
+        <include>
+            <directory suffix=".php">includes</directory>
+        </include>
+    </source>
+
+    <php>
+        <const name="PEANUT_CONNECT_TEST_MODE" value="true"/>
+    </php>
 </phpunit>
