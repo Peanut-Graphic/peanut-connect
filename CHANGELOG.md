@@ -5,6 +5,12 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.2] - 2026-06-07
+
+### Security
+- **`/restore` now verifies archive authenticity before restoring (fixes an authenticated RCE).** The endpoint downloaded a ZIP and executed its SQL dump + copied its files over `wp-content` (including `.php`), gated only by the Hub bearer and a host check on the URL. A bearer leak (or a repointed `hub_url`) therefore allowed remote code execution by restoring a crafted archive. `restore_backup()` now checks the downloaded archive against a SHA-256 allowlist of archives this site actually created (recorded at `create_backup()` time) and refuses anything not on it — so a malicious archive is rejected before any extraction or SQL runs, even if the bearer leaks. Pre-existing local backups are seeded into the allowlist once on upgrade so legitimate rollbacks keep working.
+- **Zip-slip hardening on restore.** The file copy during restore now refuses to write outside `wp-content`, defending against path-traversal/symlink entries in an archive.
+
 ## [3.11.1] - 2026-06-07
 
 ### Fixed
