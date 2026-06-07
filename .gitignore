@@ -31,6 +31,7 @@ npm-debug.log*
 # Test coverage
 tests/coverage/
 frontend/coverage/
+/coverage/
 .phpunit.cache/
 
 # Composer

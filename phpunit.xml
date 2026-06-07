@@ -3,30 +3,45 @@
 	bootstrap="tests/bootstrap.php"
 	backupGlobals="false"
 	colors="true"
-	convertErrorsToExceptions="true"
-	convertNoticesToExceptions="true"
-	convertWarningsToExceptions="true"
 >
 	<testsuites>
-		<testsuite name="Peanut Connect Test Suite">
+		<!-- Default suite: every test, the historical behaviour, plus the new
+		     property/contract layers. NOTE: tests/phpunit/unit/*Test.php is a
+		     large dormant suite (189 failures — needs WP fn mocks like
+		     shortcode_atts() that the bootstrap doesn't define). It was never
+		     run historically because the globs below only match the test-/Test_
+		     prefixes, and it is deliberately NOT wired in here — tracked as a
+		     pre-existing gap, not regressed by this branch. -->
+		<!-- Net 1/unit: the mock-backed unit tests that actually run today.
+		     This is also the historical default set (the root test-/Test_
+		     prefixed files). Named "Unit" so CI can target it explicitly;
+		     no other suite overlaps it, so a bare `phpunit` run never
+		     double-counts. -->
+		<testsuite name="Unit">
 			<directory prefix="test-" suffix=".php">./tests/</directory>
 			<!-- 3.9.4: also discover files named Test_Foo.php (matching
 			     their class name) so PHPUnit 10's strict file/class
-			     matcher can find them. The existing test-foo.php files
-			     silently don't run because of the same mismatch — that's
-			     a separate cleanup. -->
+			     matcher can find them. -->
 			<directory prefix="Test_" suffix=".php">./tests/</directory>
 		</testsuite>
+		<!-- Net 6: property-based / fuzz tests over pure functions. -->
+		<testsuite name="Property">
+			<directory suffix="Test.php">./tests/Property/</directory>
+		</testsuite>
+		<!-- Net 7: seam contracts. Empty until a WP harness can boot. -->
+		<testsuite name="Contract">
+			<directory suffix="Test.php">./tests/Contract/</directory>
+		</testsuite>
 	</testsuites>
-	<filter>
-		<whitelist processUncoveredFilesFromWhitelist="true">
+	<source>
+		<include>
 			<directory suffix=".php">./includes/</directory>
-			<exclude>
-				<directory suffix=".php">./vendor/</directory>
-				<directory suffix=".php">./node_modules/</directory>
-			</exclude>
-		</whitelist>
-	</filter>
+		</include>
+		<exclude>
+			<directory suffix=".php">./vendor/</directory>
+			<directory suffix=".php">./node_modules/</directory>
+		</exclude>
+	</source>
 	<php>
 		<const name="PEANUT_CONNECT_TEST_MODE" value="true"/>
 	</php>
