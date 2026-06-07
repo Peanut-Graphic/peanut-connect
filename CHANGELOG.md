@@ -5,6 +5,18 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.1] - 2026-06-07
+
+### Fixed
+- **`/wp-json/peanut-connect/v1/track` now propagates `click_id` from the request body.** The browser tracker has been sending `click_id` on every event since 3.7.0, but the REST endpoint never extracted it — events fell back to `Peanut_Connect_Tracker::get_click_id()` server-side, which only reads `$_GET['click_id']` (absent on POSTs to `/wp-json/...`) and the plugin's `peanut_click_id` cookie. The Hub sync filter is `WHERE click_id IS NOT NULL AND click_id != ''`, so any event from a page whose cookie didn't get set in time landed with NULL click_id and was silently dropped from Hub. Result: in 7 days on dominionenergyptr.com, Hub journey_events captured 12,298 page_views but **zero** browser-side `click` events and **zero** `click_to_portal` (Hub funnel "Clicked enroll" stage) events — even though the tracker was firing them correctly all along.
+- **`get_click_id()` now also reads Hub's `_pnut_cid` cookie.** Hub's `tracker.min.js` writes `_pnut_cid` on every click-through. This plugin's own `tracker.js` only sets `peanut_click_id` when the URL click_id matches a strict UUID regex, so on sites where the campaign URL flows through Hub's tracker first, server-side recovery had no cookie to read. Both cookies are now checked (strict UUID validation preserved).
+
+### Impact
+On dominionenergyptr.com specifically, this restores end-to-end visibility of the **middle stage of the conversion funnel** (Enroll Now clicks). Combined with 3.9.16 (`click_id` href forwarding) and 3.9.17 (Safari ITP bypass via same-origin GTM beacon proxy), the only remaining funnel gap on the WordPress side is the IntelliSource portal hop itself — which is Comverge-hosted and needs vendor cooperation or a separate same-origin endpoint there.
+
+### Diagnosed
+Live trace 2026-06-07: synthesized an "Enroll Now" click against the live site with the browser tracker patched to log all outbound POSTs. Saw the tracker fire two `sendBeacon` calls to `/wp-json/peanut-connect/v1/track` (one `click`, one `custom`/`click_to_portal`). Hub showed zero matching events. Traced the swallow to `track_event()` rebuilding `$data` without `click_id`, plus the Hub sync's click_id WHERE clause filtering NULL-click_id rows out before they reached the network.
+
 ## [3.11.0] - 2026-06-05
 
 ### Added
