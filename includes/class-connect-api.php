@@ -1793,6 +1793,17 @@ class Peanut_Connect_API {
             'page_title' => $request->get_param('page_title'),
             'referrer'   => $request->get_param('referrer'),
             'metadata'   => $request->get_param('metadata'),
+            // 3.11.1: propagate click_id from the request body. The browser
+            // tracker sends it on every event; previously this endpoint
+            // dropped it and forced record_event() to rebuild it from
+            // server-side $_COOKIE['peanut_click_id']. That cookie is only
+            // populated when the URL click_id matches the strict UUID regex
+            // — so any event from a page whose cookie didn't get set landed
+            // with NULL click_id, and the Hub sync (which only ships rows
+            // WHERE click_id IS NOT NULL) dropped it silently. Result: zero
+            // browser-side click / click_to_portal events reached Hub for
+            // sites whose visitors hit non-UUID landing URLs.
+            'click_id'   => $request->get_param('click_id'),
         ];
 
         $event_id = Peanut_Connect_Tracker::record_event($visitor_id, $event_type, $data);

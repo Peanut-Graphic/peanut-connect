@@ -414,12 +414,22 @@ class Peanut_Connect_Tracker {
             }
         }
 
-        // Check cookie (subsequent pageviews in same journey)
-        if (isset($_COOKIE[self::CLICK_ID_COOKIE])) {
-            $click_id = sanitize_text_field($_COOKIE[self::CLICK_ID_COOKIE]);
-            if (preg_match('/^[a-f0-9\-]{36}$/i', $click_id)) {
-                self::$click_id = $click_id;
-                return self::$click_id;
+        // Check cookie (subsequent pageviews in same journey). Two cookie
+        // names are checked: this plugin's own (CLICK_ID_COOKIE, default
+        // `peanut_click_id`) and Hub's separate tracker.min.js cookie
+        // `_pnut_cid`. Hub's tracker writes _pnut_cid on every click-
+        // through but historically this plugin only read its own cookie —
+        // so on sites where tracker.min.js set the cookie before this
+        // plugin's tracker.js had a chance to, server-side click_id
+        // recovery silently failed.
+        $cookie_names = [self::CLICK_ID_COOKIE, '_pnut_cid'];
+        foreach ($cookie_names as $name) {
+            if (isset($_COOKIE[$name])) {
+                $click_id = sanitize_text_field($_COOKIE[$name]);
+                if (preg_match('/^[a-f0-9\-]{36}$/i', $click_id)) {
+                    self::$click_id = $click_id;
+                    return self::$click_id;
+                }
             }
         }
 
