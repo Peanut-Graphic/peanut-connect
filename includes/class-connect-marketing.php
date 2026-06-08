@@ -251,23 +251,25 @@ class Peanut_Connect_Marketing {
 
     public static function tracking_setup(): WP_REST_Response {
         $hub_url = (string) get_option('peanut_connect_hub_url', '');
-        $api_key = (string) get_option('peanut_connect_hub_api_key', '');
-        $has_key = $api_key !== '';
+        $connected = $hub_url !== '' && get_option('peanut_connect_hub_api_key', '') !== '';
+        // The tracker snippet uses the PUBLIC tracker_key (delivered by Hub on
+        // heartbeat), never the Hub bearer. The bearer authorises /restore,
+        // /update, banner, etc., so it must never be returned to the browser or
+        // embedded in public page HTML.
+        $tracker_key = (string) get_option('peanut_connect_tracker_key', '');
 
         return new WP_REST_Response([
             'success' => true,
             'data'    => [
-                'connected'        => $hub_url !== '' && $has_key,
+                'connected'        => $connected,
                 'hub_url'          => $hub_url,
                 'tracker_js'       => $hub_url !== '' ? trailingslashit($hub_url) . 'js/tracker.min.js' : '',
-                // Unmasked: the site key is embedded in the public tracker
-                // snippet anyway, so masking it in this admin-only endpoint
-                // adds no security but breaks the copyable snippet.
-                'site_key'         => $api_key,
-                // Masked variant for UI display ("Site Identity" card on the
-                // Tracking page) where we want to confirm the key is set
-                // without surfacing the value mid-screen.
+                // Public tracker identifier — safe to embed in the snippet.
+                'site_key'         => $tracker_key,
                 'site_key_masked'  => self::masked_key(),
+                // false until JS tracking is enabled for this site in Hub (then
+                // Hub starts sending the tracker_key on heartbeat).
+                'tracker_ready'    => $tracker_key !== '',
             ],
         ], 200);
     }
@@ -344,10 +346,10 @@ class Peanut_Connect_Marketing {
     }
 
     /**
-     * Return a masked version of the saved API key for display.
+     * Return a masked version of the public tracker key for display.
      */
     private static function masked_key(): string {
-        $key = (string) get_option('peanut_connect_hub_api_key', '');
+        $key = (string) get_option('peanut_connect_tracker_key', '');
         if ($key === '') {
             return '';
         }
