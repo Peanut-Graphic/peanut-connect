@@ -160,31 +160,81 @@ class Peanut_Connect_Rate_Limiter {
      * @return string|null Client IP address or null if not determinable
      */
     private static function get_client_ip(): ?string {
-        $headers = [
-            'HTTP_CF_CONNECTING_IP',     // Cloudflare
-            'HTTP_X_FORWARDED_FOR',      // Standard proxy header
-            'HTTP_X_REAL_IP',            // Nginx proxy
-            'REMOTE_ADDR',               // Direct connection
-        ];
+        $remote = isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : '';
 
-        foreach ($headers as $header) {
-            if (!empty($_SERVER[$header])) {
-                $ip = $_SERVER[$header];
-
-                // X-Forwarded-For can contain multiple IPs, get the first one
-                if (strpos($ip, ',') !== false) {
-                    $ips = explode(',', $ip);
-                    $ip = trim($ips[0]);
+        // Forwarded headers (CF-Connecting-IP / X-Forwarded-For / X-Real-IP) are
+        // attacker-controllable and must NOT be trusted unless the direct TCP
+        // peer is a known proxy/CDN — otherwise a client rotates them per request
+        // to defeat the auth-endpoint rate limit and pollute per-IP buckets.
+        // Default: use REMOTE_ADDR (the real peer). Sites genuinely behind
+        // Cloudflare/an LB opt in via `peanut_connect_trusted_proxies` (a list of
+        // IPs or CIDRs); only then are the forwarded headers honoured.
+        $trusted = apply_filters('peanut_connect_trusted_proxies', []);
+        if ($remote !== '' && is_array($trusted) && self::ip_matches_any($remote, $trusted)) {
+            foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR'] as $header) {
+                if (empty($_SERVER[$header])) {
+                    continue;
                 }
-
-                // Validate IP format
+                // X-Forwarded-For may be a list; the left-most is the client.
+                $ip = trim(explode(',', (string) $_SERVER[$header])[0]);
                 if (filter_var($ip, FILTER_VALIDATE_IP)) {
                     return $ip;
                 }
             }
         }
 
-        return null;
+        return ($remote !== '' && filter_var($remote, FILTER_VALIDATE_IP)) ? $remote : null;
+    }
+
+    /**
+     * Whether an IP matches any entry in a list of plain IPs or CIDR ranges.
+     */
+    private static function ip_matches_any(string $ip, array $list): bool {
+        foreach ($list as $entry) {
+            $entry = trim((string) $entry);
+            if ($entry === '') {
+                continue;
+            }
+            if (strpos($entry, '/') === false) {
+                if ($ip === $entry) {
+                    return true;
+                }
+                continue;
+            }
+            if (self::ip_in_cidr($ip, $entry)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * IPv4/IPv6 CIDR containment check (binary, family-aware).
+     */
+    private static function ip_in_cidr(string $ip, string $cidr): bool {
+        $parts = explode('/', $cidr, 2);
+        if (count($parts) !== 2) {
+            return false;
+        }
+        [$subnet, $bits] = $parts;
+        $bits = (int) $bits;
+        $ip_bin = @inet_pton($ip);
+        $subnet_bin = @inet_pton($subnet);
+        if ($ip_bin === false || $subnet_bin === false
+            || strlen($ip_bin) !== strlen($subnet_bin)
+            || $bits < 0 || $bits > strlen($ip_bin) * 8) {
+            return false;
+        }
+        $whole = intdiv($bits, 8);
+        $rem = $bits % 8;
+        if ($whole > 0 && strncmp($ip_bin, $subnet_bin, $whole) !== 0) {
+            return false;
+        }
+        if ($rem === 0) {
+            return true;
+        }
+        $mask = chr((0xff << (8 - $rem)) & 0xff);
+        return (ord($ip_bin[$whole]) & ord($mask)) === (ord($subnet_bin[$whole]) & ord($mask));
     }
 
     /**

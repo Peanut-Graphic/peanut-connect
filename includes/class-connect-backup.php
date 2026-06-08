@@ -23,13 +23,20 @@ class Peanut_Connect_Backup {
         $backup_dir = WP_CONTENT_DIR . '/peanut-backups';
         if (!file_exists($backup_dir)) {
             wp_mkdir_p($backup_dir);
-            // Add .htaccess to prevent direct access
-            file_put_contents($backup_dir . '/.htaccess', 'deny from all');
         }
+        // Harden the directory on every run (self-heals, and covers dirs created
+        // before this hardening). The archive holds the full DB — incl. user
+        // hashes + secret keys — plus wp-content, so it must not be web-fetchable.
+        self::harden_backup_dir($backup_dir);
 
         $timestamp = date('Y-m-d-His');
         $site_slug = sanitize_title(get_bloginfo('name'));
-        $backup_name = "{$site_slug}-{$timestamp}";
+        // Unguessable token: on nginx/LiteSpeed/Caddy the .htaccess deny is
+        // ignored, so a predictable {slug}-{timestamp} name (1-second
+        // granularity) is brute-forceable. The token makes the URL unguessable
+        // regardless of server, which is the real protection.
+        $token = wp_generate_password(20, false, false);
+        $backup_name = "{$site_slug}-{$timestamp}-{$token}";
         $backup_path = "{$backup_dir}/{$backup_name}";
 
         // 1. Export database
@@ -462,6 +469,35 @@ class Peanut_Connect_Backup {
             }
         }
         update_option('peanut_connect_known_backups_seeded', 1, false);
+    }
+
+    /**
+     * Write deny rules into the backup directory for the common servers, plus an
+     * index.php so the listing can't be browsed. Idempotent; nginx/LiteSpeed
+     * ignore .htaccess (the unguessable filename token covers those).
+     *
+     * @param string $dir Backup directory path.
+     */
+    private static function harden_backup_dir(string $dir): void {
+        if (!is_dir($dir)) {
+            return;
+        }
+        if (!file_exists($dir . '/.htaccess')) {
+            file_put_contents(
+                $dir . '/.htaccess',
+                "Deny from all\n<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n"
+            );
+        }
+        if (!file_exists($dir . '/index.php')) {
+            file_put_contents($dir . '/index.php', "<?php // Silence is golden.\n");
+        }
+        if (!file_exists($dir . '/web.config')) {
+            file_put_contents(
+                $dir . '/web.config',
+                "<configuration><system.webServer><authorization>"
+                . "<deny users=\"*\" /></authorization></system.webServer></configuration>\n"
+            );
+        }
     }
 
     /**

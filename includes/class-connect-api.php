@@ -983,6 +983,19 @@ class Peanut_Connect_API {
             ], 400);
         }
 
+        // SSRF guard: the freshly generated key is POSTed to this host below, so
+        // reject internal/metadata/RFC1918 targets (parity with the guard on
+        // update_hub_settings; the v3.7.21 hardening missed this entry point).
+        $host = strtolower((string) wp_parse_url($hub_url, PHP_URL_HOST));
+        $scheme = strtolower((string) wp_parse_url($hub_url, PHP_URL_SCHEME));
+        if (!self::is_safe_hub_host($host, $scheme)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'code' => 'peanut_connect_hub_url_invalid',
+                'message' => __('Hub URL must be a public HTTPS host.', 'peanut-connect'),
+            ], 400);
+        }
+
         // Generate a random 64-character API key
         $api_key = wp_generate_password(64, false, false);
 
@@ -1038,19 +1051,13 @@ class Peanut_Connect_API {
             ], $status_code);
         }
 
-        // Check for success
-        // Debug logging
-        error_log('Peanut Connect: Hub response status=' . $status_code . ', success=' . ($body['success'] ?? 'null'));
-
+        // Check for success. (No debug error_log of hub_url / key material —
+        // shared-host error logs are frequently world-readable and the Hub
+        // bearer is long-lived; logging it or its metadata is a durable leak.)
         if ($status_code >= 200 && $status_code < 300 && ($body['success'] ?? false)) {
             // Save the Hub URL and API key locally
-            error_log('Peanut Connect: Saving hub_url=' . $hub_url);
             $url_saved = update_option('peanut_connect_hub_url', $hub_url);
-            error_log('Peanut Connect: hub_url saved=' . ($url_saved ? 'yes' : 'no'));
-
-            error_log('Peanut Connect: Saving api_key (length=' . strlen($api_key) . ')');
             $key_saved = update_option('peanut_connect_hub_api_key', $api_key);
-            error_log('Peanut Connect: api_key saved=' . ($key_saved ? 'yes' : 'no'));
 
             // Log activity
             Peanut_Connect_Activity_Log::log('hub_connected', 'success', 'Connected to Hub', [
@@ -1097,6 +1104,19 @@ class Peanut_Connect_API {
             return new WP_REST_Response([
                 'success' => false,
                 'message' => __('Hub URL and API key are both required.', 'peanut-connect'),
+            ], 400);
+        }
+
+        // SSRF guard: the supplied Bearer key is sent to this host below, so
+        // reject internal/metadata/RFC1918 targets (parity with the guard on
+        // update_hub_settings; this entry point was previously unguarded).
+        $host = strtolower((string) wp_parse_url($hub_url, PHP_URL_HOST));
+        $scheme = strtolower((string) wp_parse_url($hub_url, PHP_URL_SCHEME));
+        if (!self::is_safe_hub_host($host, $scheme)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'code' => 'peanut_connect_hub_url_invalid',
+                'message' => __('Hub URL must be a public HTTPS host.', 'peanut-connect'),
             ], 400);
         }
 
