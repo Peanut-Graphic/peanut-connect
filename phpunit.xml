@@ -33,7 +33,10 @@
 			<directory suffix="Test.php">./tests/Contract/</directory>
 		</testsuite>
 	</testsuites>
-	<source>
+	<!-- Coverage filter. PHPUnit 9.6 (the pinned runner) uses coverage/include,
+	     not PHPUnit 10's source element. Without a recognised filter, the clover
+	     coverage report emits nothing and the coverage gate fails (file not found). -->
+	<coverage>
 		<include>
 			<directory suffix=".php">./includes/</directory>
 		</include>
@@ -41,7 +44,7 @@
 			<directory suffix=".php">./vendor/</directory>
 			<directory suffix=".php">./node_modules/</directory>
 		</exclude>
-	</source>
+	</coverage>
 	<php>
 		<const name="PEANUT_CONNECT_TEST_MODE" value="true"/>
 	</php>
