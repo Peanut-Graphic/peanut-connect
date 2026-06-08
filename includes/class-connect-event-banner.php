@@ -61,9 +61,9 @@ class Peanut_Connect_Event_Banner {
         $banner = [
             'deployment_id' => intval($data['deployment_id'] ?? 0),
             'event_id' => intval($data['event_id'] ?? 0),
-            'html' => wp_kses_post($data['html'] ?? ''),
-            'css' => sanitize_textarea_field($data['css'] ?? ''),
-            'position' => sanitize_text_field($data['position'] ?? 'top'),
+            'html' => self::sanitize_banner_html((string) ($data['html'] ?? '')),
+            'css' => self::sanitize_banner_css((string) ($data['css'] ?? '')),
+            'position' => self::sanitize_position($data['position'] ?? 'top'),
             'show_at' => sanitize_text_field($data['show_at'] ?? ''),
             'hide_at' => sanitize_text_field($data['hide_at'] ?? ''),
             'active' => true,
@@ -143,20 +143,24 @@ class Peanut_Connect_Event_Banner {
             }
         }
 
-        // Output custom CSS — strip any </style> escape attempts before
-        // rendering. CSS is treated as untrusted text from Hub.
+        // Output custom CSS — re-sanitised at render (defence in depth). CSS is
+        // untrusted Hub input shown on every public pageview; sanitize_banner_css
+        // neutralises tag breakout, @import, url() exfiltration and JS-in-CSS.
         if (!empty($banner['css'])) {
-            $safe_css = preg_replace('#</\s*style\s*>#i', '', (string) $banner['css']);
-            echo '<style id="peanut-event-banner-custom-css">' . $safe_css . '</style>' . "\n";
+            $safe_css = self::sanitize_banner_css((string) $banner['css']);
+            if ($safe_css !== '') {
+                echo '<style id="peanut-event-banner-custom-css">' . $safe_css . '</style>' . "\n";
+            }
         }
 
-        // Output banner HTML — pass through wp_kses_post to strip script tags
-        // and other dangerous markup that may have slipped past Hub's saver.
-        echo wp_kses_post((string) $banner['html']) . "\n";
+        // Output banner HTML through the strict banner allowlist (re-applied at
+        // render, not just at save).
+        echo self::sanitize_banner_html((string) $banner['html']) . "\n";
 
-        // Add body class via inline script
-        $position = esc_attr($banner['position']);
-        echo "<script>document.body.classList.add('has-peanut-banner-{$position}');</script>\n";
+        // Add body class. position is constrained to a known set and JSON-encoded
+        // for the JS string context — never interpolate raw values into <script>.
+        $position = self::sanitize_position($banner['position'] ?? 'top');
+        echo '<script>document.body.classList.add(' . wp_json_encode('has-peanut-banner-' . $position) . ');</script>' . "\n";
     }
 
     /**
@@ -255,6 +259,67 @@ class Peanut_Connect_Event_Banner {
             'server_time' => current_time('mysql'),
             'timezone' => wp_timezone_string(),
         ];
+    }
+
+    /**
+     * Constrain the banner position to a known set. Prevents injection via the
+     * position value, which is emitted into markup and an inline script.
+     *
+     * @param mixed $position Raw position value.
+     * @return string 'top' or 'bottom'.
+     */
+    private static function sanitize_position($position): string {
+        $position = is_string($position) ? strtolower(trim($position)) : '';
+        return in_array($position, ['top', 'bottom'], true) ? $position : 'top';
+    }
+
+    /**
+     * Sanitise Hub-supplied banner HTML to a small banner-appropriate allowlist.
+     *
+     * Stricter than wp_kses_post: no script/iframe/form/object/style tags, no
+     * event-handler or inline-style attributes, and link/image schemes limited
+     * to http(s)/mailto. The banner renders on every public pageview, so the
+     * markup is treated as fully untrusted (a leaked Hub bearer must not be able
+     * to inject active or phishing content site-wide).
+     *
+     * @param string $html Raw HTML from Hub.
+     * @return string Sanitised HTML.
+     */
+    public static function sanitize_banner_html(string $html): string {
+        $allowed = [
+            'a'      => ['href' => true, 'title' => true, 'class' => true, 'rel' => true, 'target' => true],
+            'span'   => ['class' => true],
+            'div'    => ['class' => true],
+            'p'      => ['class' => true],
+            'strong' => [], 'em' => [], 'b' => [], 'i' => [], 'u' => [], 'br' => [], 'small' => [],
+            'button' => ['class' => true, 'type' => true],
+            'img'    => ['src' => true, 'alt' => true, 'class' => true, 'width' => true, 'height' => true],
+        ];
+        return wp_kses($html, $allowed, ['http', 'https', 'mailto']);
+    }
+
+    /**
+     * Sanitise Hub-supplied banner CSS. CSS cannot run JS in modern browsers,
+     * but raw CSS rendered site-wide enables data exfiltration (url()),
+     * clickjacking overlays, and <style> tag breakout. Neutralise each:
+     *  - strip <,> (no tag breakout, supersedes the old </style>-only strip)
+     *  - drop @import, expression(), javascript:/vbscript:, -moz-binding, behavior:
+     *  - drop url() unless it is an inline data:image (kills exfil beacons)
+     *
+     * @param string $css Raw CSS from Hub.
+     * @return string Sanitised CSS.
+     */
+    public static function sanitize_banner_css(string $css): string {
+        $css = preg_replace('#[<>]#', '', $css);
+        $css = preg_replace('#@import\b#i', '', (string) $css);
+        $css = preg_replace('#expression\s*\(#i', '', (string) $css);
+        $css = preg_replace('#(?:javascript|vbscript)\s*:#i', '', (string) $css);
+        $css = preg_replace('#-moz-binding\b#i', '', (string) $css);
+        $css = preg_replace('#behaviou?r\s*:#i', '', (string) $css);
+        $css = preg_replace_callback('#url\(\s*([\'"]?)(.*?)\1\s*\)#is', static function ($m) {
+            return preg_match('#^\s*data:image/#i', (string) $m[2]) ? $m[0] : '';
+        }, (string) $css);
+        return trim((string) $css);
     }
 
     /**
