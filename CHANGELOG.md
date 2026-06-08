@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.3] - 2026-06-07
+
+### Security
+- **Event banner (`/banner/show`) hardened against site-wide injection.** Hub-supplied banner `html`, `css`, and `position` are rendered into `wp_head` on every public pageview. Previously `css` was emitted into `<style>` with only `</style>` stripped (allowing data exfiltration via `url()`, `@import`, clickjacking overlays, and tag breakout), `html` used the broad `wp_kses_post` allowlist, and `position` was interpolated into an inline `<script>`. Now: `css` is run through a dedicated sanitiser (strips `<`/`>`, `@import`, `expression()`, `javascript:`/`vbscript:`, `-moz-binding`, `behavior:`, and any `url()` that isn't an inline `data:image`); `html` uses a tight banner-only allowlist (no script/iframe/form/object/style, no event handlers or inline styles, link/image schemes limited to http(s)/mailto); and `position` is constrained to `top`/`bottom` and JSON-encoded for the script context. Applied both at save and at render.
+
 ## [3.11.1] - 2026-06-07
 
 ### Fixed
