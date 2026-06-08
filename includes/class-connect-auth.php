@@ -16,6 +16,11 @@ if (!defined('ABSPATH')) {
 class Peanut_Connect_Auth {
 
     /**
+     * Max age (seconds) of a signed request's timestamp — anti-replay window.
+     */
+    private const SIGNATURE_WINDOW = 300;
+
+    /**
      * Verify incoming request from manager
      *
      * Performs rate limiting check before authentication to prevent
@@ -233,29 +238,8 @@ class Peanut_Connect_Auth {
             return $rate_check;
         }
 
-        $auth_header = $request->get_header('Authorization');
-
-        if (empty($auth_header)) {
-            return new WP_Error(
-                'missing_authorization',
-                __('Authorization header is required.', 'peanut-connect'),
-                ['status' => 401]
-            );
-        }
-
-        // Extract Bearer token
-        if (!preg_match('/^Bearer\s+(.+)$/i', $auth_header, $matches)) {
-            return new WP_Error(
-                'invalid_authorization',
-                __('Invalid authorization format. Use Bearer token.', 'peanut-connect'),
-                ['status' => 401]
-            );
-        }
-
-        $provided_key = $matches[1];
-        $stored_key = get_option('peanut_connect_hub_api_key');
-
-        if (empty($stored_key)) {
+        $stored_key = (string) get_option('peanut_connect_hub_api_key', '');
+        if ($stored_key === '') {
             return new WP_Error(
                 'not_configured',
                 __('Hub API key not configured. Please connect to Hub first.', 'peanut-connect'),
@@ -263,8 +247,43 @@ class Peanut_Connect_Auth {
             );
         }
 
-        // Timing-safe comparison
-        if (!hash_equals($stored_key, $provided_key)) {
+        // Preferred path: HMAC-signed request. The signature proves possession
+        // of the shared key WITHOUT transmitting it, and the timestamp + nonce
+        // make a captured request non-replayable. Used whenever Hub sends the
+        // X-Peanut-Signature header.
+        $signature = $request->get_header('X-Peanut-Signature');
+        if (!empty($signature)) {
+            return self::verify_signed_hub_request($request, $stored_key, (string) $signature);
+        }
+
+        // Legacy path: static Bearer token, for backward compatibility with
+        // Hubs/sites not yet emitting signed requests. A fully migrated site can
+        // set the `peanut_connect_require_signed_requests` option to reject
+        // unsigned requests — which makes a leaked bearer useless.
+        if (get_option('peanut_connect_require_signed_requests', false)) {
+            return new WP_Error(
+                'signature_required',
+                __('This site requires signed Hub requests.', 'peanut-connect'),
+                ['status' => 401]
+            );
+        }
+
+        $auth_header = $request->get_header('Authorization');
+        if (empty($auth_header)) {
+            return new WP_Error(
+                'missing_authorization',
+                __('Authorization header is required.', 'peanut-connect'),
+                ['status' => 401]
+            );
+        }
+        if (!preg_match('/^Bearer\s+(.+)$/i', $auth_header, $matches)) {
+            return new WP_Error(
+                'invalid_authorization',
+                __('Invalid authorization format. Use Bearer token.', 'peanut-connect'),
+                ['status' => 401]
+            );
+        }
+        if (!hash_equals($stored_key, $matches[1])) {
             return new WP_Error(
                 'invalid_key',
                 __('Invalid Hub API key.', 'peanut-connect'),
@@ -273,6 +292,81 @@ class Peanut_Connect_Auth {
         }
 
         return true;
+    }
+
+    /**
+     * Verify an HMAC-signed Hub request: timestamp freshness, single-use nonce
+     * (both anti-replay), then a constant-time signature check.
+     *
+     * @param WP_REST_Request $request    The incoming request.
+     * @param string          $stored_key The shared Hub key.
+     * @param string          $signature  The provided X-Peanut-Signature.
+     * @return bool|WP_Error
+     */
+    private static function verify_signed_hub_request(WP_REST_Request $request, string $stored_key, string $signature): bool|WP_Error {
+        $timestamp = (string) $request->get_header('X-Peanut-Timestamp');
+        $nonce = (string) $request->get_header('X-Peanut-Nonce');
+
+        if ($timestamp === '' || $nonce === '') {
+            return new WP_Error('invalid_signature', __('Signed request is missing its timestamp or nonce.', 'peanut-connect'), ['status' => 401]);
+        }
+
+        // Freshness window — a stale captured request is rejected.
+        if (!ctype_digit($timestamp) || abs(time() - (int) $timestamp) > self::SIGNATURE_WINDOW) {
+            return new WP_Error('stale_request', __('Signed request timestamp is outside the allowed window.', 'peanut-connect'), ['status' => 401]);
+        }
+
+        // Single-use nonce — a captured request cannot be replayed within the window.
+        $nonce_key = 'pc_hub_nonce_' . hash('sha256', $nonce);
+        if (get_transient($nonce_key) !== false) {
+            return new WP_Error('replayed_request', __('Signed request nonce has already been used.', 'peanut-connect'), ['status' => 401]);
+        }
+
+        $valid = self::verify_signature(
+            $stored_key,
+            (string) $request->get_method(),
+            (string) $request->get_route(),
+            $timestamp,
+            $nonce,
+            (string) $request->get_body(),
+            $signature
+        );
+        if (!$valid) {
+            return new WP_Error('invalid_signature', __('Invalid request signature.', 'peanut-connect'), ['status' => 401]);
+        }
+
+        // Burn the nonce for the window (+ slack for clock skew).
+        set_transient($nonce_key, 1, self::SIGNATURE_WINDOW * 2);
+        return true;
+    }
+
+    /**
+     * Canonical HMAC-SHA256 signature for a Hub→site request. Hub computes the
+     * identical string with the shared site key. The body is hashed (not
+     * included raw) so large payloads aren't buffered twice.
+     *
+     * @return string Lowercase-hex signature.
+     */
+    public static function compute_request_signature(string $key, string $method, string $route, string $timestamp, string $nonce, string $body): string {
+        $canonical = implode("\n", [
+            strtoupper($method),
+            $route,
+            $timestamp,
+            $nonce,
+            hash('sha256', $body),
+        ]);
+        return hash_hmac('sha256', $canonical, $key);
+    }
+
+    /**
+     * Constant-time verification of a provided request signature.
+     */
+    public static function verify_signature(string $key, string $method, string $route, string $timestamp, string $nonce, string $body, string $provided): bool {
+        if ($key === '' || $provided === '') {
+            return false;
+        }
+        $expected = self::compute_request_signature($key, $method, $route, $timestamp, $nonce, $body);
+        return hash_equals($expected, strtolower(trim($provided)));
     }
 
     /**

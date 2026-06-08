@@ -23,13 +23,20 @@ class Peanut_Connect_Backup {
         $backup_dir = WP_CONTENT_DIR . '/peanut-backups';
         if (!file_exists($backup_dir)) {
             wp_mkdir_p($backup_dir);
-            // Add .htaccess to prevent direct access
-            file_put_contents($backup_dir . '/.htaccess', 'deny from all');
         }
+        // Harden the directory on every run (self-heals, and covers dirs created
+        // before this hardening). The archive holds the full DB — incl. user
+        // hashes + secret keys — plus wp-content, so it must not be web-fetchable.
+        self::harden_backup_dir($backup_dir);
 
         $timestamp = date('Y-m-d-His');
         $site_slug = sanitize_title(get_bloginfo('name'));
-        $backup_name = "{$site_slug}-{$timestamp}";
+        // Unguessable token: on nginx/LiteSpeed/Caddy the .htaccess deny is
+        // ignored, so a predictable {slug}-{timestamp} name (1-second
+        // granularity) is brute-forceable. The token makes the URL unguessable
+        // regardless of server, which is the real protection.
+        $token = wp_generate_password(20, false, false);
+        $backup_name = "{$site_slug}-{$timestamp}-{$token}";
         $backup_path = "{$backup_dir}/{$backup_name}";
 
         // 1. Export database
@@ -49,6 +56,17 @@ class Peanut_Connect_Backup {
 
         $size = filesize($zip_file);
 
+        // SECURITY: record this archive's SHA-256 so restore_backup() can later
+        // verify that any archive it is asked to restore was actually produced
+        // by this site. The archive's SQL is executed and its files copied over
+        // wp-content on restore, so without this allowlist an attacker holding
+        // the Hub bearer could have us restore — and thus run the code of — an
+        // arbitrary archive. Computed before any cloud offload deletes the file.
+        $sha256 = hash_file('sha256', $zip_file);
+        if ($sha256 !== false) {
+            self::register_known_backup($sha256, $backup_name);
+        }
+
         // 4. If cloud storage params provided, upload and clean local
         $storage_path = $zip_file;
         if (!empty($params['storage_driver']) && $params['storage_driver'] !== 'local') {
@@ -65,6 +83,7 @@ class Peanut_Connect_Backup {
             'storage_path' => $storage_path,
             'size_bytes' => $size,
             'backup_name' => $backup_name,
+            'sha256' => $sha256 !== false ? $sha256 : null,
             'created_at' => current_time('mysql'),
         ];
     }
@@ -226,6 +245,23 @@ class Peanut_Connect_Backup {
             return $temp_file;
         }
 
+        // 1a. SECURITY: only restore an archive this site actually created.
+        // Below, this archive's SQL is executed and its files are copied over
+        // wp-content (including PHP) — so restoring an unverified archive is
+        // remote code execution. Verify the downloaded bytes against the
+        // SHA-256 allowlist recorded at create_backup() time. This holds even
+        // if the Hub bearer leaks or the configured hub_url is repointed,
+        // because the attacker cannot add their archive's hash to the allowlist
+        // (it is only written from this site's own backups).
+        self::maybe_register_existing_backups();
+        if (!self::is_known_backup($temp_file)) {
+            @unlink($temp_file);
+            return new WP_Error(
+                'untrusted_backup',
+                __('Backup failed integrity verification — only backups created by this site can be restored.', 'peanut-connect')
+            );
+        }
+
         // 2. Extract zip
         $extract_dir = WP_CONTENT_DIR . '/peanut-backups/restore-' . time();
         wp_mkdir_p($extract_dir);
@@ -303,15 +339,30 @@ class Peanut_Connect_Backup {
      * @param string $dest   Destination directory path.
      */
     private static function copy_directory(string $source, string $dest): void {
+        $dest_real = realpath($dest);
+        if ($dest_real === false) {
+            return;
+        }
+        $dest_real = rtrim($dest_real, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($source, RecursiveDirectoryIterator::SKIP_DOTS),
             RecursiveIteratorIterator::SELF_FIRST
         );
         foreach ($iterator as $item) {
             $target = $dest . DIRECTORY_SEPARATOR . substr($item->getPathname(), strlen($source) + 1);
+
             if ($item->isDir()) {
                 wp_mkdir_p($target);
             } else {
+                wp_mkdir_p(dirname($target));
+                // SECURITY (zip-slip): refuse to write anywhere outside $dest,
+                // even if the archive smuggled in a "../" path or a symlink.
+                $parent_real = realpath(dirname($target));
+                if ($parent_real === false
+                    || strpos(rtrim($parent_real, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR, $dest_real) !== 0) {
+                    continue;
+                }
                 copy($item->getPathname(), $target);
             }
         }
@@ -335,6 +386,118 @@ class Peanut_Connect_Backup {
             $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
         rmdir($dir);
+    }
+
+    /**
+     * Record the SHA-256 of a backup this site created.
+     *
+     * The recorded hashes form an allowlist that restore_backup() checks before
+     * extracting/executing any archive, so only archives produced by this site
+     * can ever be restored. Capped to the most recent entries to bound option
+     * size; not autoloaded.
+     *
+     * @param string $sha256 Lowercase-hex SHA-256 of the backup archive.
+     * @param string $name   Backup name (for diagnostics).
+     */
+    private static function register_known_backup(string $sha256, string $name): void {
+        if ($sha256 === '') {
+            return;
+        }
+        $known = get_option('peanut_connect_known_backups', []);
+        if (!is_array($known)) {
+            $known = [];
+        }
+        $known[$sha256] = ['name' => $name, 'created_at' => time()];
+
+        // Keep only the most recent 50 entries.
+        if (count($known) > 50) {
+            uasort($known, static function ($a, $b) {
+                return (int) ($b['created_at'] ?? 0) <=> (int) ($a['created_at'] ?? 0);
+            });
+            $known = array_slice($known, 0, 50, true);
+        }
+        update_option('peanut_connect_known_backups', $known, false);
+    }
+
+    /**
+     * Whether a file's contents match a backup this site recorded.
+     *
+     * Constant-time comparison over the SHA-256 allowlist. An attacker cannot
+     * add an entry to the allowlist (it is only written by create_backup from
+     * this site's own data), so an arbitrary/malicious archive never verifies.
+     *
+     * @param string $file Absolute path to the candidate archive.
+     * @return bool True only if the file matches a known backup.
+     */
+    public static function is_known_backup(string $file): bool {
+        if ($file === '' || !is_readable($file)) {
+            return false;
+        }
+        $sha256 = hash_file('sha256', $file);
+        if ($sha256 === false) {
+            return false;
+        }
+        $known = get_option('peanut_connect_known_backups', []);
+        if (!is_array($known) || $known === []) {
+            return false;
+        }
+        foreach (array_keys($known) as $recorded) {
+            if (is_string($recorded) && hash_equals($recorded, $sha256)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * One-time seeding: register hashes of any backups already sitting in the
+     * local backup directory when integrity tracking was introduced, so
+     * legitimately-created archives stay restorable after upgrade. Backups
+     * created afterwards are recorded by create_backup() directly.
+     */
+    private static function maybe_register_existing_backups(): void {
+        if (get_option('peanut_connect_known_backups_seeded')) {
+            return;
+        }
+        $backup_dir = WP_CONTENT_DIR . '/peanut-backups';
+        if (is_dir($backup_dir)) {
+            foreach (glob($backup_dir . '/*.zip') ?: [] as $zip) {
+                $sha = hash_file('sha256', $zip);
+                if ($sha !== false) {
+                    self::register_known_backup($sha, basename($zip, '.zip'));
+                }
+            }
+        }
+        update_option('peanut_connect_known_backups_seeded', 1, false);
+    }
+
+    /**
+     * Write deny rules into the backup directory for the common servers, plus an
+     * index.php so the listing can't be browsed. Idempotent; nginx/LiteSpeed
+     * ignore .htaccess (the unguessable filename token covers those).
+     *
+     * @param string $dir Backup directory path.
+     */
+    private static function harden_backup_dir(string $dir): void {
+        if (!is_dir($dir)) {
+            return;
+        }
+        if (!file_exists($dir . '/.htaccess')) {
+            file_put_contents(
+                $dir . '/.htaccess',
+                "Deny from all\n<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n"
+            );
+        }
+        if (!file_exists($dir . '/index.php')) {
+            file_put_contents($dir . '/index.php', "<?php // Silence is golden.\n");
+        }
+        if (!file_exists($dir . '/web.config')) {
+            file_put_contents(
+                $dir . '/web.config',
+                "<configuration><system.webServer><authorization>"
+                . "<deny users=\"*\" /></authorization></system.webServer></configuration>\n"
+            );
+        }
     }
 
     /**
