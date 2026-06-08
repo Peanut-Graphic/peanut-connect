@@ -5,6 +5,14 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.4] - 2026-06-07
+
+### Security (hardening — audit P1 batch)
+- **No more Hub-key/URL debug logging.** `auto_connect_to_hub()` wrote the Hub URL and the API-key length to `error_log` on every connect; shared-host logs are often world-readable and the bearer is long-lived. Removed.
+- **SSRF guards on the connect flows.** `auto_connect_to_hub()` (POSTs a freshly generated key) and `manual_connect_to_hub()` (sends the supplied Bearer) now run the target through `is_safe_hub_host()` — rejecting internal/metadata/RFC1918 hosts — matching the existing guard on `update_hub_settings()`. Previously only `update_hub_settings` was guarded.
+- **Rate-limit IP spoofing fixed.** The limiter trusted `CF-Connecting-IP`/`X-Forwarded-For`/`X-Real-IP` before `REMOTE_ADDR`, so a client could rotate them to defeat the auth-endpoint limit (10/min) and brute-force the site key/Hub bearer. Now it uses `REMOTE_ADDR` by default and only honours forwarded headers when the real peer is in a configured `peanut_connect_trusted_proxies` allowlist (IPs or CIDRs, IPv4/IPv6).
+- **Backups no longer web-locatable.** `create_backup()` adds a 20-char unguessable token to the archive filename (the real protection on nginx/LiteSpeed, which ignore `.htaccess`) and hardens the backup dir on every run (Apache deny + IIS `web.config` deny + `index.php`). The archive holds the full DB incl. user hashes + secret keys.
+
 ## [3.11.1] - 2026-06-07
 
 ### Fixed
