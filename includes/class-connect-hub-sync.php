@@ -431,6 +431,16 @@ class Peanut_Connect_Hub_Sync {
                 update_option('peanut_connect_hub_popups', $body['popups']);
             }
 
+            // Store the public JS-tracker key (NOT the Hub bearer) so the
+            // tracker snippet can use it. Hub sends it on every heartbeat;
+            // null when JS tracking is disabled.
+            if (array_key_exists('tracker_key', $body)) {
+                update_option('peanut_connect_tracker_key', sanitize_text_field((string) ($body['tracker_key'] ?? '')), false);
+            }
+            if (array_key_exists('js_tracker_enabled', $body)) {
+                update_option('peanut_connect_js_tracker_enabled', !empty($body['js_tracker_enabled']), false);
+            }
+
             // Check if Hub requested an immediate sync
             $syncNow = $body['sync_now'] ?? false;
             if ($syncNow) {
