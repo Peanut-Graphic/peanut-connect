@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.5] - 2026-06-07
+
+### Security
+- **Hub requests can now be HMAC-signed (anti-replay; key never transits).** `verify_hub_request()` prefers an `X-Peanut-Signature` (HMAC-SHA256 over method + route + timestamp + nonce + sha256(body), keyed by the shared Hub key) when present: it checks a ±300s freshness window and a single-use nonce (both block replay of a captured request) and verifies the signature in constant time — without the key ever being sent on the wire. Falls back to the legacy static Bearer token when no signature is present, so this is fully backward-compatible with Hubs/sites not yet signing. A fully migrated site can set the `peanut_connect_require_signed_requests` option to reject unsigned requests, which renders a leaked bearer useless. (Pairs with the Hub-side signing change.)
+
 ## [3.11.1] - 2026-06-07
 
 ### Fixed
