@@ -133,9 +133,9 @@ class Test_Security extends Peanut_Connect_TestCase {
      */
     public function test_sensitive_data_masking() {
         $sensitive_data = [
-            'api_key' => 'sk_live_1234567890abcdef',
+            'api_key' => 'sk_live_1234567890abcdef', // gitleaks:allow — fake fixture, not a real secret
             'password' => 'super_secret_password',
-            'site_key' => 'abcd1234efgh5678ijkl9012mnop3456',
+            'site_key' => 'abcd1234efgh5678ijkl9012mnop3456', // gitleaks:allow — fake fixture, not a real secret
         ];
 
         foreach ($sensitive_data as $key => $value) {
