@@ -5,11 +5,16 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.11.2] - 2026-06-07
+## [3.11.5] - 2026-06-07
+
+Security roll-up — supply-chain incident response + audit remediation (consolidates PRs #34–#38).
 
 ### Security
-- **`/restore` now verifies archive authenticity before restoring (fixes an authenticated RCE).** The endpoint downloaded a ZIP and executed its SQL dump + copied its files over `wp-content` (including `.php`), gated only by the Hub bearer and a host check on the URL. A bearer leak (or a repointed `hub_url`) therefore allowed remote code execution by restoring a crafted archive. `restore_backup()` now checks the downloaded archive against a SHA-256 allowlist of archives this site actually created (recorded at `create_backup()` time) and refuses anything not on it — so a malicious archive is rejected before any extraction or SQL runs, even if the bearer leaks. Pre-existing local backups are seeded into the allowlist once on upgrade so legitimate rollbacks keep working.
-- **Zip-slip hardening on restore.** The file copy during restore now refuses to write outside `wp-content`, defending against path-traversal/symlink entries in an archive.
+- **Supply chain: removed a poisoned `frontend/package-lock.json` entry + added an install-script guard.** The lockfile carried a fabricated `axios@1.14.1` entry injecting `plain-crypto-js` (npm-tombstoned typosquat). Regenerated clean (axios 1.17.0) + added `.npmrc ignore-scripts=true`. The package had no install scripts, was never imported, and never shipped in a release build (verified across live sites + release zips).
+- **`/restore`: fixed an authenticated RCE.** It downloaded a ZIP and executed its SQL + copied its files over `wp-content` (incl. `.php`), gated only by the Hub bearer + a URL host check — a bearer leak meant remote code execution. `restore_backup()` now verifies the archive against a SHA-256 allowlist of backups this site created and refuses anything else before any extraction/SQL. Pre-existing backups are seeded once on upgrade. Plus zip-slip containment on the file copy.
+- **`/banner`: fixed site-wide injection.** Hub-supplied banner CSS/HTML/position render on every public pageview. CSS is now sanitised against `url()` exfiltration / `@import` / `expression()` / tag breakout; HTML uses a tight banner-only allowlist (no script/iframe/style, no event handlers, http(s)/mailto only); position is constrained and JSON-encoded for its inline-script context.
+- **Hardening (audit P1):** removed Hub key/URL debug logging in `auto_connect_to_hub`; SSRF guards on `auto_connect`/`manual_connect` (parity with `update_hub_settings`); rate limiter no longer trusts spoofable forwarded headers (uses `REMOTE_ADDR` + a `peanut_connect_trusted_proxies` IP/CIDR allowlist); backups get an unguessable filename token + multi-server deny files.
+- **Hub requests can be HMAC-signed (anti-replay; key never transits).** `verify_hub_request()` prefers an `X-Peanut-Signature` (HMAC over method + route + timestamp + nonce + sha256(body)) with a ±300s window + single-use nonce, falling back to the legacy Bearer token. A site can set `peanut_connect_require_signed_requests` to reject unsigned requests, making a leaked bearer useless. Pairs with the Hub-side signing change.
 
 ## [3.11.1] - 2026-06-07
 
