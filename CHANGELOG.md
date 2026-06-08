@@ -5,6 +5,29 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.5] - 2026-06-07
+
+Security roll-up — supply-chain incident response + audit remediation (consolidates PRs #34–#38).
+
+### Security
+- **Supply chain: removed a poisoned `frontend/package-lock.json` entry + added an install-script guard.** The lockfile carried a fabricated `axios@1.14.1` entry injecting `plain-crypto-js` (npm-tombstoned typosquat). Regenerated clean (axios 1.17.0) + added `.npmrc ignore-scripts=true`. The package had no install scripts, was never imported, and never shipped in a release build (verified across live sites + release zips).
+- **`/restore`: fixed an authenticated RCE.** It downloaded a ZIP and executed its SQL + copied its files over `wp-content` (incl. `.php`), gated only by the Hub bearer + a URL host check — a bearer leak meant remote code execution. `restore_backup()` now verifies the archive against a SHA-256 allowlist of backups this site created and refuses anything else before any extraction/SQL. Pre-existing backups are seeded once on upgrade. Plus zip-slip containment on the file copy.
+- **`/banner`: fixed site-wide injection.** Hub-supplied banner CSS/HTML/position render on every public pageview. CSS is now sanitised against `url()` exfiltration / `@import` / `expression()` / tag breakout; HTML uses a tight banner-only allowlist (no script/iframe/style, no event handlers, http(s)/mailto only); position is constrained and JSON-encoded for its inline-script context.
+- **Hardening (audit P1):** removed Hub key/URL debug logging in `auto_connect_to_hub`; SSRF guards on `auto_connect`/`manual_connect` (parity with `update_hub_settings`); rate limiter no longer trusts spoofable forwarded headers (uses `REMOTE_ADDR` + a `peanut_connect_trusted_proxies` IP/CIDR allowlist); backups get an unguessable filename token + multi-server deny files.
+- **Hub requests can be HMAC-signed (anti-replay; key never transits).** `verify_hub_request()` prefers an `X-Peanut-Signature` (HMAC over method + route + timestamp + nonce + sha256(body)) with a ±300s window + single-use nonce, falling back to the legacy Bearer token. A site can set `peanut_connect_require_signed_requests` to reject unsigned requests, making a leaked bearer useless. Pairs with the Hub-side signing change.
+
+## [3.11.1] - 2026-06-07
+
+### Fixed
+- **`/wp-json/peanut-connect/v1/track` now propagates `click_id` from the request body.** The browser tracker has been sending `click_id` on every event since 3.7.0, but the REST endpoint never extracted it — events fell back to `Peanut_Connect_Tracker::get_click_id()` server-side, which only reads `$_GET['click_id']` (absent on POSTs to `/wp-json/...`) and the plugin's `peanut_click_id` cookie. The Hub sync filter is `WHERE click_id IS NOT NULL AND click_id != ''`, so any event from a page whose cookie didn't get set in time landed with NULL click_id and was silently dropped from Hub. Result: in 7 days on dominionenergyptr.com, Hub journey_events captured 12,298 page_views but **zero** browser-side `click` events and **zero** `click_to_portal` (Hub funnel "Clicked enroll" stage) events — even though the tracker was firing them correctly all along.
+- **`get_click_id()` now also reads Hub's `_pnut_cid` cookie.** Hub's `tracker.min.js` writes `_pnut_cid` on every click-through. This plugin's own `tracker.js` only sets `peanut_click_id` when the URL click_id matches a strict UUID regex, so on sites where the campaign URL flows through Hub's tracker first, server-side recovery had no cookie to read. Both cookies are now checked (strict UUID validation preserved).
+
+### Impact
+On dominionenergyptr.com specifically, this restores end-to-end visibility of the **middle stage of the conversion funnel** (Enroll Now clicks). Combined with 3.9.16 (`click_id` href forwarding) and 3.9.17 (Safari ITP bypass via same-origin GTM beacon proxy), the only remaining funnel gap on the WordPress side is the IntelliSource portal hop itself — which is Comverge-hosted and needs vendor cooperation or a separate same-origin endpoint there.
+
+### Diagnosed
+Live trace 2026-06-07: synthesized an "Enroll Now" click against the live site with the browser tracker patched to log all outbound POSTs. Saw the tracker fire two `sendBeacon` calls to `/wp-json/peanut-connect/v1/track` (one `click`, one `custom`/`click_to_portal`). Hub showed zero matching events. Traced the swallow to `track_event()` rebuilding `$data` without `click_id`, plus the Hub sync's click_id WHERE clause filtering NULL-click_id rows out before they reached the network.
+
 ## [3.11.0] - 2026-06-05
 
 ### Added
