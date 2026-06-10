@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
       - name: Dependency audit (PHP)
-        run: composer audit || true   # Net 2: start non-blocking; ratchet to blocking
+        run: composer audit --locked || true   # Net 2: start non-blocking; ratchet to blocking
       - name: Secret scan (gitleaks)
         run: |
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz | tar -xz gitleaks
