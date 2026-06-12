@@ -50,6 +50,72 @@ class Peanut_Connect_Forms {
                 return current_user_can('manage_options');
             },
         ]);
+
+        // Public form submission. The browser posts here (same-origin, nonce +
+        // rate-limited) and the edge forwards server-side to Hub WITH the site
+        // key — so the Hub credential never reaches the page or the visitor.
+        // (Previously the key was localized into every page carrying a form,
+        // exposing it to anyone who viewed source.)
+        register_rest_route('peanut-connect/v1', '/forms/submit', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [__CLASS__, 'handle_public_submit'],
+            'permission_callback' => '__return_true',
+        ]);
+    }
+
+    /**
+     * Public form submission proxy: validate the same-origin nonce, rate-limit,
+     * then forward the submission to Hub server-side with the site key. The key
+     * is read from options here and never leaves the server.
+     */
+    public static function handle_public_submit(WP_REST_Request $request): WP_REST_Response {
+        // Same-origin nonce (best-effort CSRF guard for an anonymous form).
+        $nonce = $request->get_header('X-WP-Nonce');
+        if (empty($nonce) || !wp_verify_nonce($nonce, 'wp_rest')) {
+            return new WP_REST_Response(['success' => false, 'message' => __('Invalid or missing security token.', 'peanut-connect')], 403);
+        }
+
+        // Rate-limit abusive submission floods (public endpoint).
+        if (class_exists('Peanut_Connect_Rate_Limiter')) {
+            $client_id = Peanut_Connect_Rate_Limiter::get_client_identifier($request);
+            $limited = Peanut_Connect_Rate_Limiter::check($client_id, 'default');
+            if (is_wp_error($limited)) {
+                return new WP_REST_Response(['success' => false, 'message' => $limited->get_error_message()], 429);
+            }
+        }
+
+        $hub_url = get_option('peanut_connect_hub_url');
+        $api_key = get_option('peanut_connect_hub_api_key');
+        if (empty($hub_url) || empty($api_key)) {
+            return new WP_REST_Response(['success' => false, 'message' => __('Form submission is not available right now.', 'peanut-connect')], 503);
+        }
+
+        $payload = $request->get_json_params();
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        $response = wp_remote_post(trailingslashit($hub_url) . 'api/v1/forms/submit', [
+            'headers' => [
+                'X-Site-Api-Key' => $api_key,
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+            ],
+            'body' => wp_json_encode($payload),
+            'timeout' => 15,
+        ]);
+
+        if (is_wp_error($response)) {
+            return new WP_REST_Response(['success' => false, 'message' => __('Could not submit the form. Please try again.', 'peanut-connect')], 502);
+        }
+
+        $code = (int) wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        return new WP_REST_Response(
+            is_array($body) ? $body : ['success' => $code >= 200 && $code < 300],
+            ($code >= 200 && $code < 600) ? $code : 502
+        );
     }
 
     /**
@@ -284,7 +350,6 @@ class Peanut_Connect_Forms {
      * Render Hub form
      */
     protected static function render_hub_form(array $form, array $options = []): string {
-        $hub_url = get_option('peanut_connect_hub_url');
         $form_id = 'peanut-form-' . esc_attr($form['slug']);
         $visitor_id = Peanut_Connect_Tracker::get_visitor_id();
         $session_id = wp_generate_uuid4();
@@ -305,7 +370,6 @@ class Peanut_Connect_Forms {
         <div id="<?php echo esc_attr($form_id); ?>"
              class="peanut-form-container peanut-form-theme-<?php echo esc_attr($options['theme'] ?? 'default'); ?>"
              data-form-slug="<?php echo esc_attr($form['slug']); ?>"
-             data-hub-url="<?php echo esc_url($hub_url); ?>"
              data-visitor-id="<?php echo esc_attr($visitor_id); ?>"
              data-session-id="<?php echo esc_attr($session_id); ?>"
              style="<?php echo esc_attr($style); ?>">
@@ -338,9 +402,13 @@ class Peanut_Connect_Forms {
             PEANUT_CONNECT_VERSION
         );
 
+        // NOTE: the Hub site key is deliberately NOT exposed here. The form
+        // submits to the local edge endpoint (submitUrl) which forwards to Hub
+        // with the key server-side. Emitting the key (or the Hub URL) into the
+        // page leaked the credential to every visitor and breached Hub-blind.
         wp_localize_script('peanut-forms', 'PeanutFormsConfig', [
-            'hubUrl' => $hub_url,
-            'apiKey' => get_option('peanut_connect_hub_api_key'),
+            'submitUrl' => rest_url('peanut-connect/v1/forms/submit'),
+            'nonce' => wp_create_nonce('wp_rest'),
             'i18n' => [
                 'submitting' => __('Submitting...', 'peanut-connect'),
                 'error' => __('Something went wrong. Please try again.', 'peanut-connect'),
