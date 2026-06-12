@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import {
@@ -42,8 +42,11 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const toast = useToast();
 
-  // Hub settings state
-  const [hubUrl, setHubUrl] = useState('https://hub.peanutgraphic.com');
+  // Hub settings state. Starts empty rather than a hardcoded branded URL: a
+  // baked-in default leaks the Hub's existence on Hub-blind installs and forces
+  // self-hosted-Hub agencies to clear the field every load. Hydrated from the
+  // server's own value below when the site is already paired.
+  const [hubUrl, setHubUrl] = useState('');
   const [hubApiKey, setHubApiKey] = useState('');
   const [hubConnectMode, setHubConnectMode] = useState<'auto' | 'manual'>('auto');
   const [showHubDisconnectModal, setShowHubDisconnectModal] = useState(false);
@@ -52,6 +55,14 @@ export default function Settings() {
     queryKey: ['settings'],
     queryFn: settingsApi.get,
   });
+
+  // Prefill the Hub URL field from the server's own stored value when the site
+  // is already paired (e.g. when reconnecting), instead of a hardcoded default.
+  useEffect(() => {
+    if (settings?.hub?.url) {
+      setHubUrl(settings.hub.url);
+    }
+  }, [settings?.hub?.url]);
 
   // Hub mutations
   const autoConnectHubMutation = useMutation({

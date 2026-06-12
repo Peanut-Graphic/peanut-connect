@@ -28,7 +28,7 @@ End-to-end campaign and site platform for WordPress. Installed on a client (or y
 
 **Hub link (the connective tissue):**
 - Marketing API proxy to Hub (campaigns, journeys, analytics live in Hub; Connect is the on-site executor)
-- Site key auth (SHA-256 hashed, never plain-text)
+- Hub request auth: HMAC-SHA256 request signing (key never transmitted, timestamp + single-use nonce for anti-replay), with a static Bearer fallback for sites/Hubs not yet emitting signed requests
 - Hub Mode toggle: standard, hide-Suite, disable-Suite (controls how it coexists with Peanut Suite)
 - Manual Hub-key onboarding flow as fallback when auto-pairing isn't available
 
@@ -66,8 +66,9 @@ After activation, configure the plugin at **Settings > Peanut End to End** (menu
 
 ## Security
 
-- All API endpoints require authentication via site key
-- Keys are stored as SHA-256 hashes, never in plain text
+- All Hub-facing API endpoints require authentication (HMAC-SHA256 signed request, or a static Bearer site key as fallback)
+- The shared Hub key is held in `wp_options` and used as the HMAC signing secret — so signed requests never put the key on the wire. (It is stored as-is, not hashed, because an HMAC secret must be recoverable to verify a signature; protect it with database/transport security. A future hardening track is encryption-at-rest + a verification token distinct from the signing secret.)
+- High-impact capabilities (remote updates, content publishing, remote restore, the outbound proxy) are gated by per-site permission flags that default to OFF — the owner opts in
 - Communication should always use HTTPS
 - Rate limiting prevents brute force attacks
 - WordPress capabilities are checked for update operations
