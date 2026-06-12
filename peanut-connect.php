@@ -184,6 +184,7 @@ final class Peanut_Connect {
 
         // Schedule daily cleanup of old synced records (v2.6.3+)
         add_action('peanut_connect_cleanup', [Peanut_Connect_Database::class, 'cleanup_old_records']);
+        add_action('peanut_connect_cleanup', [Peanut_Connect_Auth::class, 'purge_expired_nonces']);
         if (!wp_next_scheduled('peanut_connect_cleanup')) {
             wp_schedule_event(time(), 'daily', 'peanut_connect_cleanup');
         }
