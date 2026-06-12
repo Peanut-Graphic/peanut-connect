@@ -39,6 +39,7 @@ class Peanut_Connect_Auth {
         'access_analytics' => true,
         'perform_updates'  => false,
         'publish_content'  => false,
+        'backup_restore'   => false,
         'api_proxy'        => false,
     ];
 

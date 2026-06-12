@@ -851,11 +851,14 @@ class Peanut_Connect_API {
             ],
         ]);
 
-        // Restore from a backup archive
+        // Restore from a backup archive. Restore overwrites the database and
+        // replaces files (RCE-equivalent), so unlike /backup it sits behind its
+        // own opt-in 'backup_restore' permission that the site owner controls —
+        // a Hub key alone is not sufficient.
         register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/restore', [
             'methods' => WP_REST_Server::CREATABLE,
             'callback' => [$this, 'restore_backup'],
-            'permission_callback' => [Peanut_Connect_Auth::class, 'hub_permission_callback'],
+            'permission_callback' => Peanut_Connect_Auth::hub_permission_callback_for('backup_restore'),
             'args' => [
                 'backup_url' => [
                     'required' => true,
@@ -1785,22 +1788,63 @@ class Peanut_Connect_API {
         return null;
     }
 
+    /** Upper bounds on the attacker-controllable fields of the public, unauthenticated tracking endpoints. */
+    private const TRACK_VISITOR_ID_MAX = 64;
+    private const TRACK_EVENT_TYPE_MAX = 64;
+    private const TRACK_METADATA_MAX_BYTES = 8192;
+
     /**
-     * Track event (pageview, click, etc.)
+     * Shared front gate for the public (`__return_true`) tracking endpoints:
+     * rate-limit, honor the admin's tracking opt-out, and bound the
+     * attacker-controlled inputs. Returns a response to short-circuit with, or
+     * null to proceed.
+     *
+     * The opt-out check matters because these endpoints accept writes directly;
+     * without it, disabling tracking (a GDPR/CCPA action) stopped the frontend
+     * auto-tracker but left the REST write path wide open to anyone POSTing to
+     * it. The size/length bounds stop unauthenticated analytic poisoning and
+     * multi-MB row writes that amplify into the Hub sync.
      */
-    public function track_event(WP_REST_Request $request): WP_REST_Response {
-        // Check rate limit
-        $rate_limited = $this->check_tracking_rate_limit($request, 'track');
+    private function tracking_precheck(WP_REST_Request $request, string $endpoint): ?WP_REST_Response {
+        $rate_limited = $this->check_tracking_rate_limit($request, $endpoint);
         if ($rate_limited) {
             return $rate_limited;
         }
 
-        if (!class_exists('Peanut_Connect_Tracker')) {
-            return new WP_REST_Response(['success' => false, 'message' => 'Tracking not initialized'], 500);
+        if (!class_exists('Peanut_Connect_Tracker') || !Peanut_Connect_Tracker::is_tracking_enabled()) {
+            return new WP_REST_Response(['success' => false, 'code' => 'tracking_disabled'], 403);
+        }
+
+        $visitor_id = (string) $request->get_param('visitor_id');
+        if (strlen($visitor_id) > self::TRACK_VISITOR_ID_MAX) {
+            return new WP_REST_Response(['success' => false, 'code' => 'invalid_visitor_id'], 400);
+        }
+
+        $metadata = $request->get_param('metadata');
+        if ($metadata !== null) {
+            $encoded = is_string($metadata) ? $metadata : (string) wp_json_encode($metadata);
+            if (strlen($encoded) > self::TRACK_METADATA_MAX_BYTES) {
+                return new WP_REST_Response(['success' => false, 'code' => 'metadata_too_large'], 413);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Track event (pageview, click, etc.)
+     */
+    public function track_event(WP_REST_Request $request): WP_REST_Response {
+        $pre = $this->tracking_precheck($request, 'track');
+        if ($pre) {
+            return $pre;
         }
 
         $visitor_id = $request->get_param('visitor_id');
-        $event_type = $request->get_param('event_type');
+        $event_type = (string) $request->get_param('event_type');
+        if (strlen($event_type) > self::TRACK_EVENT_TYPE_MAX) {
+            return new WP_REST_Response(['success' => false, 'code' => 'invalid_event_type'], 400);
+        }
 
         $data = [
             // event_name distinguishes custom events from each other
@@ -1867,14 +1911,9 @@ class Peanut_Connect_API {
      * Identify visitor (attach email/name)
      */
     public function identify_visitor(WP_REST_Request $request): WP_REST_Response {
-        // Check rate limit
-        $rate_limited = $this->check_tracking_rate_limit($request, 'identify');
-        if ($rate_limited) {
-            return $rate_limited;
-        }
-
-        if (!class_exists('Peanut_Connect_Tracker')) {
-            return new WP_REST_Response(['success' => false, 'message' => 'Tracking not initialized'], 500);
+        $pre = $this->tracking_precheck($request, 'identify');
+        if ($pre) {
+            return $pre;
         }
 
         $visitor_id = $request->get_param('visitor_id');
@@ -1892,14 +1931,9 @@ class Peanut_Connect_API {
      * Track conversion
      */
     public function track_conversion(WP_REST_Request $request): WP_REST_Response {
-        // Check rate limit
-        $rate_limited = $this->check_tracking_rate_limit($request, 'conversion');
-        if ($rate_limited) {
-            return $rate_limited;
-        }
-
-        if (!class_exists('Peanut_Connect_Tracker')) {
-            return new WP_REST_Response(['success' => false, 'message' => 'Tracking not initialized'], 500);
+        $pre = $this->tracking_precheck($request, 'conversion');
+        if ($pre) {
+            return $pre;
         }
 
         $visitor_id = $request->get_param('visitor_id');
@@ -1926,14 +1960,9 @@ class Peanut_Connect_API {
      * Track popup interaction
      */
     public function track_popup_interaction(WP_REST_Request $request): WP_REST_Response {
-        // Check rate limit
-        $rate_limited = $this->check_tracking_rate_limit($request, 'popup_interaction');
-        if ($rate_limited) {
-            return $rate_limited;
-        }
-
-        if (!class_exists('Peanut_Connect_Tracker')) {
-            return new WP_REST_Response(['success' => false, 'message' => 'Tracking not initialized'], 500);
+        $pre = $this->tracking_precheck($request, 'popup_interaction');
+        if ($pre) {
+            return $pre;
         }
 
         $popup_id = (int) $request->get_param('popup_id');
@@ -2141,11 +2170,23 @@ class Peanut_Connect_API {
         }
         $dry_run = ! empty($p['dry_run']);
 
-        // Resolve target post.
+        // Resolve target post. A supplied wp_post_id is only honored when it
+        // points at an ordinary 'post' — otherwise the forced post_type=>'post'
+        // in the upsert below would silently convert a page, CPT, or
+        // WooCommerce product into a blog post. Refuse rather than overwrite.
         $post_id = 0;
-        if (! empty($p['wp_post_id']) && get_post((int) $p['wp_post_id'])) {
-            $post_id = (int) $p['wp_post_id'];
-        } else {
+        if (! empty($p['wp_post_id'])) {
+            $candidate = get_post((int) $p['wp_post_id']);
+            if ($candidate && $candidate->post_type === 'post') {
+                $post_id = (int) $p['wp_post_id'];
+            } elseif ($candidate) {
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'wp_post_id does not reference a podcast post',
+                ], 409);
+            }
+        }
+        if (! $post_id) {
             $found = get_posts([
                 'post_type' => 'post',
                 'post_status' => 'any',
@@ -2300,8 +2341,13 @@ class Peanut_Connect_API {
         }
 
         // 1) Transcript block in the body — append/replace inside markers only.
+        //    Sanitize through wp_kses_post first: transcript_html arrives over
+        //    the Hub channel and is written into post_content rendered to every
+        //    visitor, so an unsanitized payload is stored XSS. (The publish
+        //    handler already wp_kses_post's its body; augment must match.)
         if (! empty($p['transcript_html'])) {
-            $new_content = pc_apply_transcript_block($post->post_content, (string) $p['transcript_html']);
+            $clean_transcript = wp_kses_post((string) $p['transcript_html']);
+            $new_content = pc_apply_transcript_block($post->post_content, $clean_transcript);
             if ($new_content !== $post->post_content) {
                 wp_update_post(['ID' => $post_id, 'post_content' => $new_content]); // ID + content ONLY
             }
@@ -2672,6 +2718,7 @@ class Peanut_Connect_API {
             'perform_updates' => !empty($permissions['perform_updates']),
             'access_analytics' => !empty($permissions['access_analytics']),
             'publish_content' => !empty($permissions['publish_content']),
+            'backup_restore' => !empty($permissions['backup_restore']),
             'api_proxy' => !empty($permissions['api_proxy']),
         ], 200);
     }
@@ -2693,6 +2740,10 @@ class Peanut_Connect_API {
 
         if (isset($params['publish_content'])) {
             $permissions['publish_content'] = (bool) $params['publish_content'];
+        }
+
+        if (isset($params['backup_restore'])) {
+            $permissions['backup_restore'] = (bool) $params['backup_restore'];
         }
 
         if (isset($params['api_proxy'])) {
@@ -2788,7 +2839,9 @@ class Peanut_Connect_API {
                 'php_version' => PHP_VERSION,
                 'site_url' => get_site_url(),
                 'hub_connected' => !empty($hub_url) && !empty($hub_api_key),
-                'hub_url' => $hub_url,
+                // hub_url deliberately NOT echoed: the authenticated caller is
+                // the Hub itself (it already knows its own URL), and emitting it
+                // here violates Hub-blind Rule 3 for sensitive deployments.
                 'last_sync' => $last_sync,
                 'tracking_enabled' => (bool) $tracking_enabled,
                 'formflow' => [

@@ -452,6 +452,7 @@ final class Peanut_Connect {
             'perform_updates' => !empty($input['perform_updates']),
             'access_analytics' => !empty($input['access_analytics']),
             'publish_content' => !empty($input['publish_content']),
+            'backup_restore' => !empty($input['backup_restore']),
             'api_proxy' => !empty($input['api_proxy']),
         ];
     }
@@ -559,6 +560,13 @@ final class Peanut_Connect {
                             <td>
                                 <input type="checkbox" name="peanut_connect_permissions[publish_content]" value="1" <?php checked($permissions['publish_content'] ?? false); ?>>
                                 <span class="description"><?php echo esc_html__('Allow manager to publish and update content (e.g. podcast episodes) on this site', 'peanut-connect'); ?></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><?php echo esc_html__('Backup &amp; Restore', 'peanut-connect'); ?></th>
+                            <td>
+                                <input type="checkbox" name="peanut_connect_permissions[backup_restore]" value="1" <?php checked($permissions['backup_restore'] ?? false); ?>>
+                                <span class="description"><?php echo esc_html__('Allow manager to remotely restore a backup (overwrites this site\'s database and files)', 'peanut-connect'); ?></span>
                             </td>
                         </tr>
                     </table>
