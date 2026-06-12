@@ -12,6 +12,41 @@ if (!defined('ABSPATH')) {
 class Peanut_Connect_Updates {
 
     /**
+     * Plugin folder slugs that must never be remotely deactivated or deleted by
+     * the Hub. Remote teardown of a site's security perimeter (Wordfence,
+     * Sucuri, iThemes/Solid Security, etc.) via a single API call — or a leaked
+     * key — would collapse the site's defenses silently, so these are refused
+     * regardless of permission flags. Matched on the plugin's folder slug (the
+     * path segment before the first slash), an exact set membership rather than
+     * a fragile substring search.
+     *
+     * @var string[]
+     */
+    private const PROTECTED_PLUGIN_SLUGS = [
+        'peanut-connect',      // self — never let the Hub sever its own link
+        'wordfence',
+        'better-wp-security',  // iThemes / Solid Security
+        'sucuri-scanner',
+        'all-in-one-wp-security-and-firewall',
+        'wp-security-audit-log',
+        'ninjafirewall',
+        'sg-security',
+        'malcare-security',
+        'cerber-security',     // WP Cerber
+        'shield-security',     // Shield Security
+    ];
+
+    /**
+     * Is this plugin file protected from remote deactivation/deletion?
+     *
+     * @param string $plugin_file e.g. "wordfence/wordfence.php".
+     */
+    public static function is_protected_plugin(string $plugin_file): bool {
+        $slug = strtolower(explode('/', trim($plugin_file), 2)[0]);
+        return in_array($slug, self::PROTECTED_PLUGIN_SLUGS, true);
+    }
+
+    /**
      * Get all available updates
      */
     public static function get_available_updates(): array {
@@ -468,9 +503,11 @@ class Peanut_Connect_Updates {
             return new WP_Error('already_inactive', __('Plugin is already inactive.', 'peanut-connect'));
         }
 
-        // Prevent deactivating Peanut Connect itself
-        if (strpos($plugin_file, 'peanut-connect') !== false) {
-            return new WP_Error('cannot_deactivate', __('Cannot deactivate Peanut End to End remotely.', 'peanut-connect'));
+        // Refuse to remotely deactivate this plugin or any known security
+        // plugin — a single Hub call (or a leaked key) must not be able to
+        // strip the site's defenses.
+        if (self::is_protected_plugin($plugin_file)) {
+            return new WP_Error('cannot_deactivate', __('This plugin is protected from remote deactivation.', 'peanut-connect'));
         }
 
         // Deactivate
@@ -499,9 +536,9 @@ class Peanut_Connect_Updates {
             return new WP_Error('plugin_not_found', __('Plugin not found.', 'peanut-connect'));
         }
 
-        // Prevent deleting Peanut Connect itself
-        if (strpos($plugin_file, 'peanut-connect') !== false) {
-            return new WP_Error('cannot_delete', __('Cannot delete Peanut End to End remotely.', 'peanut-connect'));
+        // Refuse to remotely delete this plugin or any known security plugin.
+        if (self::is_protected_plugin($plugin_file)) {
+            return new WP_Error('cannot_delete', __('This plugin is protected from remote deletion.', 'peanut-connect'));
         }
 
         // Ensure plugin is deactivated first
