@@ -2666,15 +2666,12 @@ class Peanut_Connect_API {
      * Get hub permissions
      */
     public function get_permissions(WP_REST_Request $request): WP_REST_Response {
-        $permissions = get_option('peanut_connect_permissions', [
-            'perform_updates' => false,
-            'access_analytics' => false,
-            'api_proxy' => false,
-        ]);
+        $permissions = Peanut_Connect_Auth::get_permissions();
 
         return new WP_REST_Response([
             'perform_updates' => !empty($permissions['perform_updates']),
             'access_analytics' => !empty($permissions['access_analytics']),
+            'publish_content' => !empty($permissions['publish_content']),
             'api_proxy' => !empty($permissions['api_proxy']),
         ], 200);
     }
@@ -2684,10 +2681,7 @@ class Peanut_Connect_API {
      */
     public function update_permissions(WP_REST_Request $request): WP_REST_Response {
         $params = $request->get_json_params();
-        $permissions = get_option('peanut_connect_permissions', [
-            'perform_updates' => false,
-            'access_analytics' => false,
-        ]);
+        $permissions = Peanut_Connect_Auth::get_permissions();
 
         if (isset($params['perform_updates'])) {
             $permissions['perform_updates'] = (bool) $params['perform_updates'];
@@ -2695,6 +2689,10 @@ class Peanut_Connect_API {
 
         if (isset($params['access_analytics'])) {
             $permissions['access_analytics'] = (bool) $params['access_analytics'];
+        }
+
+        if (isset($params['publish_content'])) {
+            $permissions['publish_content'] = (bool) $params['publish_content'];
         }
 
         if (isset($params['api_proxy'])) {

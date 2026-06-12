@@ -21,6 +21,28 @@ class Peanut_Connect_Auth {
     private const SIGNATURE_WINDOW = 300;
 
     /**
+     * Canonical default Hub permission flags — the single source of truth for
+     * has_permission(), get_permissions(), and the activation seeding. Before
+     * this constant existed those three sites disagreed (publish_content was
+     * missing from activation, api_proxy from the auth defaults), so a freshly
+     * paired site could silently 403 a capability the SPA showed as available.
+     *
+     * High-impact capabilities (remote updates, content publishing, the
+     * outbound proxy) default to FALSE — the site owner must explicitly opt in.
+     * Read-only visibility (health, update listing, analytics) defaults to TRUE.
+     * health_check / list_updates are additionally always-allowed in
+     * has_permission() regardless of the stored option.
+     */
+    public const DEFAULT_PERMISSIONS = [
+        'health_check'     => true,
+        'list_updates'     => true,
+        'access_analytics' => true,
+        'perform_updates'  => false,
+        'publish_content'  => false,
+        'api_proxy'        => false,
+    ];
+
+    /**
      * Verify incoming request from manager
      *
      * Performs rate limiting check before authentication to prevent
@@ -117,27 +139,29 @@ class Peanut_Connect_Auth {
      * Check if a specific permission is allowed
      */
     public static function has_permission(string $permission): bool {
-        $permissions = get_option('peanut_connect_permissions', []);
-
-        // Health check and list updates are always allowed
-        if (in_array($permission, ['health_check', 'list_updates'])) {
+        // Health check and list updates are always allowed.
+        if (in_array($permission, ['health_check', 'list_updates'], true)) {
             return true;
         }
 
+        $permissions = self::get_permissions();
         return !empty($permissions[$permission]);
     }
 
     /**
-     * Get all permissions
+     * Get all permissions, merged over the canonical defaults.
+     *
+     * Merging (rather than returning the stored array verbatim) guarantees that
+     * flags added after a site was first paired — publish_content, api_proxy —
+     * always have a defined value, while a site owner's explicit stored choices
+     * (e.g. perform_updates they enabled) are preserved.
      */
     public static function get_permissions(): array {
-        return get_option('peanut_connect_permissions', [
-            'health_check' => true,
-            'list_updates' => true,
-            'perform_updates' => true,
-            'access_analytics' => true,
-            'publish_content' => true,
-        ]);
+        $stored = get_option('peanut_connect_permissions', null);
+        if (!is_array($stored)) {
+            return self::DEFAULT_PERMISSIONS;
+        }
+        return array_merge(self::DEFAULT_PERMISSIONS, $stored);
     }
 
     /**
