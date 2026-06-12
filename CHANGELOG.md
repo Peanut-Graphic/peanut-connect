@@ -5,6 +5,30 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.0] - 2026-06-12
+
+Microscope remediation — Hub-as-consumer seam hardening (first `/microscope` audit, `docs/audits/2026-06-11-hub-consumer-microscope.md`).
+
+### Security
+- **Self-updater supply chain.** The update-server response was trusted unconditionally — a non-200 carrying attacker JSON was cached as authoritative for 12h, and `download_url` was handed to WordPress's installer with no host check (one poisoned/compromised response = RCE on every paired site). Now: reject non-200 before caching; pin `download_url` to an HTTPS host on a trusted allowlist (peanutgraphic.com + GitHub release hosts) or drop it; sanitize the version string.
+- **Self-updater no longer phones home before pairing.** It instantiates only once the site is paired (or `PEANUT_CONNECT_SELF_UPDATE` is defined), so an unpaired site makes no outbound call to the update server (Hub-blind Rule 3 / Itron).
+- **Security plugins are protected from remote teardown.** The Hub could remotely deactivate/delete any plugin (Wordfence, Sucuri, …); self-protection was a fragile `strpos`. Replaced with an exact folder-slug allowlist (`is_protected_plugin()`).
+- **Podcast publish can no longer overwrite arbitrary post types.** A supplied `wp_post_id` is honored only when it references an ordinary `post`; previously the forced `post_type=>'post'` upsert could silently convert a page / CPT / WooCommerce product (now 409).
+- **Transcript augment stored-XSS fixed.** `transcript_html` is `wp_kses_post`'d before being written into `post_content` (it arrives over the Hub channel and renders to every visitor).
+- **Tracking opt-out is now honored on the write path.** The public `/track`, `/identify`, `/conversion`, `/popup-interaction` endpoints share one precheck that rate-limits, refuses writes when tracking is disabled, and bounds `visitor_id`/`event_type` length and `metadata` size (analytic-poisoning / oversized-write defense).
+- **`/restore` gated behind an opt-in `backup_restore` permission.** Remote restore (DB overwrite + file replace) no longer rides on a bare Hub key and can be disabled by the owner. `/backup` (create) is unchanged.
+- **api-proxy SSRF backstop.** `redirection => 0` stops an allowlisted endpoint from redirecting the fetch to `169.254.169.254`/RFC1918; proxied response bodies are capped at 2 MB.
+- **`/status` no longer echoes `hub_url`** to the authenticated Hub caller (Hub-blind Rule 3).
+
+### Changed
+- **Close-default permission model.** A single `Peanut_Connect_Auth::DEFAULT_PERMISSIONS` is now the source of truth for the activation seed, `has_permission()`, and `get_permissions()` (previously three diverging defaults). High-impact capabilities — `perform_updates`, `publish_content`, `backup_restore`, `api_proxy` — default **OFF**; the owner opts in. Existing installs keep their stored choices (merge over defaults); only fresh installs see the closed defaults. **`publish_content` is now actually grantable** (it was absent from the seed, the settings UI, and the SPA handlers, so the podcast surface was permanently 403).
+
+### Fixed
+- README corrected: the plugin does **not** SHA-256-hash stored keys (the Hub key is the HMAC signing secret and must be recoverable); the doc now describes auth accurately. Settings UI no longer defaults the Hub URL field to a hardcoded branded URL.
+
+### Notes / deferred
+- Three audit items are intentionally **not** in this release because shipping them unilaterally would break live paired sites or needs Hub-side coordination: the forms bearer→nonce re-architecture (Hub-hosted JS), key-hashing-at-rest (the key is the HMAC secret), and flipping `require_signed_requests` on by default (needs Hub to sign first). See `docs/audits/2026-06-11-hub-consumer-microscope-remediation.md`.
+
 ## [3.11.5] - 2026-06-07
 
 Security roll-up — supply-chain incident response + audit remediation (consolidates PRs #34–#38).
