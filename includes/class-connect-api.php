@@ -3262,7 +3262,7 @@ class Peanut_Connect_API {
             ], 500);
         }
 
-        Peanut_Connect_Activity_Log::log('backup_created', $result);
+        Peanut_Connect_Activity_Log::log('backup_created', 'success', __('Backup created', 'peanut-connect'), is_array($result) ? $result : []);
 
         return new WP_REST_Response($result, 200);
     }
@@ -3304,7 +3304,7 @@ class Peanut_Connect_API {
             ], 500);
         }
 
-        Peanut_Connect_Activity_Log::log('backup_restored', $result);
+        Peanut_Connect_Activity_Log::log('backup_restored', 'warning', __('Backup restored', 'peanut-connect'), is_array($result) ? $result : []);
 
         return new WP_REST_Response($result, 200);
     }
@@ -3338,7 +3338,7 @@ class Peanut_Connect_API {
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup.php';
         $health = Peanut_Connect_Backup::health_check();
 
-        Peanut_Connect_Activity_Log::log('update_applied', array_merge($result, ['health' => $health]));
+        Peanut_Connect_Activity_Log::log('update_applied', 'success', __('Update applied', 'peanut-connect'), array_merge(is_array($result) ? $result : [], ['health' => $health]));
 
         return new WP_REST_Response([
             'success' => true,
