@@ -21,6 +21,29 @@ class Peanut_Connect_Auth {
     private const SIGNATURE_WINDOW = 300;
 
     /**
+     * Canonical default Hub permission flags — the single source of truth for
+     * has_permission(), get_permissions(), and the activation seeding. Before
+     * this constant existed those three sites disagreed (publish_content was
+     * missing from activation, api_proxy from the auth defaults), so a freshly
+     * paired site could silently 403 a capability the SPA showed as available.
+     *
+     * High-impact capabilities (remote updates, content publishing, the
+     * outbound proxy) default to FALSE — the site owner must explicitly opt in.
+     * Read-only visibility (health, update listing, analytics) defaults to TRUE.
+     * health_check / list_updates are additionally always-allowed in
+     * has_permission() regardless of the stored option.
+     */
+    public const DEFAULT_PERMISSIONS = [
+        'health_check'     => true,
+        'list_updates'     => true,
+        'access_analytics' => true,
+        'perform_updates'  => false,
+        'publish_content'  => false,
+        'backup_restore'   => false,
+        'api_proxy'        => false,
+    ];
+
+    /**
      * Verify incoming request from manager
      *
      * Performs rate limiting check before authentication to prevent
@@ -117,27 +140,29 @@ class Peanut_Connect_Auth {
      * Check if a specific permission is allowed
      */
     public static function has_permission(string $permission): bool {
-        $permissions = get_option('peanut_connect_permissions', []);
-
-        // Health check and list updates are always allowed
-        if (in_array($permission, ['health_check', 'list_updates'])) {
+        // Health check and list updates are always allowed.
+        if (in_array($permission, ['health_check', 'list_updates'], true)) {
             return true;
         }
 
+        $permissions = self::get_permissions();
         return !empty($permissions[$permission]);
     }
 
     /**
-     * Get all permissions
+     * Get all permissions, merged over the canonical defaults.
+     *
+     * Merging (rather than returning the stored array verbatim) guarantees that
+     * flags added after a site was first paired — publish_content, api_proxy —
+     * always have a defined value, while a site owner's explicit stored choices
+     * (e.g. perform_updates they enabled) are preserved.
      */
     public static function get_permissions(): array {
-        return get_option('peanut_connect_permissions', [
-            'health_check' => true,
-            'list_updates' => true,
-            'perform_updates' => true,
-            'access_analytics' => true,
-            'publish_content' => true,
-        ]);
+        $stored = get_option('peanut_connect_permissions', null);
+        if (!is_array($stored)) {
+            return self::DEFAULT_PERMISSIONS;
+        }
+        return array_merge(self::DEFAULT_PERMISSIONS, $stored);
     }
 
     /**
@@ -316,12 +341,8 @@ class Peanut_Connect_Auth {
             return new WP_Error('stale_request', __('Signed request timestamp is outside the allowed window.', 'peanut-connect'), ['status' => 401]);
         }
 
-        // Single-use nonce — a captured request cannot be replayed within the window.
-        $nonce_key = 'pc_hub_nonce_' . hash('sha256', $nonce);
-        if (get_transient($nonce_key) !== false) {
-            return new WP_Error('replayed_request', __('Signed request nonce has already been used.', 'peanut-connect'), ['status' => 401]);
-        }
-
+        // Verify the signature BEFORE claiming the nonce, so a bad-signature
+        // request can't burn a victim's nonce.
         $valid = self::verify_signature(
             $stored_key,
             (string) $request->get_method(),
@@ -335,9 +356,41 @@ class Peanut_Connect_Auth {
             return new WP_Error('invalid_signature', __('Invalid request signature.', 'peanut-connect'), ['status' => 401]);
         }
 
-        // Burn the nonce for the window (+ slack for clock skew).
-        set_transient($nonce_key, 1, self::SIGNATURE_WINDOW * 2);
+        // Single-use nonce, claimed ATOMICALLY. add_option() performs an INSERT
+        // that returns false if the row already exists, so two concurrent
+        // requests carrying the same captured nonce cannot both pass — closing
+        // the check-then-set race the previous get_transient()/set_transient()
+        // pair allowed. The stored value is the expiry (swept by
+        // purge_expired_nonces() on the daily cleanup cron); correctness does
+        // not depend on the sweep, because a request older than the freshness
+        // window is already rejected above. autoload 'no' keeps these off the
+        // always-loaded options.
+        $nonce_key = 'pc_hub_nonce_' . hash('sha256', $nonce);
+        $claimed = add_option($nonce_key, (string) (time() + self::SIGNATURE_WINDOW * 2), '', 'no');
+        if (!$claimed) {
+            return new WP_Error('replayed_request', __('Signed request nonce has already been used.', 'peanut-connect'), ['status' => 401]);
+        }
+
         return true;
+    }
+
+    /**
+     * Sweep expired single-use nonce claims left by verify_signed_hub_request().
+     * Hooked to the daily peanut_connect_cleanup cron. Bounded, prepared query.
+     */
+    public static function purge_expired_nonces(): void {
+        global $wpdb;
+        if (!isset($wpdb)) {
+            return;
+        }
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(option_value AS UNSIGNED) < %d",
+                $wpdb->esc_like('pc_hub_nonce_') . '%',
+                time()
+            )
+        );
     }
 
     /**

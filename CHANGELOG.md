@@ -5,6 +5,39 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.0] - 2026-06-12
+
+Microscope remediation — Hub-as-consumer seam hardening (first `/microscope` audit, `docs/audits/2026-06-11-hub-consumer-microscope.md`).
+
+### Security
+- **Forms: stopped leaking the Hub bearer into public pages (A1).** The `[peanut_form]` page localized the Hub site key (and Hub URL) into HTML readable from view-source. Submissions now go through a public, nonce + rate-limited edge endpoint `POST /forms/submit` that forwards to Hub server-side with the key; the page exposes only `submitUrl` + nonce. (Safe edge-only fix: the Hub-served form JS 404s, so nothing depended on the leaked key.) Also drops the `data-hub-url` attribute.
+- **Signed-request nonce anti-replay is now race-free.** Verify the signature first, then claim the nonce atomically via `add_option()` so concurrent duplicates can't both pass; expired claims swept on the daily cleanup cron.
+- **Self-updater supply chain.** The update-server response was trusted unconditionally — a non-200 carrying attacker JSON was cached as authoritative for 12h, and `download_url` was handed to WordPress's installer with no host check (one poisoned/compromised response = RCE on every paired site). Now: reject non-200 before caching; pin `download_url` to an HTTPS host on a trusted allowlist (peanutgraphic.com + GitHub release hosts) or drop it; sanitize the version string.
+- **Self-updater no longer phones home before pairing.** It instantiates only once the site is paired (or `PEANUT_CONNECT_SELF_UPDATE` is defined), so an unpaired site makes no outbound call to the update server (Hub-blind Rule 3 / Itron).
+- **Security plugins are protected from remote teardown.** The Hub could remotely deactivate/delete any plugin (Wordfence, Sucuri, …); self-protection was a fragile `strpos`. Replaced with an exact folder-slug allowlist (`is_protected_plugin()`).
+- **Podcast publish can no longer overwrite arbitrary post types.** A supplied `wp_post_id` is honored only when it references an ordinary `post`; previously the forced `post_type=>'post'` upsert could silently convert a page / CPT / WooCommerce product (now 409).
+- **Transcript augment stored-XSS fixed.** `transcript_html` is `wp_kses_post`'d before being written into `post_content` (it arrives over the Hub channel and renders to every visitor).
+- **Tracking opt-out is now honored on the write path.** The public `/track`, `/identify`, `/conversion`, `/popup-interaction` endpoints share one precheck that rate-limits, refuses writes when tracking is disabled, and bounds `visitor_id`/`event_type` length and `metadata` size (analytic-poisoning / oversized-write defense).
+- **`/restore` gated behind an opt-in `backup_restore` permission.** Remote restore (DB overwrite + file replace) no longer rides on a bare Hub key and can be disabled by the owner. `/backup` (create) is unchanged.
+- **api-proxy SSRF backstop.** `redirection => 0` stops an allowlisted endpoint from redirecting the fetch to `169.254.169.254`/RFC1918; proxied response bodies are capped at 2 MB.
+- **`/status` no longer echoes `hub_url`** to the authenticated Hub caller (Hub-blind Rule 3).
+
+### Changed
+- **Close-default permission model.** A single `Peanut_Connect_Auth::DEFAULT_PERMISSIONS` is now the source of truth for the activation seed, `has_permission()`, and `get_permissions()` (previously three diverging defaults). High-impact capabilities — `perform_updates`, `publish_content`, `backup_restore`, `api_proxy` — default **OFF**; the owner opts in. Existing installs keep their stored choices (merge over defaults); only fresh installs see the closed defaults. **`publish_content` is now actually grantable** (it was absent from the seed, the settings UI, and the SPA handlers, so the podcast surface was permanently 403).
+
+### Fixed
+- **Backup/restore/update were never recorded in the activity log** (and 500'd under strict types): `Activity_Log::log()` was called with an array where a string `$status` was expected. Corrected to the real `(type, status, message, meta)` signature.
+- README corrected: the plugin does **not** SHA-256-hash stored keys (the Hub key is the HMAC signing secret and must be recoverable); the doc now describes auth accurately. Settings UI no longer defaults the Hub URL field to a hardcoded branded URL.
+
+### Accessibility
+- **Event banners are now reachable by screen readers.** The banner HTML allowlist no longer strips `aria-*`/`role`, and the rendered banner is wrapped in a labelled polite live region (WCAG 2.1 AA).
+
+### CI
+- Accessibility workflow moved off the self-hosted `peanut-ci` pool (which never serviced it — runs queued indefinitely) to `ubuntu-latest` with `--legacy-peer-deps`, matching the other workflows; fixed the keyboard-inaccessible `GtmCoverage` host row the run flagged.
+
+### Notes / deferred
+- Two audit items remain deferred for sound reasons (documented in `docs/audits/2026-06-11-hub-consumer-microscope-remediation.md`): **encrypt-the-key-at-rest** (the key is the HMAC secret with 24 read-sites — needs a centralized accessor + integration tests, dedicated PR) and **defaulting `require_signed_requests` on** (an operational rollout: the Hub signer is verified to match and sign universally, but every production Hub must be confirmed signing before any site enforces it, else fleet monitoring breaks).
+
 ## [3.11.5] - 2026-06-07
 
 Security roll-up — supply-chain incident response + audit remediation (consolidates PRs #34–#38).

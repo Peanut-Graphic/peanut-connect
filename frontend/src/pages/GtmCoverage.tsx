@@ -279,21 +279,24 @@ function Stat({ label, value, warn }: { label: string; value: number; warn?: boo
 
 function HostRow({ row, onClick }: { row: GtmHostRow; onClick: () => void }) {
   return (
-    <li
-      className="px-4 py-3 hover:bg-slate-50 cursor-pointer"
-      onClick={onClick}
-    >
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-sm text-slate-900 truncate">{row.host}</span>
-        <span className="text-xs text-slate-500 tabular-nums">
-          {row.load_count.toLocaleString()}
-        </span>
-      </div>
-      <div className="text-xs text-slate-500 mt-0.5">
-        {row.unique_urls.toLocaleString()} unique URL
-        {row.unique_urls === 1 ? '' : 's'} · last{' '}
-        {row.last_seen ? new Date(row.last_seen).toLocaleString() : '—'}
-      </div>
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full text-left px-4 py-3 hover:bg-slate-50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      >
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-sm text-slate-900 truncate">{row.host}</span>
+          <span className="text-xs text-slate-500 tabular-nums">
+            {row.load_count.toLocaleString()}
+          </span>
+        </div>
+        <div className="text-xs text-slate-500 mt-0.5">
+          {row.unique_urls.toLocaleString()} unique URL
+          {row.unique_urls === 1 ? '' : 's'} · last{' '}
+          {row.last_seen ? new Date(row.last_seen).toLocaleString() : '—'}
+        </div>
+      </button>
     </li>
   );
 }

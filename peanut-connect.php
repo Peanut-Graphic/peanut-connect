@@ -3,7 +3,7 @@
  * Plugin Name: End-to-End
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: End-to-end campaign and site platform for WordPress — runs campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all wired to a central Peanut Hub.
- * Version: 3.11.6
+ * Version: 3.12.0
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.11.6');
+define('PEANUT_CONNECT_VERSION', '3.12.0');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -124,8 +124,20 @@ final class Peanut_Connect {
         // Initialize videos integration ([peanut_video] shortcode)
         Peanut_Connect_Videos::init();
 
-        // Initialize self-updater early so update check filter is registered
-        new Peanut_Connect_Self_Updater();
+        // Initialize the self-updater early so its update-check filter is
+        // registered — but ONLY once the site is actually paired with a Hub.
+        // The updater phones home to the license/update server; doing that on
+        // an unpaired site leaks the Hub relationship's existence (detectable
+        // in firewall/packet logs), violating Rule 3 of the Hub↔Edge contract
+        // and the named Hub-blind requirement for sensitive clients (Itron).
+        // A deployment can force the behaviour either way with the
+        // PEANUT_CONNECT_SELF_UPDATE constant (true = always, false = never).
+        $self_update = defined('PEANUT_CONNECT_SELF_UPDATE')
+            ? (bool) PEANUT_CONNECT_SELF_UPDATE
+            : $this->is_hub_connected();
+        if ($self_update) {
+            new Peanut_Connect_Self_Updater();
+        }
     }
 
     /**
@@ -172,6 +184,7 @@ final class Peanut_Connect {
 
         // Schedule daily cleanup of old synced records (v2.6.3+)
         add_action('peanut_connect_cleanup', [Peanut_Connect_Database::class, 'cleanup_old_records']);
+        add_action('peanut_connect_cleanup', [Peanut_Connect_Auth::class, 'purge_expired_nonces']);
         if (!wp_next_scheduled('peanut_connect_cleanup')) {
             wp_schedule_event(time(), 'daily', 'peanut_connect_cleanup');
         }
@@ -411,12 +424,7 @@ final class Peanut_Connect {
         register_setting('peanut_connect', 'peanut_connect_permissions', [
             'type' => 'array',
             'sanitize_callback' => [$this, 'sanitize_permissions'],
-            'default' => [
-                'health_check' => true,
-                'list_updates' => true,
-                'perform_updates' => true,
-                'access_analytics' => true,
-            ],
+            'default' => Peanut_Connect_Auth::DEFAULT_PERMISSIONS,
         ]);
 
         // Hub Mode setting (v2.6.0+)
@@ -444,6 +452,8 @@ final class Peanut_Connect {
             'list_updates' => true, // Always allowed
             'perform_updates' => !empty($input['perform_updates']),
             'access_analytics' => !empty($input['access_analytics']),
+            'publish_content' => !empty($input['publish_content']),
+            'backup_restore' => !empty($input['backup_restore']),
             'api_proxy' => !empty($input['api_proxy']),
         ];
     }
@@ -454,12 +464,7 @@ final class Peanut_Connect {
     public function render_settings_page(): void {
         $site_key = get_option('peanut_connect_site_key');
         $manager_url = get_option('peanut_connect_manager_url');
-        $permissions = get_option('peanut_connect_permissions', [
-            'health_check' => true,
-            'list_updates' => true,
-            'perform_updates' => true,
-            'access_analytics' => true,
-        ]);
+        $permissions = Peanut_Connect_Auth::get_permissions();
         $last_sync = get_option('peanut_connect_last_sync');
         ?>
         <div class="wrap">
@@ -549,6 +554,20 @@ final class Peanut_Connect {
                             <td>
                                 <input type="checkbox" name="peanut_connect_permissions[access_analytics]" value="1" <?php checked($permissions['access_analytics'] ?? false); ?>>
                                 <span class="description"><?php echo esc_html__('Share Peanut Suite analytics data with manager', 'peanut-connect'); ?></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><?php echo esc_html__('Publish Content', 'peanut-connect'); ?></th>
+                            <td>
+                                <input type="checkbox" name="peanut_connect_permissions[publish_content]" value="1" <?php checked($permissions['publish_content'] ?? false); ?>>
+                                <span class="description"><?php echo esc_html__('Allow manager to publish and update content (e.g. podcast episodes) on this site', 'peanut-connect'); ?></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><?php echo esc_html__('Backup &amp; Restore', 'peanut-connect'); ?></th>
+                            <td>
+                                <input type="checkbox" name="peanut_connect_permissions[backup_restore]" value="1" <?php checked($permissions['backup_restore'] ?? false); ?>>
+                                <span class="description"><?php echo esc_html__('Allow manager to remotely restore a backup (overwrites this site\'s database and files)', 'peanut-connect'); ?></span>
                             </td>
                         </tr>
                     </table>
@@ -709,14 +728,13 @@ register_activation_hook(__FILE__, function() {
         update_option('peanut_connect_site_key', $key);
     }
 
-    // Set default permissions
+    // Set default permissions from the single canonical source of truth so the
+    // seeded set never drifts from has_permission()/get_permissions() again.
+    // High-impact capabilities (perform_updates, publish_content, api_proxy)
+    // seed to FALSE — the owner opts in deliberately.
     if (!get_option('peanut_connect_permissions')) {
-        update_option('peanut_connect_permissions', [
-            'health_check' => true,
-            'list_updates' => true,
-            'perform_updates' => true,
-            'access_analytics' => true,
-        ]);
+        require_once plugin_dir_path(__FILE__) . 'includes/class-connect-auth.php';
+        update_option('peanut_connect_permissions', Peanut_Connect_Auth::DEFAULT_PERMISSIONS);
     }
 
     // Create Hub tracking database tables (v2.3.0+)

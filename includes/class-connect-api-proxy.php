@@ -33,6 +33,13 @@ class Peanut_Connect_API_Proxy {
     private const DEFAULT_TIMEOUT = 30;
 
     /**
+     * Cap on the proxied response body we will buffer + re-encode. A compromised
+     * or hostile allowlisted endpoint returning a multi-MB body would otherwise
+     * be JSON-encoded into our response, doubling peak memory.
+     */
+    private const MAX_RESPONSE_BYTES = 2097152; // 2 MB
+
+    /**
      * Handle an API proxy request from Hub.
      *
      * @param WP_REST_Request $request The incoming request.
@@ -89,10 +96,15 @@ class Peanut_Connect_API_Proxy {
 
         $start_time = microtime(true);
 
-        // Forward the request
+        // Forward the request. redirection => 0 is the SSRF backstop: the host
+        // allowlist is checked against the URL above, but WordPress will follow
+        // redirects by default and the redirect target is NOT re-validated — an
+        // allowlisted endpoint redirecting to 169.254.169.254 or an RFC1918
+        // address would otherwise be fetched. We refuse to chase redirects.
         $args = [
-            'timeout'   => $timeout,
-            'sslverify' => true,
+            'timeout'     => $timeout,
+            'sslverify'   => true,
+            'redirection' => 0,
         ];
 
         if ($method === 'GET') {
@@ -120,6 +132,17 @@ class Peanut_Connect_API_Proxy {
         $status_code  = wp_remote_retrieve_response_code($response);
         $body         = wp_remote_retrieve_body($response);
         $content_type = wp_remote_retrieve_header($response, 'content-type');
+
+        if (strlen($body) > self::MAX_RESPONSE_BYTES) {
+            return new WP_REST_Response([
+                'success'      => false,
+                'status_code'  => $status_code,
+                'body'         => '',
+                'content_type' => $content_type,
+                'elapsed_ms'   => $elapsed_ms,
+                'error'        => 'response_too_large',
+            ], 502);
+        }
 
         return new WP_REST_Response([
             'success'      => $status_code >= 200 && $status_code < 400,

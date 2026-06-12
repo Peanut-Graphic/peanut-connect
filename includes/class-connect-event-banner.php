@@ -154,8 +154,13 @@ class Peanut_Connect_Event_Banner {
         }
 
         // Output banner HTML through the strict banner allowlist (re-applied at
-        // render, not just at save).
+        // render, not just at save), wrapped in a labelled polite live region so
+        // screen readers announce it when it appears and can navigate to it as a
+        // landmark — baseline a11y that does not depend on what Hub supplies.
+        echo '<div class="peanut-event-banner-region" role="region" aria-live="polite" aria-atomic="true" aria-label="'
+            . esc_attr__('Site announcement', 'peanut-connect') . '">' . "\n";
         echo self::sanitize_banner_html((string) $banner['html']) . "\n";
+        echo '</div>' . "\n";
 
         // Add body class. position is constrained to a known set and JSON-encoded
         // for the JS string context — never interpolate raw values into <script>.
@@ -286,14 +291,27 @@ class Peanut_Connect_Event_Banner {
      * @return string Sanitised HTML.
      */
     public static function sanitize_banner_html(string $html): string {
+        // Accessibility attributes permitted on banner elements so Hub can ship
+        // an accessible banner — landmark role, live-region announcement,
+        // labelled controls. The prior allowlist stripped all of these, leaving
+        // every banner invisible to screen readers (WCAG 2.1 AA §4.1.3/§2.4.4).
+        $aria = [
+            'role'             => true,
+            'aria-label'       => true,
+            'aria-hidden'      => true,
+            'aria-live'        => true,
+            'aria-atomic'      => true,
+            'aria-describedby' => true,
+            'aria-labelledby'  => true,
+        ];
         $allowed = [
-            'a'      => ['href' => true, 'title' => true, 'class' => true, 'rel' => true, 'target' => true],
-            'span'   => ['class' => true],
-            'div'    => ['class' => true],
-            'p'      => ['class' => true],
+            'a'      => array_merge(['href' => true, 'title' => true, 'class' => true, 'rel' => true, 'target' => true], $aria),
+            'span'   => array_merge(['class' => true], $aria),
+            'div'    => array_merge(['class' => true], $aria),
+            'p'      => array_merge(['class' => true], $aria),
             'strong' => [], 'em' => [], 'b' => [], 'i' => [], 'u' => [], 'br' => [], 'small' => [],
-            'button' => ['class' => true, 'type' => true],
-            'img'    => ['src' => true, 'alt' => true, 'class' => true, 'width' => true, 'height' => true],
+            'button' => array_merge(['class' => true, 'type' => true], $aria),
+            'img'    => array_merge(['src' => true, 'alt' => true, 'class' => true, 'width' => true, 'height' => true], $aria),
         ];
         return wp_kses($html, $allowed, ['http', 'https', 'mailto']);
     }

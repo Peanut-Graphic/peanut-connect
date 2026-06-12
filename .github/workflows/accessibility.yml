@@ -12,7 +12,11 @@ concurrency:
 jobs:
   accessibility:
     name: Accessibility Tests
-    runs-on: [self-hosted, linux, peanut-ci]
+    # ubuntu-latest, matching tests.yml + wp-contract.yml. This job is pure Node
+    # (npm ci + eslint + vitest) and needs no special hardware; it had been left
+    # pointed at the self-hosted peanut-ci pool, which never serviced it (runs
+    # sat queued indefinitely while the rest of CI moved to GitHub-hosted).
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
@@ -29,7 +33,9 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        # legacy-peer-deps: eslint 10 vs eslint-plugin-jsx-a11y peer range
+        # (pre-existing; same handling as tests.yml frontend-tests).
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
       - name: ESLint with jsx-a11y
         continue-on-error: true
