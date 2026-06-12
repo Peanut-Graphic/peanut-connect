@@ -233,6 +233,12 @@ if (!class_exists('WP_Error')) {
     }
 }
 
+if (!function_exists('wp_parse_url')) {
+    function wp_parse_url($url, $component = -1) {
+        return parse_url($url, $component);
+    }
+}
+
 // Initialize mock storage.
 global $mock_options, $mock_transients;
 $mock_options = [];

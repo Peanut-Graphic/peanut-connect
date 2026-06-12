@@ -23,6 +23,20 @@ class Peanut_Connect_Self_Updater {
     private const PLUGIN_SLUG = 'peanut-connect';
 
     /**
+     * Hosts the update package is allowed to be served from. A compromised or
+     * spoofed update-server response that points `download_url` anywhere else
+     * is rejected before it can be handed to WordPress's installer — otherwise
+     * a single poisoned response is remote code execution on every paired site.
+     */
+    private const TRUSTED_PACKAGE_HOSTS = [
+        'peanutgraphic.com',
+        'www.peanutgraphic.com',
+        'github.com',
+        'codeload.github.com',
+        'objects.githubusercontent.com',
+    ];
+
+    /**
      * Plugin file path
      */
     private string $plugin_file;
@@ -153,16 +167,60 @@ class Peanut_Connect_Self_Updater {
             return null;
         }
 
+        // Only trust a clean 200. A non-200 (error page, WAF challenge, captive
+        // portal) that happens to carry attacker-controlled JSON must never be
+        // cached as authoritative update info for the next 12 hours.
+        if ((int) wp_remote_retrieve_response_code($response) !== 200) {
+            return null;
+        }
+
         $body = json_decode(wp_remote_retrieve_body($response));
 
         if (!$body || !isset($body->plugin_info)) {
             return null;
         }
 
-        // Cache for 12 hours
-        set_transient($cache_key, $body->plugin_info, 12 * HOUR_IN_SECONDS);
+        $info = $body->plugin_info;
 
-        return $body->plugin_info;
+        // A version we can't parse is not a version we'll act on.
+        if (isset($info->version)) {
+            $info->version = self::sanitize_version((string) $info->version);
+            if ($info->version === '') {
+                return null;
+            }
+        }
+
+        // Pin the package host. If the server response points the installer at
+        // an untrusted host, drop the download URL so WordPress offers no
+        // package rather than fetching code from an attacker.
+        if (!empty($info->download_url) && !self::is_trusted_package_url((string) $info->download_url)) {
+            unset($info->download_url);
+        }
+
+        // Cache for 12 hours
+        set_transient($cache_key, $info, 12 * HOUR_IN_SECONDS);
+
+        return $info;
+    }
+
+    /**
+     * True only for an HTTPS URL whose host is on the trusted-package allowlist
+     * (exact match — no suffix games like "peanutgraphic.com.evil.test").
+     */
+    private static function is_trusted_package_url(string $url): bool {
+        $parts = wp_parse_url($url);
+        if (empty($parts['scheme']) || strtolower($parts['scheme']) !== 'https' || empty($parts['host'])) {
+            return false;
+        }
+        return in_array(strtolower($parts['host']), self::TRUSTED_PACKAGE_HOSTS, true);
+    }
+
+    /**
+     * Normalize a dotted-numeric version, or '' if it isn't one.
+     */
+    private static function sanitize_version(string $version): string {
+        $version = trim($version);
+        return preg_match('/^[0-9]+(\.[0-9]+){0,3}$/', $version) ? $version : '';
     }
 
     /**
