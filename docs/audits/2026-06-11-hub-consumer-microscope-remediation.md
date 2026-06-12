@@ -28,22 +28,29 @@ The standing constraint was **do not break live paired sites and do not require 
 
 **Tests added (active suite):** `Test_Self_Updater_Trust` (host pinning + version), `Test_Protected_Plugins` (allowlist exactness), `Test_Permission_Defaults` (close-default + merge semantics). Full suite: 89 tests green. Frontend: 390 tests green, `tsc --noEmit` + `vite build` clean.
 
-## Deferred — with reasons
+## Shipped in the second pass (CI ownership + deferred items revisited)
 
-These are real audit findings deliberately **not** in 3.12.0. Each would either break the live fleet if shipped alone or requires the Hub side to change first.
+After the first pass, ownership of the peanut-ci runner and both repos was confirmed, so the deferred set was re-examined. Several items turned out to be safe edge-only fixes and were completed:
 
-### A1 (full) — forms bearer → signed-nonce re-architecture
-The form's submit JS is **loaded from the Hub** and handed the Hub bearer (`wp_localize_script` → `PeanutFormsConfig.apiKey`) so the browser posts directly to Hub. Removing the key from the page requires the Hub-hosted `peanut-forms.min.js` to submit through a local edge proxy with a short-lived nonce instead — a coordinated Hub+edge change. Shipping only the edge half (dropping `apiKey`) would break live form submission. **The bearer-in-public-HTML leak remains until the Hub-side JS is updated.** This is the single highest-value remaining item and should be the next coordinated change. Tracked: audit `outbound-sync` P0, `forms` `data-hub-url` (B4 remainder).
+- **A1 — forms bearer leak: DONE.** Investigation showed the Hub-served `peanut-forms.min.js` returns **404** on both Hub hosts (`hub.peanutgraphic.com`, `www.peanutgraphic.com`) — so no working client depends on the leaked key and there is *no flag-day*. Fixed edge-only: the page no longer localizes the bearer or the Hub URL; a public nonce + rate-limited `POST /forms/submit` endpoint forwards submissions to Hub server-side with the key. The `data-hub-url` attribute (B4 remainder) is also gone.
+- **Backup/restore/update activity-log `TypeError`: DONE.** `log()` was called as `log(type, $resultArray)` against a `(type, status, message, meta)` signature — backups/restores/updates were never logged (500 under strict types). Corrected.
+- **Signed-request nonce TOCTOU: DONE.** Verify signature first, then claim the nonce atomically via `add_option()` (INSERT-or-fail); expired claims swept on the daily cleanup cron.
+- **Banner a11y: DONE.** The HTML allowlist now permits a safe set of `aria-*`/`role`, and the rendered banner is wrapped in a labelled polite live region — screen-reader reachable regardless of Hub content.
+- **CI runner: DONE.** The Accessibility workflow was the only one still pointed at the self-hosted `peanut-ci` pool, which never serviced it (queued indefinitely; 3 prior runs cancelled). Moved to `ubuntu-latest` with `--legacy-peer-deps` (matching `tests.yml`), and fixed the real keyboard-inaccessible `GtmCoverage` row the run would have flagged. All five checks now green.
 
-### A5 (full) — hash / encrypt the stored Hub key
-MAX's "store `sha256(key)` and compare hashes" is **incompatible with the design**: the same `peanut_connect_hub_api_key` is the HMAC shared secret (`hash_hmac('sha256', $canonical, $key)`), so it must be stored recoverable to verify a signature. A real fix is encryption-at-rest plus a separate verification token distinct from the signing secret — a design change, not a one-liner. Shipped the honest half (README correction). Tracked: `hub-auth-gate` P0.
+## Still deferred — with reasons
+
+These two remain out, for sound reasons (verified, not punted):
+
+### A5 — encrypt the stored Hub key at rest
+The stored `peanut_connect_hub_api_key` **is** the HMAC signing secret (`hash_hmac('sha256', $canonical, $key)`), so it cannot be hashed — it must be recoverable to verify a signature. Encryption-at-rest is viable but is a **broad, high-risk change**: the key is read at **24 sites across 11 files**, every one of which would have to route through a decrypting accessor, and there is no WP-boot integration test in this repo to catch a missed site (a miss = broken auth on the live fleet). Correct path: introduce a single `get_hub_api_key()` accessor + integration tests, then encrypt. Shipped the honest half already (README correction). Tracked: `hub-auth-gate` P0.
 
 ### A8b — make `require_signed_requests` default true
-Flipping this on rejects every unsigned Bearer request. If any production Hub path still sends unsigned requests, this **locks out the live fleet**. It must follow confirmation that Hub signs 100% of requests, then ship as a default flip + migration. Tracked: `hub-auth-gate` P0, `pairing-lifecycle` P1.
+De-risked but still an **operational rollout, not a code default-flip**. Verified on the Hub side: `App\Support\PeanutConnectSigner` mirrors the edge canonicalization exactly, and the `Http::peanutConnect($site)` macro (AppServiceProvider) signs **every** request via `withRequestMiddleware` while keeping the Bearer for back-compat — the established convention is that all Hub→edge calls use it. The remaining risk is purely deployment ordering: flipping the edge default rejects unsigned requests, so **every** production Hub must already be signing before any site enforces it, or fleet monitoring breaks. Safe path: confirm the signing macro is deployed fleet-wide, then enable per-site (the option already exists) — not a blind default change in this release. Tracked: `hub-auth-gate` P0, `pairing-lifecycle` P1.
 
 ### Other deferred (lower severity, see audit)
-TOCTOU nonce burn; DNS-rebind window in the pairing SSRF guard; partial-restore rollback + `import_database` swallowing errors; backup activity-log `TypeError`; Nginx error-log exposure (deployment-runbook item); banner a11y (`wp_kses` strips `aria-*`); the placeholder Hub URL strings in Settings.tsx (part of the Hub-blind build-time string-substitution track).
+DNS-rebind window in the pairing SSRF guard; partial-restore rollback + `import_database` swallowing errors; Nginx error-log exposure (deployment-runbook item); the placeholder Hub URL strings in Settings.tsx (part of the Hub-blind build-time string-substitution track).
 
 ## Follow-up recommendation
 
-The next coordinated Hub+edge change should bundle **A1 (forms nonce)** and **A8b (signed-required default)** together, since both are Hub-side-first and both close the remaining bearer-replay / bearer-leak exposure that A5's deferral leaves open.
+The remaining bearer-replay exposure is closed operationally by **A8b** (enable signed-required per site once the Hub signer is confirmed fleet-wide). **A5** (encryption-at-rest) is the one true code change left and should be done as a dedicated PR with the centralized accessor + integration tests, given its 24-site blast radius.
