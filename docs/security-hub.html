@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Peanut End to End — Hub ↔ Edge Security</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,900&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0c1215; --ink-2:#121b20; --ink-3:#18242a; --ink-4:#1f2e35;
+    --line:rgba(236,230,218,.10); --line-2:rgba(236,230,218,.18);
+    --paper:#ece6da; --paper-dim:#9fb0ac; --paper-faint:#6f817d;
+    --amber:#f2b455; --amber-deep:#d98e2b; --amber-soft:rgba(242,180,85,.12);
+    --mint:#74d8a8; --mint-soft:rgba(116,216,168,.12);
+    --coral:#ee6f60; --coral-soft:rgba(238,111,96,.12);
+    --blue:#73b6da; --blue-soft:rgba(115,182,218,.12);
+    --display:"Fraunces",Georgia,serif;
+    --body:"Public Sans",-apple-system,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--ink); color:var(--paper); font-family:var(--body);
+    font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  /* blueprint grid + glow + grain */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+      linear-gradient(var(--line) 1px,transparent 1px),
+      linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:46px 46px;
+    -webkit-mask-image:radial-gradient(ellipse 90% 60% at 50% 0%,#000 35%,transparent 78%);
+            mask-image:radial-gradient(ellipse 90% 60% at 50% 0%,#000 35%,transparent 78%);
+    opacity:.5;
+  }
+  body::after{
+    content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .glow{position:fixed;top:-30vh;left:50%;transform:translateX(-50%);width:120vw;height:80vh;z-index:0;pointer-events:none;
+    background:radial-gradient(ellipse at center,rgba(242,180,85,.10),transparent 60%);}
+  .wrap{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:0 28px}
+
+  /* ---- type ---- */
+  .mono{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase}
+  .eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);display:inline-flex;align-items:center;gap:.6em}
+  .eyebrow::before{content:"";width:22px;height:1px;background:var(--amber)}
+  h1,h2,h3{font-family:var(--display);font-weight:600;line-height:1.05;letter-spacing:-.01em}
+  h2{font-size:clamp(1.9rem,4.4vw,3rem);font-weight:600}
+  h3{font-size:1.32rem;font-weight:600;letter-spacing:0}
+  p{color:var(--paper-dim)} strong{color:var(--paper);font-weight:600}
+  a{color:var(--amber);text-decoration:none;border-bottom:1px solid rgba(242,180,85,.35)}
+  a:hover{border-color:var(--amber)}
+  section{padding:84px 0;border-top:1px solid var(--line);position:relative}
+
+  /* ---- hero ---- */
+  header.hero{padding:118px 0 78px;text-align:left;border:0}
+  .badge{display:inline-flex;align-items:center;gap:.55em;font-family:var(--mono);font-size:.68rem;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--mint);background:var(--mint-soft);border:1px solid rgba(116,216,168,.3);
+    padding:6px 12px;border-radius:100px}
+  .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--mint);box-shadow:0 0 0 0 rgba(116,216,168,.6);animation:pulse 2.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(116,216,168,.5)}70%{box-shadow:0 0 0 9px rgba(116,216,168,0)}100%{box-shadow:0 0 0 0 rgba(116,216,168,0)}}
+  .hero h1{font-size:clamp(2.7rem,7.2vw,5.2rem);font-weight:900;margin:26px 0 0;letter-spacing:-.025em}
+  .hero h1 .em{font-style:italic;font-weight:400;color:var(--amber)}
+  .hero .lede{font-size:clamp(1.05rem,2vw,1.32rem);max-width:46ch;margin-top:24px;color:var(--paper);line-height:1.55}
+  .hero .sub{max-width:58ch;margin-top:14px;font-size:1rem}
+
+  /* ---- stat strip ---- */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:50px}
+  .stat{background:var(--ink-2);padding:22px 20px}
+  .stat .n{font-family:var(--display);font-size:2.5rem;font-weight:600;line-height:1;color:var(--amber)}
+  .stat .n.mint{color:var(--mint)} .stat .n.coral{color:var(--coral)}
+  .stat .l{font-family:var(--mono);font-size:.64rem;letter-spacing:.13em;text-transform:uppercase;color:var(--paper-dim);margin-top:10px}
+
+  .lead-2{max-width:62ch;margin-top:18px}
+  .section-head{max-width:64ch;margin-bottom:42px}
+  .section-head h2{margin-top:14px}
+
+  /* ---- topology ---- */
+  .topo{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:stretch;gap:0;margin-top:8px}
+  .node{background:var(--ink-2);border:1px solid var(--line-2);border-radius:14px;padding:24px}
+  .node .role{font-family:var(--mono);font-size:.62rem;letter-spacing:.15em;text-transform:uppercase;color:var(--paper-faint)}
+  .node h3{margin:10px 0 8px}
+  .node.hub{border-color:rgba(115,182,218,.4)} .node.hub .ic{color:var(--blue)}
+  .node.edge{border-color:rgba(242,180,85,.45)} .node.edge .ic{color:var(--amber)}
+  .node.visitor .ic{color:var(--paper-dim)}
+  .node p{font-size:.92rem}
+  .conn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:0 6px;min-width:78px}
+  .conn .lbl{font-family:var(--mono);font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);text-align:center}
+  .conn svg{color:var(--line-2)}
+  .ic{display:inline-flex} .ic svg{width:26px;height:26px;stroke-width:1.5}
+
+  /* ---- contract rules ---- */
+  .rules{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:34px}
+  .rule{background:var(--ink-2);border:1px solid var(--line);border-left:2px solid var(--amber-deep);border-radius:10px;padding:18px 20px}
+  .rule .k{font-family:var(--mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--amber)}
+  .rule p{font-size:.92rem;margin-top:7px;color:var(--paper-dim)}
+
+  /* ---- lifecycle gates ---- */
+  .flow{position:relative;margin-top:10px;padding-left:30px}
+  .flow::before{content:"";position:absolute;left:9px;top:14px;bottom:14px;width:2px;
+    background:linear-gradient(var(--blue),var(--amber) 55%,var(--mint))}
+  .gate{position:relative;background:var(--ink-2);border:1px solid var(--line);border-radius:12px;
+    padding:18px 22px;margin-bottom:14px}
+  .gate::before{content:"";position:absolute;left:-25px;top:24px;width:13px;height:13px;border-radius:50%;
+    background:var(--ink);border:2px solid var(--amber)}
+  .gate .top{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+  .gate h3{font-size:1.06rem}
+  .gate .tag{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;
+    padding:3px 8px;border-radius:5px;background:var(--ink-4);color:var(--paper-dim);border:1px solid var(--line)}
+  .gate .tag.new{color:var(--mint);border-color:rgba(116,216,168,.3);background:var(--mint-soft)}
+  .gate p{font-size:.92rem;margin-top:8px}
+  .gate .ic svg{width:20px;height:20px;color:var(--amber)}
+
+  /* ---- defense grid ---- */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:8px}
+  .card{background:var(--ink-2);border:1px solid var(--line);border-radius:14px;padding:22px;
+    transition:transform .35s cubic-bezier(.2,.8,.2,1),border-color .35s,background .35s}
+  .card:hover{transform:translateY(-4px);border-color:var(--line-2);background:var(--ink-3)}
+  .card .ic{width:42px;height:42px;border-radius:10px;display:grid;place-items:center;background:var(--amber-soft);margin-bottom:14px}
+  .card .ic svg{width:22px;height:22px;color:var(--amber)}
+  .card.g .ic{background:var(--mint-soft)} .card.g .ic svg{color:var(--mint)}
+  .card.b .ic{background:var(--blue-soft)} .card.b .ic svg{color:var(--blue)}
+  .card h3{font-size:1.08rem;letter-spacing:0}
+  .card p{font-size:.9rem;margin-top:8px}
+  .card .rel{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--paper-faint);margin-top:12px;display:block}
+
+  /* ---- crypto pipeline ---- */
+  .crypto{background:var(--ink-2);border:1px solid var(--line-2);border-radius:16px;padding:30px;margin-top:8px}
+  .pipe{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+  .pcell{flex:1;min-width:150px;background:var(--ink-3);border:1px solid var(--line);border-radius:10px;padding:16px;text-align:center}
+  .pcell .t{font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--paper-faint)}
+  .pcell .v{font-family:var(--mono);font-size:.84rem;color:var(--paper);margin-top:8px;word-break:break-word}
+  .pcell.op{background:transparent;border-style:dashed;border-color:var(--amber-deep)}
+  .pcell.op .v{color:var(--amber)}
+  .parrow{display:grid;place-items:center;padding:0 8px;color:var(--line-2)}
+  .stored{margin-top:18px;font-family:var(--mono);font-size:.82rem;background:var(--ink);border:1px solid var(--line);
+    border-radius:10px;padding:14px 16px;color:var(--paper-dim);overflow-x:auto}
+  .stored b{color:var(--mint)} .stored .pf{color:var(--amber)}
+  .keypts{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:18px}
+  .keypts li{list-style:none;font-size:.9rem;color:var(--paper-dim);display:flex;gap:9px;align-items:flex-start}
+  .keypts li svg{flex:none;width:17px;height:17px;color:var(--mint);margin-top:3px;stroke-width:2}
+
+  /* ---- timeline ---- */
+  .time{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .ph{background:var(--ink-2);padding:24px 20px;position:relative}
+  .ph .step{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;color:var(--amber)}
+  .ph h3{font-size:1.04rem;margin:10px 0 4px;letter-spacing:0}
+  .ph .ver{font-family:var(--mono);font-size:.62rem;color:var(--mint);text-transform:uppercase;letter-spacing:.1em}
+  .ph p{font-size:.85rem;margin-top:9px}
+
+  /* ---- deferred ---- */
+  .defer{background:var(--ink-2);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:12px;padding:24px 26px;margin-top:8px}
+  .defer .k{font-family:var(--mono);font-size:.64rem;letter-spacing:.13em;text-transform:uppercase;color:var(--blue)}
+  .defer h3{margin:8px 0 10px;font-size:1.16rem}
+  .defer p{font-size:.94rem}
+
+  /* footer */
+  footer{padding:64px 0 80px;border-top:1px solid var(--line);text-align:center}
+  footer .mono{color:var(--paper-faint)}
+  footer .creed{font-family:var(--display);font-style:italic;font-size:1.15rem;color:var(--paper);max-width:40ch;margin:18px auto 0}
+  .src{display:inline-flex;align-items:center;gap:8px;margin-top:22px;font-family:var(--mono);font-size:.7rem;
+    letter-spacing:.1em;color:var(--mint);text-transform:uppercase;background:var(--mint-soft);
+    border:1px solid rgba(116,216,168,.25);border-radius:100px;padding:7px 14px}
+
+  /* reveal animation */
+  .rv{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.8,.2,1)}
+  .rv.in{opacity:1;transform:none}
+  [data-d]{transition-delay:calc(var(--d,0)*90ms)}
+  @media (prefers-reduced-motion:reduce){
+    .rv{opacity:1;transform:none;transition:none}.badge .dot{animation:none}html{scroll-behavior:auto}
+  }
+  @media(max-width:860px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .topo{grid-template-columns:1fr}
+    .conn{flex-direction:row;min-height:54px;gap:10px}.conn svg{transform:rotate(90deg)}
+    .grid{grid-template-columns:1fr 1fr}
+    .time{grid-template-columns:1fr 1fr}
+    .rules,.keypts{grid-template-columns:1fr}
+  }
+  @media(max-width:560px){
+    .grid,.stats,.time{grid-template-columns:1fr}
+    .wrap{padding:0 20px}
+  }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <div class="wrap">
+    <span class="badge rv"><span class="dot"></span> Live on origin/main · v3.13.0</span>
+    <h1 class="rv" data-d="1">The seam, <span class="em">sealed.</span></h1>
+    <p class="lede rv" data-d="2"><strong>Peanut End to End</strong> is the on-site agent that lets a central Hub monitor, update, back up, and run campaigns on a customer's WordPress site. Everything dangerous happens across one boundary — the Hub ↔ Edge seam.</p>
+    <p class="sub rv" data-d="3">This is the story of how that seam was put under a microscope, what was found, and the layered defenses now standing between a remote command and a customer's production site.</p>
+
+    <div class="stats rv" data-d="4">
+      <div class="stat"><div class="n coral" data-count="97">0</div><div class="l">Findings audited</div></div>
+      <div class="stat"><div class="n coral" data-count="11">0</div><div class="l">P0 / critical</div></div>
+      <div class="stat"><div class="n mint" data-count="11">0</div><div class="l">Defenses shipped</div></div>
+      <div class="stat"><div class="n" data-count="2">0</div><div class="l">Releases · 3.12 → 3.13</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ THE SYSTEM ============ -->
+<section>
+  <div class="wrap">
+    <div class="section-head rv">
+      <span class="eyebrow">01 — The shape of the system</span>
+      <h2>Execution at the edge.<br>Authoring in the Hub.</h2>
+      <p class="lead-2">The plugin is the only thing that can touch the WordPress site directly — render a page, serve a popup, run an update. The Hub is where campaigns get authored and cross-site data is aggregated. The plugin must keep working with <strong>sane local defaults even when the Hub is absent</strong>. That asymmetry is the whole design — and the whole attack surface.</p>
+    </div>
+
+    <div class="topo rv" data-d="1">
+      <div class="node hub">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="7" rx="1.5"/><path d="M7 6.5h.01M7 17.5h.01"/></svg></span>
+        <span class="role">Central · Laravel</span>
+        <h3>The Hub</h3>
+        <p>Authoring, cross-site rollups, fleet management. Signs every command it sends.</p>
+      </div>
+      <div class="conn"><span class="lbl">Signed<br>command</span>
+        <svg width="40" height="14" viewBox="0 0 40 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M0 7h36m0 0-5-5m5 5-5 5"/></svg>
+      </div>
+      <div class="node edge">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2 3 6v6c0 5 3.8 8.3 9 10 5.2-1.7 9-5 9-10V6l-9-4Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <span class="role">On-site · WordPress plugin</span>
+        <h3>The Edge</h3>
+        <p>Executes everything. The gatekeeper: auth, permissions, sanitization, the encrypted key vault.</p>
+      </div>
+      <div class="conn"><span class="lbl">Server-side<br>render</span>
+        <svg width="40" height="14" viewBox="0 0 40 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M0 7h36m0 0-5-5m5 5-5 5"/></svg>
+      </div>
+      <div class="node visitor">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg></span>
+        <span class="role">Public</span>
+        <h3>The Visitor</h3>
+        <p>Sees popups, banners, forms, tracker — never a credential, never the Hub's existence.</p>
+      </div>
+    </div>
+
+    <div class="rules">
+      <div class="rule rv" data-d="1"><span class="k">Rule 1 · Edge does execution</span><p>No synchronous Hub call ever sits in a page-render path. The moat is that the plugin can do what the Hub can't.</p></div>
+      <div class="rule rv" data-d="2"><span class="k">Rule 2 · Degrade to less-rich, never broken</span><p>If a feature breaks without the Hub instead of merely losing richness, it was designed wrong.</p></div>
+      <div class="rule rv" data-d="3"><span class="k">Rule 3 · Hub-blind by default</span><p>For sensitive clients the plugin must not leak the Hub's existence — no call-home, no URLs, no key in the page.</p></div>
+      <div class="rule rv" data-d="4"><span class="k">Rule 4 · Pre-fetch, don't block</span><p>Real-time decisioning is cached at the edge and refreshed on a schedule — never a live Hub call mid-request.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REQUEST LIFECYCLE ============ -->
+<section>
+  <div class="wrap">
+    <div class="section-head rv">
+      <span class="eyebrow">02 — How a Hub command is secured</span>
+      <h2>Five gates between a command and the site</h2>
+      <p class="lead-2">Every inbound Hub → Edge request to a <span class="mono" style="color:var(--amber)">/hub/*</span> endpoint passes through the same sequence. Fail any gate and the request stops — fail-closed, with a clear status, never a silent success.</p>
+    </div>
+    <div class="flow">
+      <div class="gate rv" data-d="1">
+        <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h3>1 · Rate limit</h3><span class="tag">per-site bucket</span></div>
+        <p>Keyed by validated site, not raw IP, so shared-host siblings don't starve each other. Runs before any auth work.</p>
+      </div>
+      <div class="gate rv" data-d="2">
+        <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V5l-8-3Z"/><path d="M9 12h6M12 9v6"/></svg></span><h3>2 · HMAC signature + anti-replay</h3><span class="tag">key never on the wire</span></div>
+        <p>The preferred path: an HMAC-SHA256 signature over method + route + timestamp + body, proving possession of the shared key without transmitting it. A fresh timestamp window and a <strong>single-use nonce, burned atomically</strong>, make a captured request non-replayable. (A static Bearer remains as a fallback for un-migrated sites.)</p>
+      </div>
+      <div class="gate rv" data-d="3">
+        <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><h3>3 · Permission gate</h3><span class="tag new">close-default</span></div>
+        <p>One canonical permission set. High-impact powers — remote updates, content publishing, restore, the outbound proxy — <strong>default OFF</strong>. The owner opts in; a freshly paired site can monitor but not mutate.</p>
+      </div>
+      <div class="gate rv" data-d="4">
+        <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 3 7v5c0 5 4 8 9 9 5-1 9-4 9-9V7l-9-4Z"/><path d="m15 9-6 6M9 9l6 6"/></svg></span><h3>4 · Destructive-op allowlist</h3><span class="tag new">3.12.0</span></div>
+        <p>Even with a valid key, the Hub can't deactivate or delete a security plugin (Wordfence, Sucuri, …), can't retarget a restore URL off-Hub, and can't overwrite an arbitrary post type. The blast radius of a leaked key is bounded by code, not trust.</p>
+      </div>
+      <div class="gate rv" data-d="5">
+        <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2"/></svg></span><h3>5 · Execute + audit</h3><span class="tag">activity log</span></div>
+        <p>The action runs and is recorded with the correct type/status/message — backups, restores and updates now actually appear in the audit trail (they previously threw and logged nothing).</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DEFENSE LAYERS ============ -->
+<section>
+  <div class="wrap">
+    <div class="section-head rv">
+      <span class="eyebrow">03 — What was brought together</span>
+      <h2>Eleven defenses, one hardened agent</h2>
+      <p class="lead-2">No single fix mattered most — the point is the layering. A leaked key, a compromised Hub, a hostile visitor, a poisoned update server: each now meets a different wall.</p>
+    </div>
+    <div class="grid">
+      <div class="card g rv" data-d="1">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/></svg></span>
+        <h3>Encryption at rest</h3>
+        <p>The Hub key is sealed with libsodium under a key derived from the site's wp-config salts — off-database. A stolen DB dump yields ciphertext, not a credential.</p>
+        <span class="rel">A5 · v3.13.0</span>
+      </div>
+      <div class="card rv" data-d="2">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V5l-8-3Z"/><path d="M9 12h6M12 9v6"/></svg></span>
+        <h3>HMAC signing + anti-replay</h3>
+        <p>Signed requests keep the key off the wire; an atomic single-use nonce closes the replay race that two concurrent requests could once slip through.</p>
+        <span class="rel">3.12.0</span>
+      </div>
+      <div class="card b rv" data-d="3">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18M7 14h4"/></svg></span>
+        <h3>Bearer leak closed</h3>
+        <p>Form pages no longer print the Hub key into HTML. Submissions route through a server-side edge proxy — the credential never reaches a visitor's view-source.</p>
+        <span class="rel">A1 · 3.12.0</span>
+      </div>
+      <div class="card rv" data-d="1">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+        <h3>Close-default permissions</h3>
+        <p>Update, publish, restore and proxy powers ship OFF and must be granted. Publishing was even made grantable — it was permanently locked before.</p>
+        <span class="rel">3.12.0</span>
+      </div>
+      <div class="card g rv" data-d="2">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 3 7v5c0 5 4 8 9 9 5-1 9-4 9-9V7l-9-4Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <h3>Security plugins protected</h3>
+        <p>An exact-slug allowlist refuses any remote attempt to deactivate or delete Wordfence, Sucuri and peers — the site's perimeter can't be torn down by one call.</p>
+        <span class="rel">3.12.0</span>
+      </div>
+      <div class="card rv" data-d="3">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></svg></span>
+        <h3>Supply-chain hardening</h3>
+        <p>The self-updater checks for HTTP 200, pins the package host to a trusted allowlist, sanitizes versions, and won't even phone home before pairing.</p>
+        <span class="rel">3.12.0</span>
+      </div>
+      <div class="card b rv" data-d="1">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>
+        <h3>SSRF guards</h3>
+        <p>The API proxy refuses to follow redirects (no pivot to cloud-metadata IPs) and caps response size; restore URLs are pinned to the configured Hub host.</p>
+        <span class="rel">3.12.0</span>
+      </div>
+      <div class="card rv" data-d="2">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h16v12H4z"/><path d="M8 20h8M9 9l2 2 4-4"/></svg></span>
+        <h3>Stored-XSS sealed</h3>
+        <p>Hub-supplied transcript HTML and event-banner markup pass a strict allowlist before they're written to a page every visitor sees.</p>
+        <span class="rel">3.12.0</span>
+      </div>
+      <div class="card g rv" data-d="3">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></span>
+        <h3>Tracker honors opt-out</h3>
+        <p>Public tracking endpoints now respect the admin's disable switch and bound their inputs — no writes after opt-out, no analytic poisoning.</p>
+        <span class="rel">3.12.0</span>
+      </div>
+      <div class="card b rv" data-d="1">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><path d="m4 4 16 16"/></svg></span>
+        <h3>Hub-blind preserved</h3>
+        <p>No Hub URL in <span class="mono" style="color:var(--paper-dim)">/status</span>, no branded default in the UI, no pre-pairing call-home — the Hub stays invisible to sensitive deployments.</p>
+        <span class="rel">3.12.0</span>
+      </div>
+      <div class="card rv" data-d="2">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg></span>
+        <h3>Honest audit trail</h3>
+        <p>Backup, restore and update operations are recorded correctly — a type-mismatch had silently dropped exactly the highest-impact events.</p>
+        <span class="rel">3.12.0</span>
+      </div>
+      <div class="card g rv" data-d="3">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L16 2H8l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 3 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L8 22h8l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z"/></svg></span>
+        <h3>Accessible by default</h3>
+        <p>Event banners are reachable by screen readers — a live region plus an aria-aware allowlist replaced markup that stripped every accessibility hook.</p>
+        <span class="rel">3.12.0</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ A5 DEEP DIVE ============ -->
+<section>
+  <div class="wrap">
+    <div class="section-head rv">
+      <span class="eyebrow">04 — How the key vault works</span>
+      <h2>The key that can't be stolen by reading the database</h2>
+      <p class="lead-2">The Hub key is also the HMAC signing secret, so it can't simply be hashed — it has to be recoverable. The answer is encryption with a key that lives <strong>outside</strong> the database, in the site's <span class="mono" style="color:var(--amber)">wp-config.php</span> salts.</p>
+    </div>
+
+    <div class="crypto rv">
+      <div class="pipe">
+        <div class="pcell"><div class="t">Off-DB secret</div><div class="v">wp_salt('secure_auth')</div></div>
+        <div class="parrow"><svg width="22" height="14" viewBox="0 0 22 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M0 7h18m0 0-4-4m4 4-4 4"/></svg></div>
+        <div class="pcell op"><div class="t">Derive</div><div class="v">hash_hkdf · sha256</div></div>
+        <div class="parrow"><svg width="22" height="14" viewBox="0 0 22 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M0 7h18m0 0-4-4m4 4-4 4"/></svg></div>
+        <div class="pcell"><div class="t">+ key &amp; nonce</div><div class="v">secretbox<br>(XSalsa20-Poly1305)</div></div>
+        <div class="parrow"><svg width="22" height="14" viewBox="0 0 22 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M0 7h18m0 0-4-4m4 4-4 4"/></svg></div>
+        <div class="pcell"><div class="t">At rest in wp_options</div><div class="v" style="color:var(--mint)">ciphertext</div></div>
+      </div>
+      <div class="stored"><span class="pf">enc:v1:</span>base64( <b>nonce</b> · <b>authenticated&nbsp;ciphertext</b> )</div>
+      <ul class="keypts">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m5 12 5 5L20 7"/></svg><span><strong>Decrypt-on-use.</strong> The raw key is recovered only in memory to sign a request, then wiped (<span class="mono" style="font-size:.8em">sodium_memzero</span>).</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m5 12 5 5L20 7"/></svg><span><strong>Migrates itself.</strong> An existing plaintext key is returned once, then transparently re-stored encrypted on first read.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m5 12 5 5L20 7"/></svg><span><strong>Fails closed.</strong> If salts rotate and the key can't be decrypted, the site behaves as un-paired — never a fatal error.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m5 12 5 5L20 7"/></svg><span><strong>One door.</strong> Every read/write flows through a single accessor — proven by grep that nothing else touches the option.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ JOURNEY ============ -->
+<section>
+  <div class="wrap">
+    <div class="section-head rv">
+      <span class="eyebrow">05 — How it came together</span>
+      <h2>From microscope to merged</h2>
+      <p class="lead-2">Not one big sweep — a focused, persona-by-persona audit (the Hub as a machine consumer), every finding adversarially re-verified, then synthesized by two advisors before a single line was changed.</p>
+    </div>
+    <div class="time">
+      <div class="ph rv" data-d="1"><span class="step">Phase 01</span><h3>Microscope</h3><span class="ver">audit</span><p>11 flows × 8 lenses, 22 agents. 97 verified findings, 11 P0 — clustered on the auth seam. CAT &amp; MAX synthesized the report.</p></div>
+      <div class="ph rv" data-d="2"><span class="step">Phase 02</span><h3>Remediation</h3><span class="ver">v3.12.0</span><p>The edge-contained P0/P1 batch: permission model, supply chain, SSRF, XSS, tracker, restore gate, the bearer-leak fix. ~89 tests.</p></div>
+      <div class="ph rv" data-d="3"><span class="step">Phase 03</span><h3>Foundation</h3><span class="ver">CI · accessor</span><p>Fixed a stuck CI runner; landed a no-behavior-change accessor so the key lived behind one door — the groundwork for encryption.</p></div>
+      <div class="ph rv" data-d="4"><span class="step">Phase 04</span><h3>The vault</h3><span class="ver">A5 · v3.13.0</span><p>Encryption at rest, brainstorm → spec → plan → subagent-driven build, with an opus-level crypto review. 94 tests green.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DEFERRED ============ -->
+<section>
+  <div class="wrap">
+    <div class="section-head rv">
+      <span class="eyebrow">06 — Honest state</span>
+      <h2>What's deliberately not done</h2>
+      <p class="lead-2">Honest state beats flattering state. One item remains — and it's an operations decision, not a code gap.</p>
+    </div>
+    <div class="defer rv">
+      <span class="k">Deferred · verified, not punted</span>
+      <h3>Require signed requests by default</h3>
+      <p>The Hub already signs <em>every</em> command (confirmed on the Hub side). But flipping the edge to <strong>reject</strong> unsigned requests is sequence-sensitive: every production Hub must be confirmed signing before any site enforces it, or fleet monitoring breaks the moment a site upgrades. So it ships as a per-site enablement once the fleet is verified — not a blind default flip in a release. The switch exists today; turning it on is a rollout, not a patch.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="wrap">
+    <span class="mono">Peanut End to End · slug peanut-connect · the Peanut Graphic way</span>
+    <p class="creed rv">“Foundations, not facades. Verify at the source of truth.”</p>
+    <span class="src" aria-hidden="true">✓ origin/main · v3.13.0 · all checks green</span>
+  </div>
+</footer>
+
+<script>
+  // scroll reveal
+  const io = new IntersectionObserver((es)=>{
+    es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{threshold:.12, rootMargin:'0px 0px -8% 0px'});
+  document.querySelectorAll('.rv').forEach(el=>io.observe(el));
+
+  // count-up (respects reduced motion)
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const counters = document.querySelectorAll('[data-count]');
+  const cio = new IntersectionObserver((es)=>{
+    es.forEach(e=>{
+      if(!e.isIntersecting) return;
+      const el=e.target, target=+el.dataset.count;
+      cio.unobserve(el);
+      if(reduce){ el.textContent=target; return; }
+      const dur=1100, t0=performance.now();
+      const tick=(t)=>{ const p=Math.min(1,(t-t0)/dur); el.textContent=Math.round((1-Math.pow(1-p,3))*target); if(p<1)requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
+  },{threshold:.5});
+  counters.forEach(c=>cio.observe(c));
+</script>
+</body>
+</html>
