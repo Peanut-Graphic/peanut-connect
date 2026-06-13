@@ -155,6 +155,7 @@ final class Peanut_Connect {
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('admin_head', [$this, 'hide_admin_notices_on_react_page']);
+        add_action('admin_notices', [$this, 'maybe_show_rekey_notice']);
 
         // Add settings link to plugins page
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [$this, 'add_settings_link']);
@@ -291,6 +292,28 @@ final class Peanut_Connect {
             remove_all_actions('admin_notices');
             remove_all_actions('all_admin_notices');
         }
+    }
+
+    /**
+     * Warn admins that the stored Hub key can no longer be decrypted (e.g.
+     * after WP security-key/salt rotation) and must be re-paired. The flag is
+     * set by Peanut_Connect_Auth::get_hub_api_key() on decrypt failure and
+     * cleared on the next successful set/clear.
+     */
+    public function maybe_show_rekey_notice(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        if (!get_option('peanut_connect_hub_key_undecryptable')) {
+            return;
+        }
+        $url = admin_url('admin.php?page=peanut-connect-app');
+        printf(
+            '<div class="notice notice-warning is-dismissible"><p>%s <a href="%s">%s</a></p></div>',
+            esc_html__('Peanut End to End: your Hub connection needs to be re-paired after a security-key change.', 'peanut-connect'),
+            esc_url($url),
+            esc_html__('Re-pair now', 'peanut-connect')
+        );
     }
 
     /**
