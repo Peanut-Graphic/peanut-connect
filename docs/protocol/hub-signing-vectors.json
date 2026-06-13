@@ -1,0 +1,56 @@
+{
+    "_comment": "Authoritative Hub<->Edge request-signing vectors. BOTH peanut-connect (Peanut_Connect_Auth::compute_request_signature) AND the Hub (App\\Support\\PeanutConnectSigner::signature) MUST reproduce every expected_signature. A mismatch = the two repos have drifted on canonicalization and signed requests will fail on the wire. Canonical string = METHOD\\nROUTE\\nTIMESTAMP\\nNONCE\\nsha256(BODY); signature = HMAC-SHA256(canonical, key), lowercase hex.",
+    "version": 1,
+    "vectors": [
+        {
+            "name": "get_no_body",
+            "key": "shared-site-key-001",
+            "method": "GET",
+            "route": "/peanut-connect/v1/hub/health",
+            "timestamp": "1700000000",
+            "nonce": "nonce-aaaa",
+            "body": "",
+            "expected_signature": "3e991c711144ceddf40be4a28fa511d6646b0c231ac46df6b8fc4997c4b4d3c2"
+        },
+        {
+            "name": "post_json_body",
+            "key": "shared-site-key-001",
+            "method": "POST",
+            "route": "/peanut-connect/v1/restore",
+            "timestamp": "1700000300",
+            "nonce": "nonce-bbbb",
+            "body": "{\"backup_url\":\"https://hub.example/x.zip\"}",
+            "expected_signature": "36d9ae5809d7a1d0404dc9c5dab726bf9a1cb9fc9bf96f1de284ed89d2ec316c"
+        },
+        {
+            "name": "post_empty_body",
+            "key": "shared-site-key-002",
+            "method": "POST",
+            "route": "/peanut-connect/v1/hub/plugin/update",
+            "timestamp": "1700001000",
+            "nonce": "nonce-cccc",
+            "body": "",
+            "expected_signature": "8d35f4950cfcd136aeb8908af04d738dfb306981e93915e942d34b562f857d61"
+        },
+        {
+            "name": "lowercase_method_normalized",
+            "key": "shared-site-key-001",
+            "method": "post",
+            "route": "/peanut-connect/v1/update",
+            "timestamp": "1700002000",
+            "nonce": "nonce-dddd",
+            "body": "{\"component_type\":\"plugin\",\"slug\":\"x\"}",
+            "expected_signature": "f029e6e46b15ce5b029df0b21d68d93f1d1b33dc885832bfd174a2ac7cc9ebd0"
+        },
+        {
+            "name": "unicode_body",
+            "key": "shared-site-key-003",
+            "method": "POST",
+            "route": "/peanut-connect/v1/banner/show",
+            "timestamp": "1700003000",
+            "nonce": "nonce-eeee",
+            "body": "{\"message\":\"café — déjà vu ☕\"}",
+            "expected_signature": "b43e2a28535ead5f6297a10bec00ae16de92b641ac490f6906bcef129c2357f8"
+        }
+    ]
+}
