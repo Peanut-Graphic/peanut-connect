@@ -16,7 +16,7 @@ jobs:
     # (npm ci + eslint + vitest) and needs no special hardware; it had been left
     # pointed at the self-hosted peanut-ci pool, which never serviced it (runs
     # sat queued indefinitely while the rest of CI moved to GitHub-hosted).
-    runs-on: [self-hosted, linux, peanut-ci]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
