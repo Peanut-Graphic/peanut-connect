@@ -21,6 +21,25 @@ class Peanut_Connect_Auth {
     private const SIGNATURE_WINDOW = 300;
 
     /**
+     * Wire-protocol versions this edge understands (X-Peanut-Protocol header).
+     * A request that declares a version NOT in this set is rejected with a
+     * distinct, legible error instead of a cryptic signature failure — so the
+     * next breaking canonicalization change fails loudly, not silently. A
+     * request with NO header is treated as v1 (backward-compatible: older Hubs
+     * that predate the header keep working).
+     */
+    private const SUPPORTED_PROTOCOLS = ['1'];
+
+    /**
+     * Is this declared wire-protocol version one we understand? Empty string =
+     * no header = legacy v1 (accepted). Any other value must be in the
+     * supported set. Pure + testable; used by verify_hub_request().
+     */
+    public static function is_supported_protocol(string $protocol): bool {
+        return $protocol === '' || in_array($protocol, self::SUPPORTED_PROTOCOLS, true);
+    }
+
+    /**
      * Canonical default Hub permission flags — the single source of truth for
      * has_permission(), get_permissions(), and the activation seeding. Before
      * this constant existed those three sites disagreed (publish_content was
@@ -312,6 +331,22 @@ class Peanut_Connect_Auth {
 
         if (is_wp_error($rate_check)) {
             return $rate_check;
+        }
+
+        // Protocol negotiation: reject a declared-but-unsupported wire version
+        // with a clear error rather than letting it fail later as an opaque
+        // signature mismatch. A missing header means v1 (legacy Hubs).
+        $protocol = (string) $request->get_header('X-Peanut-Protocol');
+        if (!self::is_supported_protocol($protocol)) {
+            return new WP_Error(
+                'unsupported_protocol',
+                sprintf(
+                    /* translators: %s: the requested protocol version */
+                    __('Unsupported Hub protocol version "%s". This site needs an update.', 'peanut-connect'),
+                    $protocol
+                ),
+                ['status' => 400]
+            );
         }
 
         $stored_key = self::get_hub_api_key();

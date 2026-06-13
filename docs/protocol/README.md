@@ -7,6 +7,20 @@ Nothing else enforces that agreement — a drift on either side surfaces only as
 runtime failure (e.g. "invalid signature"), with both repos' own unit tests
 still green.
 
+## `X-Peanut-Protocol` — wire-protocol version header
+
+Hub sends `X-Peanut-Protocol: 1` on every request to the edge. The edge
+(`Peanut_Connect_Auth::is_supported_protocol()` / `verify_hub_request()`) rejects
+a **declared-but-unknown** version with a distinct `unsupported_protocol` (400)
+error instead of letting it fail later as an opaque `invalid_signature`. A
+**missing** header is treated as v1, so Hubs that predate the header keep working
+— the header is backward-compatible in either deploy order.
+
+When a future change breaks the canonicalization, bump this version **in lockstep
+on both sides** (and add a new vector set below). The header is not part of the
+signed canonical string in v1; a version that changes the signing format will be
+caught by the signature itself.
+
 ## `hub-signing-vectors.json` — request-signing test vectors
 
 The canonical HMAC signature for a Hub→edge request is:
