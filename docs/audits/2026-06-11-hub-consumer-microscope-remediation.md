@@ -38,14 +38,20 @@ After the first pass, ownership of the peanut-ci runner and both repos was confi
 - **Banner a11y: DONE.** The HTML allowlist now permits a safe set of `aria-*`/`role`, and the rendered banner is wrapped in a labelled polite live region — screen-reader reachable regardless of Hub content.
 - **CI runner: DONE.** The Accessibility workflow was the only one still pointed at the self-hosted `peanut-ci` pool, which never serviced it (queued indefinitely; 3 prior runs cancelled). Moved to `ubuntu-latest` with `--legacy-peer-deps` (matching `tests.yml`), and fixed the real keyboard-inaccessible `GtmCoverage` row the run would have flagged. All five checks now green.
 
-## Still deferred — with reasons
+## Remaining items
 
-These two remain out, for sound reasons (verified, not punted):
+A5 has since shipped (below). One item — A8b — remains deferred, for a sound operational reason (verified, not punted).
 
-### A5 — encrypt the stored Hub key at rest
-The stored `peanut_connect_hub_api_key` **is** the HMAC signing secret (`hash_hmac('sha256', $canonical, $key)`), so it cannot be hashed — it must be recoverable to verify a signature. Encryption-at-rest is viable but is a **broad, high-risk change**: the key is read at **24 sites across 11 files**, every one of which would have to route through a decrypting accessor, and there is no WP-boot integration test in this repo to catch a missed site (a miss = broken auth on the live fleet). Correct path: introduce a single `get_hub_api_key()` accessor + integration tests, then encrypt. Shipped the honest half already (README correction). Tracked: `hub-auth-gate` P0.
+### A5 — encrypt the stored Hub key at rest — ✅ SHIPPED in 3.13.0
 
-### A8b — make `require_signed_requests` default true
+Done via the dedicated spec/plan (`docs/superpowers/specs/2026-06-13-a5-encrypt-hub-key-at-rest-design.md`, `docs/superpowers/plans/2026-06-13-a5-encrypt-hub-key-at-rest.md`), executed as two PRs:
+
+- **PR-A** — a no-behavior-change refactor routing all reads/writes/delete of `peanut_connect_hub_api_key` through a single `Peanut_Connect_Auth::get/set/clear_hub_api_key()` accessor (grep-proven: the raw option name appears only inside those three methods).
+- **PR-B** — `Peanut_Connect_Secret` (libsodium secretbox, key derived via `hash_hkdf` from `wp_salt('secure_auth')` — off-DB) wired into the accessor: the key is encrypted at rest (`enc:v1:`…), remains usable as the HMAC secret via decrypt-on-use, legacy plaintext migrates transparently on first read, and an undecryptable value (e.g. WP salt rotation) degrades to un-paired + a dismissible re-pair admin notice — never fatal. Tests: `Test_Secret` + `Test_Hub_Key_Accessor`.
+
+The earlier "cannot be hashed (it's the HMAC secret)" point stands — encryption-at-rest with decrypt-on-use is exactly the resolution. Note: if libsodium were unavailable the storage degrades to plaintext (logged), but libsodium is guaranteed on the plugin's PHP 8.0 floor, so that path is unreachable on supported installs.
+
+### A8b — make `require_signed_requests` default true (still deferred)
 De-risked but still an **operational rollout, not a code default-flip**. Verified on the Hub side: `App\Support\PeanutConnectSigner` mirrors the edge canonicalization exactly, and the `Http::peanutConnect($site)` macro (AppServiceProvider) signs **every** request via `withRequestMiddleware` while keeping the Bearer for back-compat — the established convention is that all Hub→edge calls use it. The remaining risk is purely deployment ordering: flipping the edge default rejects unsigned requests, so **every** production Hub must already be signing before any site enforces it, or fleet monitoring breaks. Safe path: confirm the signing macro is deployed fleet-wide, then enable per-site (the option already exists) — not a blind default change in this release. Tracked: `hub-auth-gate` P0, `pairing-lifecycle` P1.
 
 ### Other deferred (lower severity, see audit)
