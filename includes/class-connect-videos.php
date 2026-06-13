@@ -58,7 +58,7 @@ class Peanut_Connect_Videos {
 
     private static function forward(string $method, string $path, ?array $body = null, ?array $query = null) {
         $hub_url = (string) get_option('peanut_connect_hub_url', '');
-        $api_key = (string) get_option('peanut_connect_hub_api_key', '');
+        $api_key = Peanut_Connect_Auth::get_hub_api_key();
 
         if ($hub_url === '' || $api_key === '') {
             return new WP_Error(

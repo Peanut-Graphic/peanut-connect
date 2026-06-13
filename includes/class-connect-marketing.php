@@ -251,7 +251,7 @@ class Peanut_Connect_Marketing {
 
     public static function tracking_setup(): WP_REST_Response {
         $hub_url = (string) get_option('peanut_connect_hub_url', '');
-        $connected = $hub_url !== '' && get_option('peanut_connect_hub_api_key', '') !== '';
+        $connected = $hub_url !== '' && Peanut_Connect_Auth::get_hub_api_key() !== '';
         // The tracker snippet uses the PUBLIC tracker_key (delivered by Hub on
         // heartbeat), never the Hub bearer. The bearer authorises /restore,
         // /update, banner, etc., so it must never be returned to the browser or
@@ -286,7 +286,7 @@ class Peanut_Connect_Marketing {
      */
     private static function forward(string $method, string $path, ?array $body = null, ?array $query = null) {
         $hub_url = (string) get_option('peanut_connect_hub_url', '');
-        $api_key = (string) get_option('peanut_connect_hub_api_key', '');
+        $api_key = Peanut_Connect_Auth::get_hub_api_key();
 
         if ($hub_url === '' || $api_key === '') {
             return new WP_Error(

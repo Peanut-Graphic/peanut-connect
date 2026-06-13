@@ -282,7 +282,7 @@ class Peanut_Connect_Auth {
             return $rate_check;
         }
 
-        $stored_key = (string) get_option('peanut_connect_hub_api_key', '');
+        $stored_key = self::get_hub_api_key();
         if ($stored_key === '') {
             return new WP_Error(
                 'not_configured',

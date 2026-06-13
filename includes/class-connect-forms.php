@@ -85,7 +85,7 @@ class Peanut_Connect_Forms {
         }
 
         $hub_url = get_option('peanut_connect_hub_url');
-        $api_key = get_option('peanut_connect_hub_api_key');
+        $api_key = Peanut_Connect_Auth::get_hub_api_key();
         if (empty($hub_url) || empty($api_key)) {
             return new WP_REST_Response(['success' => false, 'message' => __('Form submission is not available right now.', 'peanut-connect')], 503);
         }
@@ -147,7 +147,7 @@ class Peanut_Connect_Forms {
      */
     public static function sync_from_hub(): array {
         $hub_url = get_option('peanut_connect_hub_url');
-        $api_key = get_option('peanut_connect_hub_api_key');
+        $api_key = Peanut_Connect_Auth::get_hub_api_key();
 
         if (empty($hub_url) || empty($api_key)) {
             return ['success' => false, 'error' => __('Hub not configured', 'peanut-connect')];

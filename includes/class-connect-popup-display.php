@@ -40,7 +40,7 @@ class Peanut_Connect_Popup_Display {
      */
     public static function is_connected(): bool {
         $hub_url = get_option('peanut_connect_hub_url');
-        $api_key = get_option('peanut_connect_hub_api_key');
+        $api_key = Peanut_Connect_Auth::get_hub_api_key();
         return !empty($hub_url) && !empty($api_key);
     }
 

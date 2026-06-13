@@ -122,7 +122,7 @@ class Peanut_Connect_Short_Links {
      */
     private static function fetch_slugs_from_hub(): array {
         $hub_url = self::hub_url();
-        $api_key = (string) get_option('peanut_connect_hub_api_key', '');
+        $api_key = Peanut_Connect_Auth::get_hub_api_key();
         if ($hub_url === '' || $api_key === '') {
             return [];
         }
