@@ -328,13 +328,17 @@ class Peanut_Connect_Hub_Sync {
     private static function send_to_hub(string $hub_url, string $api_key, array $data): array {
         $endpoint = rtrim($hub_url, '/') . '/api/v1/sync/push';
 
+        $sync_body = wp_json_encode($data);
         $response = wp_remote_post($endpoint, [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-            ],
-            'body' => wp_json_encode($data),
+            'headers' => array_merge(
+                [
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ],
+                Peanut_Connect_Auth::outbound_signature_headers('POST', $endpoint, $sync_body)
+            ),
+            'body' => $sync_body,
             'timeout' => 30,
         ]);
 
@@ -400,18 +404,22 @@ class Peanut_Connect_Hub_Sync {
 
         $health = new Peanut_Connect_Health();
 
+        $heartbeat_body = wp_json_encode([
+            'health_data' => $health->get_health_data(),
+            'connect_version' => PEANUT_CONNECT_VERSION,
+            'wp_version' => get_bloginfo('version'),
+            'php_version' => PHP_VERSION,
+        ]);
         $response = wp_remote_post($endpoint, [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-            ],
-            'body' => wp_json_encode([
-                'health_data' => $health->get_health_data(),
-                'connect_version' => PEANUT_CONNECT_VERSION,
-                'wp_version' => get_bloginfo('version'),
-                'php_version' => PHP_VERSION,
-            ]),
+            'headers' => array_merge(
+                [
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ],
+                Peanut_Connect_Auth::outbound_signature_headers('POST', $endpoint, $heartbeat_body)
+            ),
+            'body' => $heartbeat_body,
             'timeout' => 15,
         ]);
 
@@ -472,11 +480,14 @@ class Peanut_Connect_Hub_Sync {
         $endpoint = rtrim($hub_url, '/') . '/api/v1/sites/verify';
 
         $response = wp_remote_post($endpoint, [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-            ],
+            'headers' => array_merge(
+                [
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ],
+                Peanut_Connect_Auth::outbound_signature_headers('POST', $endpoint, '')
+            ),
             'timeout' => 15,
         ]);
 
@@ -521,10 +532,13 @@ class Peanut_Connect_Hub_Sync {
         $endpoint = rtrim($hub_url, '/') . '/api/v1/popups/active';
 
         $response = wp_remote_get($endpoint, [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Accept' => 'application/json',
-            ],
+            'headers' => array_merge(
+                [
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Accept' => 'application/json',
+                ],
+                Peanut_Connect_Auth::outbound_signature_headers('GET', $endpoint, '')
+            ),
             'timeout' => 10,
             'sslverify' => true,
         ]);

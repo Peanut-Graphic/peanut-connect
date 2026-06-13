@@ -82,10 +82,17 @@ class Peanut_Connect_Videos {
             ],
         ];
 
+        $encoded_body = '';
         if ($body !== null && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+            $encoded_body = wp_json_encode($body);
             $args['headers']['Content-Type'] = 'application/json';
-            $args['body'] = wp_json_encode($body);
+            $args['body'] = $encoded_body;
         }
+
+        $args['headers'] = array_merge(
+            $args['headers'],
+            Peanut_Connect_Auth::outbound_signature_headers($method, $url, $encoded_body)
+        );
 
         $response = wp_remote_request($url, $args);
 

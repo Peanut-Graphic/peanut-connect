@@ -135,10 +135,13 @@ class Peanut_Connect_Short_Links {
             $url = trailingslashit($hub_url) . 'api/v1/marketing/links?active=1&per_page=100&page=' . $page;
             $response = wp_remote_get($url, [
                 'timeout' => 8,
-                'headers' => [
-                    'Accept'        => 'application/json',
-                    'Authorization' => 'Bearer ' . $api_key,
-                ],
+                'headers' => array_merge(
+                    [
+                        'Accept'        => 'application/json',
+                        'Authorization' => 'Bearer ' . $api_key,
+                    ],
+                    Peanut_Connect_Auth::outbound_signature_headers('GET', $url, '')
+                ),
             ]);
 
             if (is_wp_error($response)) {
