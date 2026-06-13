@@ -1060,7 +1060,7 @@ class Peanut_Connect_API {
         if ($status_code >= 200 && $status_code < 300 && ($body['success'] ?? false)) {
             // Save the Hub URL and API key locally
             $url_saved = update_option('peanut_connect_hub_url', $hub_url);
-            $key_saved = update_option('peanut_connect_hub_api_key', $api_key);
+            $key_saved = Peanut_Connect_Auth::set_hub_api_key($api_key);
 
             // Log activity
             Peanut_Connect_Activity_Log::log('hub_connected', 'success', 'Connected to Hub', [
@@ -1156,7 +1156,7 @@ class Peanut_Connect_API {
 
         if ($body_says_success) {
             update_option('peanut_connect_hub_url', $hub_url);
-            update_option('peanut_connect_hub_api_key', $api_key);
+            Peanut_Connect_Auth::set_hub_api_key($api_key);
 
             return new WP_REST_Response([
                 'success' => true,
@@ -1253,7 +1253,7 @@ class Peanut_Connect_API {
 
         // Clear local options
         delete_option('peanut_connect_hub_url');
-        delete_option('peanut_connect_hub_api_key');
+        Peanut_Connect_Auth::clear_hub_api_key();
         delete_option('peanut_connect_last_hub_sync');
 
         // Log activity
@@ -2085,7 +2085,7 @@ class Peanut_Connect_API {
 
         // Save API key (only if provided, don't clear existing)
         if (!empty($api_key)) {
-            update_option('peanut_connect_hub_api_key', sanitize_text_field($api_key));
+            Peanut_Connect_Auth::set_hub_api_key(sanitize_text_field($api_key));
         }
 
         // Save tracking enabled setting
