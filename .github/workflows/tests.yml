@@ -11,7 +11,7 @@ on:
 
 jobs:
   static-and-security:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, peanut-ci]
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -28,7 +28,7 @@ jobs:
           ./gitleaks detect --no-git --source . --redact --no-banner --exit-code 1
 
   php-tests:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, peanut-ci]
     needs: static-and-security
     env:
       # Coverage is near-zero today: the mock-backed Unit suite only exercises a
@@ -70,7 +70,7 @@ jobs:
           path: coverage/
 
   frontend-tests:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, peanut-ci]
     defaults:
       run:
         working-directory: frontend
