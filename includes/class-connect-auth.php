@@ -498,6 +498,37 @@ class Peanut_Connect_Auth {
     }
 
     /**
+     * Build outbound request-signing headers for an edge→Hub call, mirroring the
+     * inbound Hub→edge scheme so the Hub can verify possession of the shared key
+     * without it traveling in the clear. The signed route is the URL path
+     * (no scheme/host/query); the signed body must be the EXACT bytes sent on
+     * the wire. ADDITIVE: callers keep their existing Bearer/X-Site-Api-Key
+     * header — the Hub accepts either while the fleet migrates (the "require
+     * signed" flip is deferred, like A8b). Returns [] when unpaired so it is a
+     * safe no-op.
+     *
+     * @param string $method HTTP method.
+     * @param string $url    Full Hub URL (path is signed; query/host are not).
+     * @param string $body   Exact request body bytes (''/empty for GET).
+     * @return array<string,string> Headers to merge into the wp_remote_* args.
+     */
+    public static function outbound_signature_headers(string $method, string $url, string $body): array {
+        $key = self::get_hub_api_key();
+        if ($key === '') {
+            return [];
+        }
+        $route = (string) (wp_parse_url($url, PHP_URL_PATH) ?: '/');
+        $timestamp = (string) time();
+        $nonce = bin2hex(random_bytes(16));
+        return [
+            'X-Peanut-Protocol'  => self::SUPPORTED_PROTOCOLS[0],
+            'X-Peanut-Timestamp' => $timestamp,
+            'X-Peanut-Nonce'     => $nonce,
+            'X-Peanut-Signature' => self::compute_request_signature($key, $method, $route, $timestamp, $nonce, $body),
+        ];
+    }
+
+    /**
      * Constant-time verification of a provided request signature.
      */
     public static function verify_signature(string $key, string $method, string $route, string $timestamp, string $nonce, string $body, string $provided): bool {
