@@ -166,6 +166,25 @@ class Peanut_Connect_Auth {
     }
 
     /**
+     * Centralized accessor for the Hub API key option. ALL reads/writes of
+     * peanut_connect_hub_api_key go through these three methods so the at-rest
+     * representation (Phase B: encrypted) lives in exactly one place.
+     *
+     * Phase A: thin passthrough — no behavior change.
+     */
+    public static function get_hub_api_key(): string {
+        return (string) get_option('peanut_connect_hub_api_key', '');
+    }
+
+    public static function set_hub_api_key(string $key): bool {
+        return (bool) update_option('peanut_connect_hub_api_key', $key);
+    }
+
+    public static function clear_hub_api_key(): void {
+        delete_option('peanut_connect_hub_api_key');
+    }
+
+    /**
      * Permission callback for REST endpoints
      *
      * Creates a permission callback with rate limiting for the specified endpoint.
@@ -263,7 +282,7 @@ class Peanut_Connect_Auth {
             return $rate_check;
         }
 
-        $stored_key = (string) get_option('peanut_connect_hub_api_key', '');
+        $stored_key = self::get_hub_api_key();
         if ($stored_key === '') {
             return new WP_Error(
                 'not_configured',

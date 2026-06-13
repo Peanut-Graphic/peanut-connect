@@ -925,7 +925,7 @@ class Peanut_Connect_API {
     public function get_settings(WP_REST_Request $request): WP_REST_Response {
         // Hub settings
         $hub_url = get_option('peanut_connect_hub_url');
-        $hub_api_key = get_option('peanut_connect_hub_api_key');
+        $hub_api_key = Peanut_Connect_Auth::get_hub_api_key();
         $hub_last_sync = get_option('peanut_connect_last_hub_sync');
         $hub_mode = get_option('peanut_connect_hub_mode', 'standard');
         $tracking_enabled = get_option('peanut_connect_tracking_enabled', false);
@@ -1060,7 +1060,7 @@ class Peanut_Connect_API {
         if ($status_code >= 200 && $status_code < 300 && ($body['success'] ?? false)) {
             // Save the Hub URL and API key locally
             $url_saved = update_option('peanut_connect_hub_url', $hub_url);
-            $key_saved = update_option('peanut_connect_hub_api_key', $api_key);
+            $key_saved = Peanut_Connect_Auth::set_hub_api_key($api_key);
 
             // Log activity
             Peanut_Connect_Activity_Log::log('hub_connected', 'success', 'Connected to Hub', [
@@ -1156,7 +1156,7 @@ class Peanut_Connect_API {
 
         if ($body_says_success) {
             update_option('peanut_connect_hub_url', $hub_url);
-            update_option('peanut_connect_hub_api_key', $api_key);
+            Peanut_Connect_Auth::set_hub_api_key($api_key);
 
             return new WP_REST_Response([
                 'success' => true,
@@ -1197,7 +1197,7 @@ class Peanut_Connect_API {
      */
     public function test_hub_connection(WP_REST_Request $request): WP_REST_Response {
         $hub_url = get_option('peanut_connect_hub_url');
-        $api_key = get_option('peanut_connect_hub_api_key');
+        $api_key = Peanut_Connect_Auth::get_hub_api_key();
 
         if (empty($hub_url) || empty($api_key)) {
             return new WP_REST_Response([
@@ -1232,7 +1232,7 @@ class Peanut_Connect_API {
     public function disconnect_hub(WP_REST_Request $request): WP_REST_Response {
         // Get current Hub URL and API key before deleting
         $hub_url = get_option('peanut_connect_hub_url');
-        $api_key = get_option('peanut_connect_hub_api_key');
+        $api_key = Peanut_Connect_Auth::get_hub_api_key();
 
         // Notify Hub about disconnect (best effort - don't fail if Hub is unreachable)
         if (!empty($hub_url) && !empty($api_key)) {
@@ -1253,7 +1253,7 @@ class Peanut_Connect_API {
 
         // Clear local options
         delete_option('peanut_connect_hub_url');
-        delete_option('peanut_connect_hub_api_key');
+        Peanut_Connect_Auth::clear_hub_api_key();
         delete_option('peanut_connect_last_hub_sync');
 
         // Log activity
@@ -1411,7 +1411,7 @@ class Peanut_Connect_API {
     public function get_dashboard(WP_REST_Request $request): WP_REST_Response {
         // Hub connection info
         $hub_url = get_option('peanut_connect_hub_url');
-        $hub_api_key = get_option('peanut_connect_hub_api_key');
+        $hub_api_key = Peanut_Connect_Auth::get_hub_api_key();
         $hub_last_sync = get_option('peanut_connect_last_hub_sync');
 
         // Get health summary
@@ -1991,7 +1991,7 @@ class Peanut_Connect_API {
      */
     public function get_hub_settings(WP_REST_Request $request): WP_REST_Response {
         $hub_url = get_option('peanut_connect_hub_url', '');
-        $api_key = get_option('peanut_connect_hub_api_key', '');
+        $api_key = Peanut_Connect_Auth::get_hub_api_key();
         $tracking_enabled = get_option('peanut_connect_tracking_enabled', false);
         $last_sync = get_option('peanut_connect_last_hub_sync', '');
 
@@ -2085,7 +2085,7 @@ class Peanut_Connect_API {
 
         // Save API key (only if provided, don't clear existing)
         if (!empty($api_key)) {
-            update_option('peanut_connect_hub_api_key', sanitize_text_field($api_key));
+            Peanut_Connect_Auth::set_hub_api_key(sanitize_text_field($api_key));
         }
 
         // Save tracking enabled setting
@@ -2810,7 +2810,7 @@ class Peanut_Connect_API {
      */
     public function get_public_status(WP_REST_Request $request): WP_REST_Response {
         $hub_url = get_option('peanut_connect_hub_url', '');
-        $hub_api_key = get_option('peanut_connect_hub_api_key', '');
+        $hub_api_key = Peanut_Connect_Auth::get_hub_api_key();
         $last_sync = get_option('peanut_connect_last_hub_sync', '');
         $tracking_enabled = get_option('peanut_connect_tracking_enabled', false);
 

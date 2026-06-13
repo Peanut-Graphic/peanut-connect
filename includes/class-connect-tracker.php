@@ -70,7 +70,7 @@ class Peanut_Connect_Tracker {
      */
     public static function is_tracking_enabled(): bool {
         $hub_url = get_option('peanut_connect_hub_url');
-        $api_key = get_option('peanut_connect_hub_api_key');
+        $api_key = Peanut_Connect_Auth::get_hub_api_key();
         $tracking_enabled = get_option('peanut_connect_tracking_enabled', false);
 
         return !empty($hub_url) && !empty($api_key) && $tracking_enabled;
