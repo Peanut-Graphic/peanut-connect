@@ -115,7 +115,8 @@ if (!function_exists('wp_hash')) {
 
 if (!function_exists('wp_salt')) {
     function wp_salt($scheme = 'auth') {
-        return 'test_salt_' . $scheme;
+        // Tests can override via $GLOBALS to simulate salt rotation.
+        return $GLOBALS['mock_wp_salt'] ?? ('peanut-connect-test-salt-' . $scheme);
     }
 }
 

@@ -3,7 +3,7 @@
  * Plugin Name: End-to-End
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: End-to-end campaign and site platform for WordPress — runs campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all wired to a central Peanut Hub.
- * Version: 3.12.0
+ * Version: 3.13.0
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.12.0');
+define('PEANUT_CONNECT_VERSION', '3.13.0');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -65,6 +65,7 @@ final class Peanut_Connect {
     private function load_dependencies(): void {
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-rate-limiter.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-activity-log.php';
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-secret.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-auth.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/helpers/transcript-block.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-health.php';
@@ -154,6 +155,7 @@ final class Peanut_Connect {
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('admin_head', [$this, 'hide_admin_notices_on_react_page']);
+        add_action('admin_notices', [$this, 'maybe_show_rekey_notice']);
 
         // Add settings link to plugins page
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [$this, 'add_settings_link']);
@@ -290,6 +292,28 @@ final class Peanut_Connect {
             remove_all_actions('admin_notices');
             remove_all_actions('all_admin_notices');
         }
+    }
+
+    /**
+     * Warn admins that the stored Hub key can no longer be decrypted (e.g.
+     * after WP security-key/salt rotation) and must be re-paired. The flag is
+     * set by Peanut_Connect_Auth::get_hub_api_key() on decrypt failure and
+     * cleared on the next successful set/clear.
+     */
+    public function maybe_show_rekey_notice(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        if (!get_option('peanut_connect_hub_key_undecryptable')) {
+            return;
+        }
+        $url = admin_url('admin.php?page=peanut-connect-app');
+        printf(
+            '<div class="notice notice-warning is-dismissible"><p>%s <a href="%s">%s</a></p></div>',
+            esc_html__('Peanut End to End: your Hub connection needs to be re-paired after a security-key change.', 'peanut-connect'),
+            esc_url($url),
+            esc_html__('Re-pair now', 'peanut-connect')
+        );
     }
 
     /**

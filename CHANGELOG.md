@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.13.0] - 2026-06-13
+
+### Security
+- **Hub API key is now encrypted at rest** (A5). `peanut_connect_hub_api_key` was stored in plaintext; it is now encrypted with libsodium secretbox under a key derived from WP's wp-config salts (`hash_hkdf` over `wp_salt`), so a database-only compromise can no longer recover a usable Hub key. The key remains usable as the HMAC signing secret via decrypt-on-use. All access is funnelled through a single `Peanut_Connect_Auth::get/set/clear_hub_api_key()` accessor. Existing plaintext keys migrate transparently on first read. If the key can no longer be decrypted (e.g. after a WP security-key/salt rotation) the site behaves as un-paired and shows a dismissible admin notice prompting re-pair — never a fatal error.
+
 ## [3.12.0] - 2026-06-12
 
 Microscope remediation — Hub-as-consumer seam hardening (first `/microscope` audit, `docs/audits/2026-06-11-hub-consumer-microscope.md`).
