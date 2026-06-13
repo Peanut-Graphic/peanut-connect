@@ -169,19 +169,51 @@ class Peanut_Connect_Auth {
      * Centralized accessor for the Hub API key option. ALL reads/writes of
      * peanut_connect_hub_api_key go through these three methods so the at-rest
      * representation (Phase B: encrypted) lives in exactly one place.
-     *
-     * Phase A: thin passthrough — no behavior change.
+     */
+
+    /**
+     * Read the Hub API key, decrypted. Returns '' when unset or when the
+     * stored value can no longer be decrypted (e.g. after a WP salt rotation),
+     * in which case it flags the site for the admin re-pair notice. A legacy
+     * plaintext value is returned as-is and transparently re-stored encrypted.
      */
     public static function get_hub_api_key(): string {
-        return (string) get_option('peanut_connect_hub_api_key', '');
+        $stored = (string) get_option('peanut_connect_hub_api_key', '');
+        if ($stored === '') {
+            return '';
+        }
+        if (Peanut_Connect_Secret::is_ciphertext($stored)) {
+            $plain = Peanut_Connect_Secret::decrypt($stored);
+            if ($plain === null) {
+                update_option('peanut_connect_hub_key_undecryptable', 1);
+                return '';
+            }
+            return $plain;
+        }
+        // Legacy plaintext: return it, and migrate to encrypted on this read.
+        self::set_hub_api_key($stored);
+        return $stored;
     }
 
+    /**
+     * Store the Hub API key encrypted at rest. Clears any prior
+     * "undecryptable" flag (the key is now freshly set).
+     *
+     * @param string $key The raw Hub API key.
+     * @return bool Whether the option was written.
+     */
     public static function set_hub_api_key(string $key): bool {
-        return (bool) update_option('peanut_connect_hub_api_key', $key);
+        $ok = (bool) update_option('peanut_connect_hub_api_key', Peanut_Connect_Secret::encrypt($key));
+        delete_option('peanut_connect_hub_key_undecryptable');
+        return $ok;
     }
 
+    /**
+     * Remove the stored Hub API key and any "undecryptable" flag.
+     */
     public static function clear_hub_api_key(): void {
         delete_option('peanut_connect_hub_api_key');
+        delete_option('peanut_connect_hub_key_undecryptable');
     }
 
     /**

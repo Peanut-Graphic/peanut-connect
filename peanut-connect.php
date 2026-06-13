@@ -65,6 +65,7 @@ final class Peanut_Connect {
     private function load_dependencies(): void {
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-rate-limiter.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-activity-log.php';
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-secret.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-auth.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/helpers/transcript-block.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-health.php';
