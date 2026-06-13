@@ -95,13 +95,18 @@ class Peanut_Connect_Forms {
             $payload = $request->get_params();
         }
 
-        $response = wp_remote_post(trailingslashit($hub_url) . 'api/v1/forms/submit', [
-            'headers' => [
-                'X-Site-Api-Key' => $api_key,
-                'Accept' => 'application/json',
-                'Content-Type' => 'application/json',
-            ],
-            'body' => wp_json_encode($payload),
+        $forms_endpoint = trailingslashit($hub_url) . 'api/v1/forms/submit';
+        $forms_body = wp_json_encode($payload);
+        $response = wp_remote_post($forms_endpoint, [
+            'headers' => array_merge(
+                [
+                    'X-Site-Api-Key' => $api_key,
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                ],
+                Peanut_Connect_Auth::outbound_signature_headers('POST', $forms_endpoint, $forms_body)
+            ),
+            'body' => $forms_body,
             'timeout' => 15,
         ]);
 
@@ -153,11 +158,15 @@ class Peanut_Connect_Forms {
             return ['success' => false, 'error' => __('Hub not configured', 'peanut-connect')];
         }
 
-        $response = wp_remote_get(trailingslashit($hub_url) . 'api/v1/forms/active', [
-            'headers' => [
-                'X-Site-Api-Key' => $api_key,
-                'Accept' => 'application/json',
-            ],
+        $forms_active_url = trailingslashit($hub_url) . 'api/v1/forms/active';
+        $response = wp_remote_get($forms_active_url, [
+            'headers' => array_merge(
+                [
+                    'X-Site-Api-Key' => $api_key,
+                    'Accept' => 'application/json',
+                ],
+                Peanut_Connect_Auth::outbound_signature_headers('GET', $forms_active_url, '')
+            ),
             'timeout' => 30,
         ]);
 

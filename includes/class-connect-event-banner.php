@@ -358,20 +358,24 @@ class Peanut_Connect_Event_Banner {
         $endpoint = rtrim($hub_url, '/') . '/api/ptr/banner/acknowledge';
 
         // Send async if WP HTTP API supports it
+        $banner_body = wp_json_encode([
+            'deployment_id' => $deployment_id,
+            'type' => $type, // 'show' or 'hide'
+            'site_url' => get_site_url(),
+            'timestamp' => current_time('c'),
+        ]);
         wp_remote_post($endpoint, [
             'timeout' => 5,
             'blocking' => false,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-            ],
-            'body' => wp_json_encode([
-                'deployment_id' => $deployment_id,
-                'type' => $type, // 'show' or 'hide'
-                'site_url' => get_site_url(),
-                'timestamp' => current_time('c'),
-            ]),
+            'headers' => array_merge(
+                [
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ],
+                Peanut_Connect_Auth::outbound_signature_headers('POST', $endpoint, $banner_body)
+            ),
+            'body' => $banner_body,
         ]);
     }
 }
