@@ -5,6 +5,17 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.14.0] - 2026-06-14
+
+Hub↔Edge seam hardening — the CAT backlog (D-10/D-11/D-12). All additive and backward-compatible; the edge keeps working against an older Hub and degrades gracefully.
+
+### Security
+- **Outbound edge→Hub requests are now HMAC-signed** (D-11). Every data-plane outbound call carries `X-Peanut-Protocol` / `X-Peanut-Timestamp` / `X-Peanut-Nonce` / `X-Peanut-Signature` alongside its existing Bearer/site-key, so the Hub can verify possession of the key without it traveling alone. Additive: the Bearer is still sent; the require-signed enforcement flip is a later coordinated step.
+- **Key rotation & revocation** (D-12). The site key can now be rotated **without re-pairing** via a two-phase confirmed swap (propose signed with the old key → confirm signed with the new key → adopt only after confirm), so a rotation can never lock a site out — the old key stays valid until the new one is proven. Triggered on-demand from Settings (“Rotate key”) or by the Hub on its heartbeat. Revocation: two consecutive `401`s from the Hub clear the local key and surface the re-pair notice.
+
+### Changed
+- **Wire-protocol version negotiation** (D-10). Inbound Hub requests may declare `X-Peanut-Protocol`; an unknown version is rejected with a clear `unsupported_protocol` error instead of an opaque signature failure. A missing header is treated as v1 (backward-compatible).
+
 ## [3.13.0] - 2026-06-13
 
 ### Security
