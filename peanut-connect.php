@@ -67,6 +67,7 @@ final class Peanut_Connect {
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-activity-log.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-secret.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-auth.php';
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-key-rotation.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/helpers/transcript-block.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-health.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-updates.php';

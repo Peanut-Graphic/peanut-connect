@@ -35,6 +35,7 @@ import {
   AlertOctagon,
   AlertCircle,
   Download,
+  KeyRound,
 } from 'lucide-react';
 import { formatRelative } from '@/utils/date';
 
@@ -108,6 +109,21 @@ export default function Settings() {
     },
     onError: (err) => {
       toast.error((err as Error).message || 'Failed to disconnect from Hub');
+    },
+  });
+
+  const rotateHubKeyMutation = useMutation({
+    mutationFn: settingsApi.rotateHubKey,
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(data.message || 'API key rotated successfully');
+        queryClient.invalidateQueries({ queryKey: ['settings'] });
+      } else {
+        toast.error(data.message || 'Key rotation failed');
+      }
+    },
+    onError: (err) => {
+      toast.error((err as Error).message || 'Failed to rotate Hub API key');
     },
   });
 
@@ -537,6 +553,36 @@ export default function Settings() {
                 )}
               </div>
             )}
+
+            {/* Rotate API Key */}
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex items-start gap-3">
+                  <KeyRound className="w-5 h-5 text-slate-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-900">Rotate API Key</p>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Generate a new API key and securely exchange it with Hub. The old key is revoked
+                      immediately. Use this if you suspect the current key has been compromised.
+                    </p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => {
+                        if (window.confirm('Rotate the Hub API key? The current key will be revoked immediately and replaced with a fresh one.')) {
+                          rotateHubKeyMutation.mutate();
+                        }
+                      }}
+                      disabled={rotateHubKeyMutation.isPending}
+                      icon={<KeyRound className="w-4 h-4" />}
+                    >
+                      {rotateHubKeyMutation.isPending ? 'Rotating…' : 'Rotate key'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Danger Zone - Disconnect */}
             <div className="mt-6 pt-6 border-t border-red-200">

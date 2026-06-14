@@ -240,6 +240,42 @@ if (!function_exists('wp_parse_url')) {
     }
 }
 
+if (!function_exists('wp_generate_password')) {
+    function wp_generate_password(int $length = 12, bool $special_chars = true, bool $extra_special_chars = false): string {
+        $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        $password = '';
+        for ($i = 0; $i < $length; $i++) {
+            $password .= $chars[random_int(0, strlen($chars) - 1)];
+        }
+        return $password;
+    }
+}
+
+if (!function_exists('trailingslashit')) {
+    function trailingslashit(string $string): string {
+        return rtrim($string, '/\\') . '/';
+    }
+}
+
+if (!function_exists('wp_remote_post')) {
+    function wp_remote_post(string $url, array $args = []): array|WP_Error {
+        global $mock_wp_remote_post;
+        if (is_callable($mock_wp_remote_post ?? null)) {
+            return ($mock_wp_remote_post)($url, $args);
+        }
+        return ['response' => ['code' => 200, 'message' => 'OK'], 'body' => '{}'];
+    }
+}
+
+if (!function_exists('wp_remote_retrieve_response_code')) {
+    function wp_remote_retrieve_response_code(array|WP_Error $response): int|string {
+        if (is_wp_error($response)) {
+            return '';
+        }
+        return $response['response']['code'] ?? '';
+    }
+}
+
 // Initialize mock storage.
 global $mock_options, $mock_transients;
 $mock_options = [];
