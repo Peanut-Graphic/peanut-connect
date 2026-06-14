@@ -433,7 +433,25 @@ class Peanut_Connect_Hub_Sync {
         $body = json_decode(wp_remote_retrieve_body($response), true);
         $status_code = wp_remote_retrieve_response_code($response);
 
+        // Revocation detection: two consecutive 401s clear the key and surface
+        // the re-pair notice (A5). A single blip does not kill a live pairing.
+        if ($status_code === 401) {
+            self::register_auth_failure();
+            return [
+                'success' => false,
+                'message' => $body['message'] ?? 'HTTP 401 — key may have been revoked',
+            ];
+        }
+
         if ($status_code >= 200 && $status_code < 300 && ($body['success'] ?? false)) {
+            // Successful response — reset any outstanding auth-failure strikes.
+            self::reset_auth_failures();
+
+            // Hub signalled that it wants us to rotate to a fresh key now.
+            if (!empty($body['rotate']) && class_exists('Peanut_Connect_Key_Rotation')) {
+                Peanut_Connect_Key_Rotation::rotate();
+            }
+
             // Store active popups if returned
             if (!empty($body['popups'])) {
                 update_option('peanut_connect_hub_popups', $body['popups']);
@@ -471,6 +489,31 @@ class Peanut_Connect_Hub_Sync {
             'success' => false,
             'message' => $body['message'] ?? "HTTP $status_code",
         ];
+    }
+
+    /**
+     * Record one auth failure against the two-strike revocation counter.
+     *
+     * Returns true when the second strike is reached — meaning the bearer key
+     * has been cleared and the re-pair flag has been set.
+     */
+    public static function register_auth_failure(): bool {
+        $n = (int) get_option('peanut_connect_auth_fail_count', 0) + 1;
+        update_option('peanut_connect_auth_fail_count', $n);
+        if ($n >= 2) {
+            Peanut_Connect_Auth::clear_hub_api_key();
+            update_option('peanut_connect_hub_key_undecryptable', 1);
+            update_option('peanut_connect_auth_fail_count', 0);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Reset the auth-failure strike counter after a successful response.
+     */
+    public static function reset_auth_failures(): void {
+        update_option('peanut_connect_auth_fail_count', 0);
     }
 
     /**

@@ -73,6 +73,13 @@ class Peanut_Connect_API {
             'permission_callback' => [$this, 'admin_permission_check'],
         ]);
 
+        // Hub settings - rotate key (admin-initiated; D-12 edge rotation)
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/settings/hub/rotate-key', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'rotate_hub_key'],
+            'permission_callback' => [$this, 'admin_permission_check'],
+        ]);
+
         // Hub settings - trigger sync
         register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/settings/hub/sync', [
             'methods' => WP_REST_Server::CREATABLE,
@@ -1263,6 +1270,25 @@ class Peanut_Connect_API {
             'success' => true,
             'message' => __('Disconnected from Hub.', 'peanut-connect'),
         ], 200);
+    }
+
+    /**
+     * Admin-initiated key rotation (D-12 edge rotation).
+     *
+     * Calls Peanut_Connect_Key_Rotation::rotate() and returns the result.
+     * Requires the site to be paired; returns 500 on failure.
+     */
+    public function rotate_hub_key(WP_REST_Request $request): WP_REST_Response {
+        if (!class_exists('Peanut_Connect_Key_Rotation')) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => __('Key rotation class not available.', 'peanut-connect'),
+            ], 500);
+        }
+
+        $result = Peanut_Connect_Key_Rotation::rotate();
+
+        return new WP_REST_Response($result, $result['success'] ? 200 : 500);
     }
 
     /**

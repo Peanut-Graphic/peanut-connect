@@ -63,6 +63,10 @@ export const settingsApi = {
     return response.data;
   },
 
+  // Hub settings - rotate key (D-12 edge rotation)
+  rotateHubKey: (): Promise<{ success: boolean; message: string }> =>
+    api.post('/settings/hub/rotate-key').then((r) => r.data),
+
   // Hub settings - trigger sync
   triggerHubSync: async (): Promise<{ success: boolean; message: string; stats?: Record<string, number> }> => {
     const response = await api.post('/settings/hub/sync');
