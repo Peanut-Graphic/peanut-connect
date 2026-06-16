@@ -24,6 +24,18 @@ if (!defined('WP_PLUGIN_DIR')) {
     define('WP_PLUGIN_DIR', WP_CONTENT_DIR . '/plugins');
 }
 
+if (!defined('MINUTE_IN_SECONDS')) {
+    define('MINUTE_IN_SECONDS', 60);
+}
+
+if (!defined('HOUR_IN_SECONDS')) {
+    define('HOUR_IN_SECONDS', 3600);
+}
+
+if (!defined('DAY_IN_SECONDS')) {
+    define('DAY_IN_SECONDS', 86400);
+}
+
 // Mock common WordPress functions.
 
 if (!function_exists('esc_html')) {
@@ -267,12 +279,56 @@ if (!function_exists('wp_remote_post')) {
     }
 }
 
+if (!function_exists('wp_remote_get')) {
+    function wp_remote_get(string $url, array $args = []): array|WP_Error {
+        global $mock_wp_remote_get, $mock_wp_remote_get_calls;
+        $mock_wp_remote_get_calls = ($mock_wp_remote_get_calls ?? 0) + 1;
+        if (is_callable($mock_wp_remote_get ?? null)) {
+            return ($mock_wp_remote_get)($url, $args);
+        }
+        return ['response' => ['code' => 200, 'message' => 'OK'], 'body' => '{}'];
+    }
+}
+
+if (!function_exists('wp_remote_retrieve_body')) {
+    function wp_remote_retrieve_body(array|WP_Error $response): string {
+        if (is_wp_error($response)) {
+            return '';
+        }
+        return $response['body'] ?? '';
+    }
+}
+
 if (!function_exists('wp_remote_retrieve_response_code')) {
     function wp_remote_retrieve_response_code(array|WP_Error $response): int|string {
         if (is_wp_error($response)) {
             return '';
         }
         return $response['response']['code'] ?? '';
+    }
+}
+
+if (!function_exists('dbDelta')) {
+    function dbDelta($queries = '', $execute = true) {
+        global $wpdb;
+        // In standalone tests the fake $wpdb records the CREATE TABLE so
+        // drift/self-heal assertions can observe that a migration ran.
+        if (isset($wpdb) && is_object($wpdb) && method_exists($wpdb, 'query')) {
+            foreach ((array) $queries as $q) {
+                $wpdb->query($q);
+            }
+        }
+        return [];
+    }
+}
+
+// Provide a stub for the WordPress upgrade include that create_tables()
+// require_once's, so standalone tests can exercise the migration path.
+if (defined('ABSPATH')) {
+    $upgrade_stub = ABSPATH . 'wp-admin/includes/upgrade.php';
+    if (!file_exists($upgrade_stub)) {
+        @mkdir(dirname($upgrade_stub), 0777, true);
+        @file_put_contents($upgrade_stub, "<?php\n// Test stub: dbDelta() is defined in wordpress-mocks.php.\n");
     }
 }
 
