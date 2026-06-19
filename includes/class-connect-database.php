@@ -34,6 +34,19 @@ class Peanut_Connect_Database {
     const DB_VERSION_OPTION = 'peanut_connect_db_version';
 
     /**
+     * Transient that caches a passing schema-drift check so the
+     * expensive INFORMATION_SCHEMA introspection doesn't run on every
+     * request. Value is DB_VERSION; presence means "schema verified for
+     * this version". TTL keeps the self-heal periodic, not per-request.
+     */
+    const SCHEMA_OK_TRANSIENT = 'peanut_connect_schema_ok';
+
+    /**
+     * How long a passing schema check is trusted before re-verifying.
+     */
+    const SCHEMA_OK_TTL = HOUR_IN_SECONDS;
+
+    /**
      * Initialize database
      */
     public static function init(): void {
@@ -60,6 +73,23 @@ class Peanut_Connect_Database {
     public static function check_db_version(): void {
         $installed_version = get_option(self::DB_VERSION_OPTION);
 
+        // Fast path: when the recorded version already matches AND a
+        // recent schema check passed, do nothing — and crucially do NOT
+        // run the INFORMATION_SCHEMA introspection. Before 3.9.x this
+        // OR-expression always evaluated schema_matches_current_version()
+        // (its right operand) on every request because PHP short-circuit
+        // only skips the right operand when the LEFT is true; here the
+        // left is false on the hot path (version matches), so the
+        // expensive query ran constantly. The transient bounds it.
+        if ($installed_version === self::DB_VERSION
+            && get_transient(self::SCHEMA_OK_TRANSIENT) === self::DB_VERSION) {
+            return;
+        }
+
+        // Deep check only runs when the version differs OR the transient
+        // is unset/expired. A genuine drift (missing column) still
+        // returns false here and re-triggers create_tables(), preserving
+        // the self-heal guarantee.
         $needs_migration = ($installed_version !== self::DB_VERSION)
             || !self::schema_matches_current_version();
 
@@ -67,7 +97,14 @@ class Peanut_Connect_Database {
             self::create_tables();
             self::backfill_event_names($installed_version);
             update_option(self::DB_VERSION_OPTION, self::DB_VERSION);
+            // Force a fresh schema verification now that we've migrated.
+            delete_transient(self::SCHEMA_OK_TRANSIENT);
         }
+
+        // Cache the now-good state so the introspection is periodic, not
+        // per-request. If create_tables() ran, the schema is current by
+        // construction; if we got here on a passing deep check, likewise.
+        set_transient(self::SCHEMA_OK_TRANSIENT, self::DB_VERSION, self::SCHEMA_OK_TTL);
     }
 
     /**
@@ -417,28 +454,60 @@ class Peanut_Connect_Database {
 
         foreach ($tables as $table => $field) {
             $table_name = self::table($table);
-            $count = $wpdb->query(
-                $wpdb->prepare(
-                    "DELETE FROM $table_name WHERE synced = 1 AND $field < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                    $cutoff
-                )
+            $deleted += self::delete_chunked(
+                "DELETE FROM $table_name WHERE synced = 1 AND $field < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $cutoff
             );
-            $deleted += (int) $count;
         }
 
         // Visitors: prune synced rows whose last_seen_at is older than the
         // longer cutoff. Joins to events/touches would be safer but expensive;
         // the visitor_cutoff buffer reduces the orphan-insert window.
         $visitors_table = self::table('visitors');
-        $count = $wpdb->query(
-            $wpdb->prepare(
-                "DELETE FROM $visitors_table WHERE synced = 1 AND last_seen_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $visitor_cutoff
-            )
+        $deleted += self::delete_chunked(
+            "DELETE FROM $visitors_table WHERE synced = 1 AND last_seen_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            $visitor_cutoff
         );
-        $deleted += (int) $count;
 
         return $deleted;
+    }
+
+    /**
+     * Number of rows deleted per cleanup batch.
+     *
+     * Unbounded `DELETE ... WHERE` over a large backlog can hold row
+     * locks / blow the binlog for the whole table in one statement —
+     * on a busy site that stalls writes (event/visitor INSERTs) for the
+     * duration. Chunking keeps each statement short and lets normal
+     * traffic interleave.
+     */
+    const CLEANUP_CHUNK_SIZE = 1000;
+
+    /**
+     * Run a `DELETE ... WHERE <cond> %s` statement in bounded batches,
+     * appending `LIMIT N` and looping until a batch deletes 0 rows.
+     *
+     * @param string $sql_no_limit Prepared-style SQL ending in `%s` for
+     *                             the cutoff, WITHOUT a LIMIT clause.
+     * @param string $cutoff       The datetime cutoff bound to `%s`.
+     * @return int Total rows deleted across all batches.
+     */
+    private static function delete_chunked(string $sql_no_limit, string $cutoff): int {
+        global $wpdb;
+
+        $total = 0;
+        $sql = $sql_no_limit . ' LIMIT ' . (int) self::CLEANUP_CHUNK_SIZE;
+
+        do {
+            $count = (int) $wpdb->query(
+                $wpdb->prepare($sql, $cutoff) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            );
+            $total += $count;
+            // Stop when a batch is short (no more matching rows) or the
+            // query errored (false → 0 here).
+        } while ($count >= self::CLEANUP_CHUNK_SIZE);
+
+        return $total;
     }
 
     /**

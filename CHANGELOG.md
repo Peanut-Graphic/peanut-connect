@@ -5,6 +5,18 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.14.1] - 2026-06-16
+
+Reliability hardening from the 2026-06-16 reliability audit. All surgical, behavior-preserving fixes to hot-path and cron-path performance.
+
+### Performance
+- **Schema-drift self-heal no longer introspects on every request.** `check_db_version()` ran an `INFORMATION_SCHEMA.COLUMNS` query on every `plugins_loaded` (the OR short-circuit still evaluated the deep schema check even when the version option already matched `DB_VERSION`). The passing result is now cached in a 1-hour transient and the deep check is skipped entirely on the hot path; a genuine column drift still re-triggers a migration (self-heal preserved, verified by test).
+- **Popup render path can no longer make blocking Hub calls.** `get_active_popups()` (called from `wp_footer` / `wp_enqueue_scripts`) used to fall through to a synchronous 10s `wp_remote_get` to the Hub whenever the cached option was empty, and didn't cache empty/failed results — so a Hub outage turned every pageview into a 10s hang. The render path now reads only the heartbeat-populated option and negative-caches an empty result for 5 minutes; the heartbeat clears that cache when it stores fresh popups.
+- **Daily cleanup `DELETE`s are now chunked.** `cleanup_old_records()` issued six unbounded `DELETE ... WHERE synced = 1` statements; on a large backlog each could hold locks / stall writes for the whole table. Every delete now runs in `LIMIT 1000` batches looped until drained.
+
+### Tests
+- New CI schema-drift guard statically asserts every column written via `$wpdb->insert`/`->update` to a `peanut_connect` table exists in that table's dbDelta CREATE schema — the build-time analogue of the runtime self-heal.
+
 ## [3.14.0] - 2026-06-14
 
 Hub↔Edge seam hardening — the CAT backlog (D-10/D-11/D-12). All additive and backward-compatible; the edge keeps working against an older Hub and degrades gracefully.

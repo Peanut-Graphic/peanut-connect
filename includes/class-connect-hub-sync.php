@@ -455,6 +455,9 @@ class Peanut_Connect_Hub_Sync {
             // Store active popups if returned
             if (!empty($body['popups'])) {
                 update_option('peanut_connect_hub_popups', $body['popups']);
+                // Clear the render-path negative cache so popups appear
+                // on the next pageview without waiting out the empty TTL.
+                delete_transient(Peanut_Connect_Popup_Display::EMPTY_POPUPS_TRANSIENT);
             }
 
             // Store the public JS-tracker key (NOT the Hub bearer) so the
@@ -597,6 +600,10 @@ class Peanut_Connect_Hub_Sync {
             $popups = $body['popups'] ?? [];
             // Cache popups for future use
             update_option('peanut_connect_hub_popups', $popups);
+            // Clear the render-path negative cache so freshly-fetched
+            // popups appear on the next pageview instead of waiting out
+            // the empty-popups TTL.
+            delete_transient(Peanut_Connect_Popup_Display::EMPTY_POPUPS_TRANSIENT);
             return $popups;
         }
 
