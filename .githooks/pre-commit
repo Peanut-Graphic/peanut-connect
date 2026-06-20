@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# ============================================================
+# pre-commit hook (GAP-01) — block secrets before they're committed.
+# Canonical Peanut template. Enable once per clone:
+#     git config core.hooksPath .githooks
+# Requires gitleaks (https://github.com/gitleaks/gitleaks):
+#     brew install gitleaks
+# ============================================================
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "⚠️  gitleaks not installed — skipping secret pre-scan."
+  echo "    Install it so secrets are caught before they leave your machine:"
+  echo "      brew install gitleaks"
+  exit 0
+fi
+
+if ! gitleaks protect --staged --redact --config .gitleaks.toml; then
+  echo ""
+  echo "❌ Potential secret detected in your staged changes (above)."
+  echo "   Remove it, or if it's a false positive add an allowlist entry to .gitleaks.toml."
+  exit 1
+fi

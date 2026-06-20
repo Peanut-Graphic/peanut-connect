@@ -1,0 +1,50 @@
+# gitleaks config — Peanut secret-scan (GAP-01)
+# Canonical template; copy verbatim into any Peanut repo (see
+# docs/testing-program/reusable/secret-scan/). Start from gitleaks' default
+# ruleset and allowlist only documentation/fixtures/examples — never real config.
+
+title = "Peanut gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Docs, test fixtures, example files, and committed worktree copies (not real secrets)"
+paths = [
+  # API/manual docs use placeholder example tokens (sk_test_…, BEGIN KEY blocks)
+  '''(^|/)docs/.*\.md$''',
+  '''(^|/)DOCUMENTATION/.*''',
+  # Committed Claude worktree copies — duplicated docs/fixtures, never real prod config
+  '''(^|/)\.claude/worktrees/.*''',
+  # Test fixtures with signed/sample tokens
+  '''(^|/)tester-fixtures/.*''',
+  '''(^|/)tests/.*[Ff]ixtures?/.*''',
+  # Example env / config templates
+  '''\.example$''',
+  '''(^|/)\.env\.example$''',
+  # In-app help/tooltip sample strings
+  '''(^|/)resources/js/help/content/.*''',
+  # The Servers create/edit pages render an SSH-private-key *input form*
+  # (user-entered, with placeholder example text), not a committed secret.
+  '''(^|/)resources/js/Pages/Servers/(Create|Edit)\.tsx$''',
+  # Compiled front-end bundles (gitignored going forward; history retains them).
+  '''(^|/)public/build/.*''',
+  # Test files use fake/sample credentials by design.
+  '''(^|/)tests/.*''',
+  # Analytics setup page shows an example GA4 Measurement-Protocol secret.
+  '''(^|/)resources/js/Pages/Analytics/GA4Setup\.tsx$''',
+  # Operator runbooks use example auth headers in curl snippets.
+  '''(^|/)tester-worker/.*\.md$''',
+
+  # compiled front-end bundles (common across WP plugins / apps)
+  '''(^|/)assets/dist/.*''',
+  '''(^|/)frontend/coverage/.*''',
+  '''(^|/)public/embed/build/.*''',
+]
+
+regexTarget = "match"
+regexes = [
+  # Obvious documentation placeholders
+  '''sk_test_(example|placeholder|xxx|0{4,})''',
+  '''YOUR_[A-Z_]*(KEY|TOKEN|SECRET)''',
+]
