@@ -1,0 +1,64 @@
+# Red-then-green regression gate (GAP-03) — "a test per fix", enforced.
+# A bugfix-type PR (conventional-commit `fix:` / `security:` / `hotfix:` /
+# `bugfix:`) must include a regression test. Catches "fixed but no guard, so it
+# regresses later". Canonical Peanut template; copy verbatim, make it a REQUIRED
+# status check.
+name: regression-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  require-regression-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need the base commit to diff the PR
+
+      - name: Enforce test-per-fix
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.sha }}
+          HAS_OVERRIDE: ${{ contains(github.event.pull_request.labels.*.name, 'no-regression-test') }}
+        run: |
+          set -euo pipefail
+
+          # Only bugfix-type PRs are gated (by conventional-commit prefix:
+          # fix: / fix(scope): / fix!: / security: / hotfix: / bugfix:).
+          # Bracket class keeps this portable across GNU and BSD grep.
+          if ! printf '%s' "$TITLE" | grep -qiE '^(fix|bugfix|hotfix|security)[(!:]'; then
+            echo "Not a bugfix PR — regression-test requirement N/A."
+            echo "  title: $TITLE"
+            exit 0
+          fi
+
+          if [ "$HAS_OVERRIDE" = "true" ]; then
+            echo "::warning title=regression-gate::'no-regression-test' override label present — skipping. Justify in the PR body."
+            exit 0
+          fi
+
+          CHANGED="$(git diff --name-only "$BASE".."$HEAD")"
+          # A test change = anything under tests/, or a recognised test file.
+          if printf '%s\n' "$CHANGED" | grep -qE '(^|/)tests?/|\.test\.[jt]sx?$|\.spec\.[jt]sx?$|Test\.php$|_test\.py$|test_.*\.py$'; then
+            echo "✓ Bugfix PR includes a regression test."
+            exit 0
+          fi
+
+          echo "::error title=regression-gate::Bugfix PR \"$TITLE\" has no regression test."
+          cat <<'MSG'
+
+          GAP-03: every bugfix needs a test proven to fail before the fix
+          (red-then-green), so it can't silently regress later.
+
+          → Add a test (under tests/ or a *.test.* / *Test.php / *_test.py file)
+            that fails on the unfixed code, then make it pass.
+          → If this genuinely can't have a test (e.g. config-only / infra), apply
+            the 'no-regression-test' label and explain why in the PR body.
+          MSG
+          exit 1
