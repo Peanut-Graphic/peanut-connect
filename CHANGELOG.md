@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.14.3] - 2026-06-22
+
+### Added
+- **Podcast publish now sets the post excerpt, featured image, and Yoast focus keyphrase.** Previously only the meta description was applied, so published episode posts arrived with an empty excerpt, no featured image, and a blank Yoast focus keyphrase. The publish endpoint now maps three new (optional) payload fields from Hullabaloo: `excerpt` -> `post_excerpt`, `featured_image_url` -> sideloaded featured image (`_thumbnail_id`, set only when the post has no thumbnail yet so republishing never duplicates media), and `focus_keyphrase` -> `_yoast_wpseo_focuskw`. All additive and backward-compatible: each is applied only when present, so older Hullabaloo builds that omit them are unaffected.
+
 ## [3.14.2] - 2026-06-22
 
 ### Fixed
