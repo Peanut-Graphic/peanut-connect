@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.14.2] - 2026-06-22
+
+### Fixed
+- **Fatal `SodiumException` (HTTP 500 site-wide) on hosts without the native libsodium PHP extension** (regression from the 3.13.0 A5 encrypt-at-rest work). `Peanut_Connect_Secret::encrypt()/decrypt()` called `sodium_memzero()` unconditionally; where the native `sodium` extension is absent, WordPress's `sodium_compat` polyfill **throws** on `sodium_memzero` (it cannot securely wipe memory in pure PHP). Because the Hub-key accessor runs on the `init` hook, this white-screened the entire site on every request (observed live on nattybumpercar.com). The three `sodium_memzero($key)` calls are now guarded with `extension_loaded('sodium')` — the wipe still runs where native libsodium exists and is safely skipped (best-effort, non-fatal) where it isn't. No change to encryption behavior.
+
 ## [3.14.1] - 2026-06-16
 
 Reliability hardening from the 2026-06-16 reliability audit. All surgical, behavior-preserving fixes to hot-path and cron-path performance.

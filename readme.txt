@@ -4,7 +4,7 @@ Tags: campaigns, marketing, utm, popups, monitoring, updates, analytics, forms, 
 Requires at least: 6.0
 Tested up to: 6.4
 Requires PHP: 8.0
-Stable tag: 3.14.1
+Stable tag: 3.14.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,9 @@ Yes. Peanut End to End works on any WordPress site. If Peanut Suite is also inst
 No. The plugin only loads what each page needs — the tracker is a small first-party script, popups and banners are conditional, and admin endpoints only respond to authenticated API requests from your paired Hub.
 
 == Changelog ==
+
+= 3.14.2 =
+* Fixed: fatal SodiumException (HTTP 500 site-wide) on hosts without the native libsodium PHP extension — encrypt-at-rest (3.13.0) called sodium_memzero() unconditionally, which the WordPress sodium_compat polyfill throws on. The three calls are now guarded with extension_loaded('sodium'). No change to encryption behavior.
 
 = 3.11.6 =
 * Security (P2-2): the tracker snippet no longer exposes the Hub bearer — tracking_setup now returns the separate public tracker_key (delivered by Hub on heartbeat) instead of the privileged API key. Also repairs tracking on non-plugin pages, which were silently dropped because the snippet carried the wrong key.

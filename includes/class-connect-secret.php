@@ -38,7 +38,7 @@ class Peanut_Connect_Secret {
         }
         $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
         $cipher = sodium_crypto_secretbox($plaintext, $nonce, $key);
-        sodium_memzero($key);
+        if (extension_loaded('sodium')) { sodium_memzero($key); }
         return self::PREFIX . base64_encode($nonce . $cipher);
     }
 
@@ -56,13 +56,13 @@ class Peanut_Connect_Secret {
         }
         $raw = base64_decode(substr($stored, strlen(self::PREFIX)), true);
         if ($raw === false || strlen($raw) <= SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) {
-            sodium_memzero($key);
+            if (extension_loaded('sodium')) { sodium_memzero($key); }
             return null;
         }
         $nonce = substr($raw, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
         $cipher = substr($raw, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
         $plain = sodium_crypto_secretbox_open($cipher, $nonce, $key);
-        sodium_memzero($key);
+        if (extension_loaded('sodium')) { sodium_memzero($key); }
         return $plain === false ? null : $plain;
     }
 
