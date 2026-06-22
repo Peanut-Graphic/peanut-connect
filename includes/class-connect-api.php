@@ -2277,6 +2277,11 @@ class Peanut_Connect_API {
             'post_status' => in_array($status_in, ['publish', 'draft', 'pending', 'private'], true) ? $status_in : 'publish',
             'post_type' => 'post',
         ];
+        // Excerpt — only when provided, so we never blank an existing excerpt
+        // for older Hullabaloo releases that don't send the field.
+        if (! empty($p['excerpt'])) {
+            $postarr['post_excerpt'] = sanitize_textarea_field($p['excerpt']);
+        }
         if ($post_id) {
             $postarr['ID'] = $post_id;
             $res = wp_update_post($postarr, true);
@@ -2299,6 +2304,25 @@ class Peanut_Connect_API {
         }
         if (! empty($p['meta_description'])) {
             update_post_meta($post_id, '_yoast_wpseo_metadesc', sanitize_text_field($p['meta_description']));
+        }
+        // Yoast focus keyphrase — only when provided.
+        if (! empty($p['focus_keyphrase'])) {
+            update_post_meta($post_id, '_yoast_wpseo_focuskw', sanitize_text_field($p['focus_keyphrase']));
+        }
+        // Featured image — sideload the episode/podcast artwork and set it as
+        // the post thumbnail, but only when the post doesn't already have one,
+        // so republishing the same episode never re-downloads or duplicates the
+        // media library entry.
+        if (! empty($p['featured_image_url']) && ! has_post_thumbnail($post_id)) {
+            if (! function_exists('media_sideload_image')) {
+                require_once ABSPATH . 'wp-admin/includes/media.php';
+                require_once ABSPATH . 'wp-admin/includes/file.php';
+                require_once ABSPATH . 'wp-admin/includes/image.php';
+            }
+            $thumb_id = media_sideload_image(esc_url_raw($p['featured_image_url']), $post_id, null, 'id');
+            if (! is_wp_error($thumb_id)) {
+                set_post_thumbnail($post_id, (int) $thumb_id);
+            }
         }
 
         if (class_exists('Peanut_Connect_Activity_Log')) {
