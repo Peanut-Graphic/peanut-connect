@@ -1,0 +1,47 @@
+/*
+ * Peanut Connect — on-page feedback widget styles.
+ *
+ * NOT enqueued as a page stylesheet — it would not pierce the Shadow DOM
+ * boundary. Instead the PHP enqueue() reads this file's text and injects it
+ * into the widget's shadow root <style> tag (see assets/js/feedback.js).
+ */
+.pp-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483000;
+}
+
+.pp-pin {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  pointer-events: auto;
+  width: 26px;
+  height: 26px;
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  color: #fff;
+  font: 600 12px/22px system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+}
+
+.pp-pin.pp-done {
+  opacity: .45;
+}
+
+.pp-launcher {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483002;
+  pointer-events: auto;
+  background: #00234F;
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font: 600 13px system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+}
