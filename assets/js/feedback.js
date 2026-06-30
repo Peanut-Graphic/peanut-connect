@@ -91,7 +91,15 @@
   function enterPlaceMode() { placing = true; document.body.style.cursor = 'crosshair'; }
 
   // --- Movable notes panel (Task 10): draggable + collapsible + persisted, to-do list + filter ---
-  const panelState = JSON.parse(localStorage.getItem('ppFeedbackPanel') || '{"x":20,"y":20,"open":true}');
+  let panelState;
+  try {
+    const raw = JSON.parse(localStorage.getItem('ppFeedbackPanel') || '{}');
+    panelState = (raw && typeof raw === 'object' && typeof raw.x === 'number' && typeof raw.y === 'number')
+      ? { x: raw.x, y: raw.y, open: raw.open !== false }
+      : { x: 20, y: 20, open: true };
+  } catch (e) {
+    panelState = { x: 20, y: 20, open: true };
+  }
   const panel = document.createElement('div');
   panel.className = 'pp-panel';
   panel.style.left = panelState.x + 'px';
@@ -124,7 +132,19 @@
   function renderList() {
     const sel = panel.querySelector('.pp-by');
     const names = Array.from(new Set(items.map((i) => i.author_name).filter(Boolean)));
-    sel.innerHTML = '<option value="">Everyone</option>' + names.map((n) => `<option ${n === filterBy ? 'selected' : ''}>${n}</option>`).join('');
+    sel.innerHTML = '';
+    const everyoneOpt = document.createElement('option');
+    everyoneOpt.value = '';
+    everyoneOpt.textContent = 'Everyone';
+    everyoneOpt.selected = !filterBy;
+    sel.appendChild(everyoneOpt);
+    names.forEach((n) => {
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n;
+      opt.selected = (n === filterBy);
+      sel.appendChild(opt);
+    });
     sel.onchange = () => { filterBy = sel.value; renderList(); };
 
     const ul = panel.querySelector('.pp-list');
@@ -135,7 +155,13 @@
       const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = it.status === 'done';
       cb.addEventListener('change', () => {
         const status = cb.checked ? 'done' : 'open';
-        api('PATCH', '/feedback/' + it.id, { status }).then((res) => { if (res && res.success) { it.status = status; renderPins(); renderList(); } });
+        api('PATCH', '/feedback/' + it.id, { status }).then((res) => {
+          if (res && res.success) {
+            it.status = status; renderPins(); renderList();
+          } else {
+            cb.checked = (it.status === 'done');
+          }
+        }).catch(() => { cb.checked = (it.status === 'done'); });
       });
       const dot = document.createElement('span'); dot.className = 'pp-dot'; dot.style.background = it.color || '#2D6CDF';
       const txt = document.createElement('span'); txt.className = 'pp-txt'; txt.textContent = (it.author_name ? it.author_name + ': ' : '') + it.body;
