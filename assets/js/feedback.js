@@ -90,6 +90,61 @@
 
   function enterPlaceMode() { placing = true; document.body.style.cursor = 'crosshair'; }
 
+  // --- Movable notes panel (Task 10): draggable + collapsible + persisted, to-do list + filter ---
+  const panelState = JSON.parse(localStorage.getItem('ppFeedbackPanel') || '{"x":20,"y":20,"open":true}');
+  const panel = document.createElement('div');
+  panel.className = 'pp-panel';
+  panel.style.left = panelState.x + 'px';
+  panel.style.top = panelState.y + 'px';
+  panel.innerHTML =
+    '<div class="pp-panel-head"><span class="pp-grip">Notes</span>' +
+    '<button class="pp-add">+ Add</button><button class="pp-toggle"></button></div>' +
+    '<div class="pp-filter"><select class="pp-by"><option value="">Everyone</option></select></div>' +
+    '<ul class="pp-list"></ul>';
+  shadow.appendChild(panel);
+
+  function savePanel() { localStorage.setItem('ppFeedbackPanel', JSON.stringify(panelState)); }
+  function applyCollapsed() {
+    panel.classList.toggle('pp-collapsed', !panelState.open);
+    panel.querySelector('.pp-toggle').textContent = panelState.open ? '–' : '+';
+  }
+  applyCollapsed();
+  panel.querySelector('.pp-toggle').addEventListener('click', () => { panelState.open = !panelState.open; applyCollapsed(); savePanel(); });
+  panel.querySelector('.pp-add').addEventListener('click', enterPlaceMode);
+
+  // drag by the head
+  (function drag() {
+    const head = panel.querySelector('.pp-panel-head'); let sx, sy, ox, oy, on = false;
+    head.addEventListener('mousedown', (e) => { on = true; sx = e.clientX; sy = e.clientY; ox = panelState.x; oy = panelState.y; e.preventDefault(); });
+    window.addEventListener('mousemove', (e) => { if (!on) return; panelState.x = Math.max(0, ox + e.clientX - sx); panelState.y = Math.max(0, oy + e.clientY - sy); panel.style.left = panelState.x + 'px'; panel.style.top = panelState.y + 'px'; });
+    window.addEventListener('mouseup', () => { if (on) { on = false; savePanel(); } });
+  })();
+
+  let filterBy = '';
+  function renderList() {
+    const sel = panel.querySelector('.pp-by');
+    const names = Array.from(new Set(items.map((i) => i.author_name).filter(Boolean)));
+    sel.innerHTML = '<option value="">Everyone</option>' + names.map((n) => `<option ${n === filterBy ? 'selected' : ''}>${n}</option>`).join('');
+    sel.onchange = () => { filterBy = sel.value; renderList(); };
+
+    const ul = panel.querySelector('.pp-list');
+    ul.innerHTML = '';
+    items.filter((i) => !filterBy || i.author_name === filterBy).forEach((it, idx) => {
+      const li = document.createElement('li');
+      li.className = 'pp-row';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = it.status === 'done';
+      cb.addEventListener('change', () => {
+        const status = cb.checked ? 'done' : 'open';
+        api('PATCH', '/feedback/' + it.id, { status }).then((res) => { if (res && res.success) { it.status = status; renderPins(); renderList(); } });
+      });
+      const dot = document.createElement('span'); dot.className = 'pp-dot'; dot.style.background = it.color || '#2D6CDF';
+      const txt = document.createElement('span'); txt.className = 'pp-txt'; txt.textContent = (it.author_name ? it.author_name + ': ' : '') + it.body;
+      if (it.status === 'done') txt.classList.add('pp-strike');
+      li.append(cb, dot, txt);
+      ul.appendChild(li);
+    });
+  }
+
   document.addEventListener('click', function (e) {
     if (!placing) return;
     // ignore clicks inside our own shadow host
@@ -111,7 +166,7 @@
       author_name: reviewerName(),
       author_is_agency: !!cfg.isAgency,
       body: body,
-    }).then((res) => { if (res && res.feedback) { items.push({ ...res.feedback, anchor_selector: a.selector, anchor_x: a.nx, anchor_y: a.ny }); renderPins(); } });
+    }).then((res) => { if (res && res.feedback) { items.push({ anchor_selector: a.selector, anchor_x: Math.max(0, Math.min(1, a.nx)), anchor_y: Math.max(0, Math.min(1, a.ny)), ...res.feedback }); renderPins(); renderList(); } });
   }, true);
 
   function renderPins() {
@@ -133,7 +188,7 @@
 
   function load() {
     api('GET', '/feedback?page_url=' + encodeURIComponent(location.pathname + location.search))
-      .then((res) => { items = (res && res.feedback) || []; renderPins(); });
+      .then((res) => { items = (res && res.feedback) || []; renderPins(); renderList(); });
   }
   window.addEventListener('resize', renderPins);
   load();
