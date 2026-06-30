@@ -229,7 +229,10 @@ class Peanut_Connect_Feedback {
     public static function update(\WP_REST_Request $request) {
         $id = (int) $request['id'];
         $in = $request->get_json_params() ?: [];
-        $body = array_intersect_key($in, array_flip(['status', 'body']));
+        // Token clients (review-link visitors) may only check a note off (status);
+        // only an authenticated agency caller may rewrite the note body itself.
+        $allowed = self::is_agency() ? ['status', 'body'] : ['status'];
+        $body = array_intersect_key($in, array_flip($allowed));
         return self::relay('PATCH', "/feedback/{$id}", $body);
     }
 
