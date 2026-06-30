@@ -39,6 +39,82 @@ class Peanut_Connect_Feedback {
 
     public static function init(): void {
         add_action('rest_api_init', [self::class, 'register_routes']);
+        self::boot_frontend();
+    }
+
+    /**
+     * Hook the frontend widget enqueue + footer container behind the
+     * review-mode gate. Split out from init() so it can be unit-tested
+     * (or re-bootstrapped) independently of the REST route registration.
+     */
+    public static function boot_frontend(): void {
+        add_action('wp_enqueue_scripts', [self::class, 'enqueue']);
+        add_action('wp_footer', [self::class, 'render_root']);
+    }
+
+    /**
+     * Review mode is active for a logged-in agency user (can edit_posts),
+     * or for any visitor carrying a ?pp_review=<token> query arg matching
+     * the site's configured review token. hash_equals() is used to avoid
+     * timing attacks, and an empty configured token never matches (an
+     * empty request token is also rejected) so a freshly-installed site
+     * with no token set never accidentally opens review mode to the public.
+     */
+    private static function review_active(): bool {
+        if (is_user_logged_in() && current_user_can('edit_posts')) {
+            return true;
+        }
+
+        $token = isset($_GET['pp_review']) ? sanitize_text_field(wp_unslash($_GET['pp_review'])) : '';
+        $expected = (string) get_option('peanut_connect_feedback_review_token', '');
+
+        return $token !== '' && $expected !== '' && hash_equals($expected, $token);
+    }
+
+    /**
+     * Enqueue the feedback widget script (review mode only). The widget
+     * renders into a Shadow DOM, so the page-level stylesheet can't pierce
+     * it — instead the CSS source is injected as a JS string the widget
+     * attaches inside the shadow root.
+     */
+    public static function enqueue(): void {
+        if (! self::review_active()) {
+            return;
+        }
+
+        wp_enqueue_script(
+            'peanut-connect-feedback',
+            plugins_url('assets/js/feedback.js', dirname(__FILE__)),
+            [],
+            '1.0.0',
+            true
+        );
+
+        $css = (string) @file_get_contents(plugin_dir_path(dirname(__FILE__)) . 'assets/css/feedback.css');
+        wp_add_inline_script(
+            'peanut-connect-feedback',
+            'window.__ppFeedbackCss = ' . wp_json_encode($css) . ';',
+            'before'
+        );
+
+        $token = isset($_GET['pp_review']) ? sanitize_text_field(wp_unslash($_GET['pp_review'])) : '';
+        wp_localize_script('peanut-connect-feedback', 'peanutConnectFeedback', [
+            'restUrl'     => esc_url_raw(rest_url('peanut-connect/v1/feedback')),
+            'nonce'       => wp_create_nonce('wp_rest'),
+            'isAgency'    => self::is_agency(),
+            'reviewToken' => $token,
+        ]);
+    }
+
+    /**
+     * Print the widget's mount point just before </body> (review mode only).
+     */
+    public static function render_root(): void {
+        if (! self::review_active()) {
+            return;
+        }
+
+        echo '<div id="peanut-connect-feedback-root"></div>';
     }
 
     public static function register_routes(): void {
