@@ -183,15 +183,23 @@ class Peanut_Connect_Feedback {
         $endpoint = rtrim($hub_url, '/') . '/api/v1/connect' . $path;
         $encoded  = $body === null ? '' : (string) wp_json_encode($body);
 
+        $headers = [
+            'Authorization' => 'Bearer ' . $api_key,
+            'Accept'        => 'application/json',
+        ];
+        // Only send Content-Type when there is a body. A bodyless GET carrying
+        // Content-Type: application/json is routed by Hub to the POST/store
+        // handler (verified end-to-end locally), which 422s the list/replies
+        // GETs and breaks pin loading. GETs must go out without it.
+        if ($body !== null) {
+            $headers['Content-Type'] = 'application/json';
+        }
+
         $args = [
             'method'  => $method,
             'timeout' => 15,
             'headers' => array_merge(
-                [
-                    'Authorization' => 'Bearer ' . $api_key,
-                    'Content-Type'  => 'application/json',
-                    'Accept'        => 'application/json',
-                ],
+                $headers,
                 Peanut_Connect_Auth::outbound_signature_headers($method, $endpoint, $encoded)
             ),
         ];
