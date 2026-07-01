@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.19.1] - 2026-07-01
+
+### Fixed
+- **`force_check_updates` still fataled after 3.18.0.** The endpoint references `get_plugin_data(PEANUT_CONNECT_FILE)`, but `PEANUT_CONNECT_FILE` is **never defined** — an undefined constant is a fatal `Error` in PHP 8, so the admin "Check for updates" action returned a 500 regardless of the 3.18.0 missing-includes fix. Now uses `PEANUT_CONNECT_PLUGIN_DIR . 'peanut-connect.php'`. (The 3.18.0 changelog claim that this was fixed was premature — the `require_once` additions were necessary but not sufficient.)
+
 ## [3.19.0] - 2026-07-01
 
 ### Added

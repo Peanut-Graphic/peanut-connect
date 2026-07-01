@@ -4,7 +4,7 @@ Tags: campaigns, marketing, utm, popups, monitoring, updates, analytics, forms, 
 Requires at least: 6.0
 Tested up to: 6.4
 Requires PHP: 8.0
-Stable tag: 3.19.0
+Stable tag: 3.19.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,9 @@ Yes. Peanut End to End works on any WordPress site. If Peanut Suite is also inst
 No. The plugin only loads what each page needs — the tracker is a small first-party script, popups and banners are conditional, and admin endpoints only respond to authenticated API requests from your paired Hub.
 
 == Changelog ==
+
+= 3.19.1 =
+* Fixed (for real this time): the "Check for updates" admin action still returned a critical error after 3.18.0 — the actual cause was an undefined `PEANUT_CONNECT_FILE` constant referenced in that endpoint, which fatals on PHP 8. It now uses the correct plugin-file path. (3.18.0 fixed a related missing-includes issue but not this one.)
 
 = 3.19.0 =
 * Mark It Up review links now **follow the reviewer across the whole site**. Previously a client reviewer only saw the widget on pages whose URL still carried `?pp_review=…`; clicking a plain nav link dropped it. Now, once they open one tokenized link, a cookie keeps review mode on for 30 days as they browse — no need to re-add the token to every page. (Logged-in agency users already got this automatically.) The cookie only holds the same token from the link, so it grants no extra access.

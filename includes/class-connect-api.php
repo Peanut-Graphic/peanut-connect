@@ -1613,8 +1613,10 @@ class Peanut_Connect_API {
         wp_clean_plugins_cache(true);
         wp_update_plugins();
 
-        // Get current plugin version
-        $plugin_data = get_plugin_data(PEANUT_CONNECT_FILE);
+        // Get current plugin version. (PEANUT_CONNECT_FILE was never defined —
+        // referencing it fataled this endpoint in PHP 8; use the real main-file
+        // path derived from the defined plugin-dir constant.)
+        $plugin_data = get_plugin_data(PEANUT_CONNECT_PLUGIN_DIR . 'peanut-connect.php');
         $current_version = $plugin_data['Version'] ?? '0.0.0';
 
         // Get fresh update info
