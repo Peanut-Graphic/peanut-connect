@@ -18,6 +18,9 @@ if (! defined('ABSPATH')) {
 
 class Peanut_Connect_Feedback {
 
+    /** Cookie that carries a matched review token across the site for a reviewer. */
+    const REVIEW_COOKIE = 'pp_review';
+
     /**
      * Whitelist + coerce the store payload; the agency flag is decided by
      * the SERVER based on the authenticated caller, never trusted from the
@@ -40,6 +43,7 @@ class Peanut_Connect_Feedback {
     public static function init(): void {
         add_action('rest_api_init', [self::class, 'register_routes']);
         add_action('admin_menu', [self::class, 'admin_menu']);
+        add_action('init', [self::class, 'maybe_persist_review_cookie']);
         self::boot_frontend();
     }
 
@@ -109,7 +113,7 @@ class Peanut_Connect_Feedback {
                         <th scope="row"><?php esc_html_e('Share link', 'peanut-connect'); ?></th>
                         <td>
                             <input type="text" class="large-text code" readonly onclick="this.select()" value="<?php echo esc_attr($example); ?>" />
-                            <p class="description"><?php esc_html_e('Append the same ?pp_review=… to any page URL to point a reviewer at a specific page.', 'peanut-connect'); ?></p>
+                            <p class="description"><?php esc_html_e('Send a reviewer this link. Once they open it, review mode follows them across the whole site (for 30 days) — no need to re-add the token to every page. You can also append ?pp_review=… to any specific page URL.', 'peanut-connect'); ?></p>
                         </td>
                     </tr>
                     <?php endif; ?>
@@ -146,10 +150,51 @@ class Peanut_Connect_Feedback {
             return true;
         }
 
-        $token = isset($_GET['pp_review']) ? sanitize_text_field(wp_unslash($_GET['pp_review'])) : '';
         $expected = (string) get_option('peanut_connect_feedback_review_token', '');
+        if ($expected === '') {
+            return false;
+        }
 
-        return $token !== '' && $expected !== '' && hash_equals($expected, $token);
+        // Token can arrive on the URL (?pp_review=…) or, once a reviewer has
+        // followed one tokenized link, from the cookie we set for them — so
+        // they can browse the whole site without re-appending the token to
+        // every internal link.
+        $url_token    = isset($_GET['pp_review']) ? sanitize_text_field(wp_unslash($_GET['pp_review'])) : '';
+        $cookie_token = isset($_COOKIE[self::REVIEW_COOKIE]) ? sanitize_text_field(wp_unslash($_COOKIE[self::REVIEW_COOKIE])) : '';
+
+        return ($url_token !== '' && hash_equals($expected, $url_token))
+            || ($cookie_token !== '' && hash_equals($expected, $cookie_token));
+    }
+
+    /**
+     * When a reviewer arrives on a tokenized URL (?pp_review=<token>) that
+     * matches the site's review token, drop a cookie so review mode follows
+     * them across the whole site (plain internal links don't carry the query
+     * arg). Runs on `init` — before headers are sent — so setcookie() works.
+     * The cookie only ever holds the same token the reviewer already had in
+     * the link, so it grants no access they didn't already have.
+     */
+    public static function maybe_persist_review_cookie(): void {
+        if (empty($_GET['pp_review'])) {
+            return;
+        }
+        $expected = (string) get_option('peanut_connect_feedback_review_token', '');
+        $token    = sanitize_text_field(wp_unslash($_GET['pp_review']));
+        if ($expected === '' || $token === '' || ! hash_equals($expected, $token)) {
+            return;
+        }
+        if (isset($_COOKIE[self::REVIEW_COOKIE]) && hash_equals($token, (string) $_COOKIE[self::REVIEW_COOKIE])) {
+            return; // already set to this token
+        }
+        setcookie(self::REVIEW_COOKIE, $token, [
+            'expires'  => time() + 30 * DAY_IN_SECONDS,
+            'path'     => defined('COOKIEPATH') && COOKIEPATH ? COOKIEPATH : '/',
+            'domain'   => defined('COOKIE_DOMAIN') ? COOKIE_DOMAIN : '',
+            'secure'   => is_ssl(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        $_COOKIE[self::REVIEW_COOKIE] = $token; // honor it on this same request
     }
 
     /**

@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.19.0] - 2026-07-01
+
+### Added
+- **Site-wide review token (cookie persistence).** A matched `?pp_review=<token>` now drops a `pp_review` cookie (30 days, `HttpOnly`, `SameSite=Lax`, `Secure` on HTTPS) on the WordPress `init` hook, and `review_active()` accepts the URL token *or* the cookie. So a logged-out client reviewer opens one tokenized link and review mode follows them across the whole site instead of falling off on every plain internal link. The cookie only ever carries the same token the reviewer already had, so it grants no access they didn't already have. Logged-in agency users were unaffected (they always got site-wide review mode).
+
 ## [3.18.1] - 2026-07-01
 
 ### Fixed
