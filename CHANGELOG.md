@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.18.1] - 2026-07-01
+
+### Fixed
+- **Widget JS cache-busting.** `feedback.js` was enqueued with a hardcoded `'1.0.0'` version, so browsers never refetched it after a plugin update — the inline CSS refreshed but the widget JS stayed cached, meaning new features (e.g. 3.18.0 drawing) never reached clients without a manual hard-refresh. Now versioned by `PEANUT_CONNECT_VERSION` so each release busts the cache. This is what actually delivers the 3.18.0 drawing JS to installed sites.
+
 ## [3.18.0] - 2026-07-01
 
 ### Added

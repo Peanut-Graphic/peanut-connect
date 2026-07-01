@@ -167,7 +167,10 @@ class Peanut_Connect_Feedback {
             'peanut-connect-feedback',
             plugins_url('assets/js/feedback.js', dirname(__FILE__)),
             [],
-            '1.0.0',
+            // Version the asset by the plugin version so each release busts the
+            // browser cache — a hardcoded constant would serve stale widget JS
+            // forever after an update (the inline CSS updates, the JS wouldn't).
+            defined('PEANUT_CONNECT_VERSION') ? PEANUT_CONNECT_VERSION : '1.0.0',
             true
         );
 
