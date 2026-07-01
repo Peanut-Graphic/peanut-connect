@@ -4,7 +4,7 @@ Tags: campaigns, marketing, utm, popups, monitoring, updates, analytics, forms, 
 Requires at least: 6.0
 Tested up to: 6.4
 Requires PHP: 8.0
-Stable tag: 3.15.0
+Stable tag: 3.15.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,9 @@ Yes. Peanut End to End works on any WordPress site. If Peanut Suite is also inst
 No. The plugin only loads what each page needs — the tracker is a small first-party script, popups and banners are conditional, and admin endpoints only respond to authenticated API requests from your paired Hub.
 
 == Changelog ==
+
+= 3.15.1 =
+* Added: a "Feedback Review" admin page (under the End-to-End menu) to set/generate the per-site review token and copy the client review link — no more editing options by hand. Appears when the site is connected to Hub.
 
 = 3.15.0 =
 * Added: On-page visual feedback — in review mode, reviewers can drop pinned notes and checkable to-dos directly on any page, each reviewer color-coded, and everything relays to your paired Hub for triage. Gated behind a Hub connection and a per-site review token, and dormant on sites that don't enable it; the widget UI is isolated in a Shadow DOM so it can't affect your theme.

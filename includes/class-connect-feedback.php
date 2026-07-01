@@ -39,7 +39,88 @@ class Peanut_Connect_Feedback {
 
     public static function init(): void {
         add_action('rest_api_init', [self::class, 'register_routes']);
+        add_action('admin_menu', [self::class, 'admin_menu']);
         self::boot_frontend();
+    }
+
+    /**
+     * Add a "Feedback Review" subpage under the End-to-End menu where an
+     * agency admin can set/generate the per-site review token and copy the
+     * client review link (the ?pp_review=… surface). Only registered when
+     * the feedback module boots (i.e. the site is Hub-connected).
+     */
+    public static function admin_menu(): void {
+        add_submenu_page(
+            'peanut-connect-app',
+            __('Feedback Review', 'peanut-connect'),
+            __('Feedback Review', 'peanut-connect'),
+            'manage_options',
+            'peanut-connect-feedback-review',
+            [self::class, 'render_admin_page']
+        );
+    }
+
+    /**
+     * Render + handle the review-token settings page. Admin-only, nonce-gated.
+     */
+    public static function render_admin_page(): void {
+        if (! current_user_can('manage_options')) {
+            return;
+        }
+
+        $notice = '';
+        if (! empty($_POST['pcf_action']) && check_admin_referer('pcf_review_token')) {
+            if ($_POST['pcf_action'] === 'generate') {
+                $token = bin2hex(random_bytes(20)); // 40-char hex secret
+            } else {
+                $token = sanitize_text_field(wp_unslash($_POST['pcf_review_token'] ?? ''));
+            }
+            update_option('peanut_connect_feedback_review_token', $token);
+            $notice = $token === ''
+                ? __('Review token cleared — client review links are now disabled.', 'peanut-connect')
+                : __('Review token saved.', 'peanut-connect');
+        }
+
+        $token   = (string) get_option('peanut_connect_feedback_review_token', '');
+        $example = $token !== '' ? esc_url(add_query_arg('pp_review', $token, home_url('/'))) : '';
+        ?>
+        <div class="wrap">
+            <h1><?php esc_html_e('Feedback — Client Review Link', 'peanut-connect'); ?></h1>
+            <?php if ($notice !== '') : ?>
+                <div class="notice notice-success is-dismissible"><p><?php echo esc_html($notice); ?></p></div>
+            <?php endif; ?>
+
+            <p style="max-width:640px">
+                <?php esc_html_e('Set a review token to let clients leave on-page feedback without a WordPress login. Logged-in editors already see the feedback widget and do NOT need this token. Share the link below with a reviewer — anyone with it can drop pinned notes on the site (their replies stay agency-only).', 'peanut-connect'); ?>
+            </p>
+
+            <form method="post">
+                <?php wp_nonce_field('pcf_review_token'); ?>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row"><label for="pcf_review_token"><?php esc_html_e('Review token', 'peanut-connect'); ?></label></th>
+                        <td>
+                            <input name="pcf_review_token" id="pcf_review_token" type="text" class="regular-text code" value="<?php echo esc_attr($token); ?>" autocomplete="off" />
+                            <p class="description"><?php esc_html_e('A shared secret. Leave blank and save to disable client review links.', 'peanut-connect'); ?></p>
+                        </td>
+                    </tr>
+                    <?php if ($example !== '') : ?>
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Share link', 'peanut-connect'); ?></th>
+                        <td>
+                            <input type="text" class="large-text code" readonly onclick="this.select()" value="<?php echo esc_attr($example); ?>" />
+                            <p class="description"><?php esc_html_e('Append the same ?pp_review=… to any page URL to point a reviewer at a specific page.', 'peanut-connect'); ?></p>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
+                </table>
+                <p>
+                    <button type="submit" name="pcf_action" value="save" class="button button-primary"><?php esc_html_e('Save token', 'peanut-connect'); ?></button>
+                    <button type="submit" name="pcf_action" value="generate" class="button"><?php esc_html_e('Generate a new token', 'peanut-connect'); ?></button>
+                </p>
+            </form>
+        </div>
+        <?php
     }
 
     /**
