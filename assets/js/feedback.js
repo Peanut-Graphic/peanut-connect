@@ -95,7 +95,7 @@
   // Minimal launcher so the widget is usable/testable on its own (a later task adds the full panel).
   const launcher = document.createElement('button');
   launcher.className = 'pp-launcher';
-  launcher.textContent = '+ Add note';
+  launcher.textContent = '+ Mark it up';
   launcher.addEventListener('click', () => enterPlaceMode());
   shadow.appendChild(launcher);
 
@@ -119,13 +119,24 @@
   panel.style.left = panelState.x + 'px';
   panel.style.top = panelState.y + 'px';
   panel.innerHTML =
-    '<div class="pp-panel-head"><span class="pp-grip">Notes</span>' +
+    '<div class="pp-panel-head"><span class="pp-grip">Mark It Up</span>' +
+    '<button class="pp-help-btn" type="button" title="How to use" aria-label="How to use">?</button>' +
     '<button class="pp-add">+ Add</button><button class="pp-toggle"></button></div>' +
+    '<div class="pp-help" hidden><strong>How to use</strong><ol>' +
+    '<li>Click <strong>+ Mark it up</strong> (or <strong>+ Add</strong>).</li>' +
+    '<li>Click the spot on the page you want to comment on.</li>' +
+    '<li>Type your note — a colored pin drops there and saves to Hub.</li>' +
+    '<li>Tick a note off in this list once it\'s handled.</li>' +
+    '</ol></div>' +
     '<div class="pp-filter"><select class="pp-by"><option value="">Everyone</option></select></div>' +
     '<ul class="pp-list"></ul>';
   panel.setAttribute('role', 'region');
-  panel.setAttribute('aria-label', 'Feedback notes');
+  panel.setAttribute('aria-label', 'Mark It Up feedback');
   shadow.appendChild(panel);
+  panel.querySelector('.pp-help-btn').addEventListener('click', () => {
+    const h = panel.querySelector('.pp-help');
+    if (h) h.hidden = !h.hidden;
+  });
 
   function savePanel() { localStorage.setItem('ppFeedbackPanel', JSON.stringify(panelState)); }
   function applyCollapsed() {

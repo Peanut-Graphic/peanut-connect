@@ -52,8 +52,8 @@ class Peanut_Connect_Feedback {
     public static function admin_menu(): void {
         add_submenu_page(
             'peanut-connect-app',
-            __('Feedback Review', 'peanut-connect'),
-            __('Feedback Review', 'peanut-connect'),
+            __('Mark It Up', 'peanut-connect'),
+            __('Mark It Up', 'peanut-connect'),
             'manage_options',
             'peanut-connect-feedback-review',
             [self::class, 'render_admin_page']
@@ -85,7 +85,7 @@ class Peanut_Connect_Feedback {
         $example = $token !== '' ? esc_url(add_query_arg('pp_review', $token, home_url('/'))) : '';
         ?>
         <div class="wrap">
-            <h1><?php esc_html_e('Feedback — Client Review Link', 'peanut-connect'); ?></h1>
+            <h1><?php esc_html_e('Mark It Up — Client Review Link', 'peanut-connect'); ?></h1>
             <?php if ($notice !== '') : ?>
                 <div class="notice notice-success is-dismissible"><p><?php echo esc_html($notice); ?></p></div>
             <?php endif; ?>

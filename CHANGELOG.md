@@ -5,10 +5,15 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.15.1] - 2026-07-01
+## [3.16.0] - 2026-07-01
 
 ### Added
-- **"Feedback Review" admin page** (submenu under the End-to-End menu) for managing the on-page feedback review token. An agency admin can set or generate the per-site review token and copy the client review link (`?pp_review=…`) directly, instead of editing the `peanut_connect_feedback_review_token` option by hand. Nonce-gated, `manage_options`-only; registered when the feedback module boots (i.e. the site is Hub-connected).
+- **"Mark It Up" admin page** (submenu under the End-to-End menu) for managing the on-page feedback review token. An agency admin can set or generate the per-site review token and copy the client review link (`?pp_review=…`) directly, instead of editing the `peanut_connect_feedback_review_token` option by hand. Nonce-gated, `manage_options`-only; registered when the feedback module boots (i.e. the site is Hub-connected).
+- In-widget **"?" how-to** panel with a 4-step quick start.
+
+### Changed
+- Renamed the on-page feedback widget to **Mark It Up** (panel title + launcher).
+- Recolored the widget chrome off dark blue (now violet `#6D28D9`) so it doesn't blend into navy-themed sites.
 
 ## [3.15.0] - 2026-07-01
 
