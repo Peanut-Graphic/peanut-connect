@@ -12,22 +12,63 @@
   z-index: 2147483000;
 }
 
-.pp-pin {
+/* Red "?" marker (points at a highlight or a spot; click opens the note tooltip). */
+.pp-mark {
   position: absolute;
-  transform: translate(-50%, -100%);
+  transform: translate(-50%, -120%);
   pointer-events: auto;
-  width: 26px;
-  height: 26px;
+  width: 22px; height: 22px;
   border: 2px solid #fff;
-  border-radius: 50% 50% 50% 0;
+  border-radius: 50%;
+  background: #DC2626;
   color: #fff;
-  font: 600 12px/22px system-ui, sans-serif;
+  font: 700 13px/18px system-ui, sans-serif;
+  text-align: center;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+  padding: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
 }
+.pp-mark.pp-done { opacity: .4; }
 
-.pp-pin.pp-done {
-  opacity: .45;
+/* Yellow text highlight (drawn as rects over the selected range). */
+.pp-hl {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(255, 235, 59, .55);
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+}
+.pp-hl.pp-done { opacity: .3; }
+
+/* Dark note tooltip (the "review question" look). */
+.pp-tip {
+  position: absolute;
+  z-index: 2147483003;
+  pointer-events: auto;
+  max-width: 300px;
+  background: #1f2430;
+  color: #fff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  font: 13px/1.45 system-ui, sans-serif;
+}
+.pp-tip-label { color: #ffd84d; font-weight: 700; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 3px; }
+.pp-tip-body { white-space: pre-wrap; }
+
+/* Floating "Note on this" chip that appears by a text selection. */
+.pp-selchip {
+  position: fixed;
+  z-index: 2147483004;
+  pointer-events: auto;
+  background: #6D28D9;
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: 600 12px system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .3);
 }
 
 .pp-launcher {
@@ -36,6 +77,9 @@
   bottom: 16px;
   z-index: 2147483002;
   pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   background: #6D28D9;
   color: #fff;
   border: 0;
@@ -44,6 +88,16 @@
   font: 600 13px system-ui, sans-serif;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+}
+.pp-count {
+  background: #DC2626;
+  color: #fff;
+  border-radius: 999px;
+  min-width: 18px; height: 18px;
+  line-height: 18px;
+  text-align: center;
+  font-size: 11px; font-weight: 700;
+  padding: 0 5px;
 }
 
 .pp-panel { position: fixed; width: 300px; max-height: 60vh; overflow: auto; z-index: 2147483001;

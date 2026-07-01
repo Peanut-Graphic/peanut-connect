@@ -5,6 +5,12 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.17.0] - 2026-07-01
+
+### Added
+- **Text-highlight notes.** Select text on the page → "Note on this" highlights it (yellow) and attaches a note. Notes (highlight or point) render as a red "?" marker; clicking it opens a dark note tooltip (the "review question" look). Highlights re-anchor on reload by re-finding the quoted text — stored as a range descriptor (`{k,c,q,p,s}`) in the existing `anchor_selector` field, so no Hub schema change. Point-at-a-spot notes remain for images/buttons.
+- **Open-count badge** on the "+ Mark it up" launcher.
+
 ## [3.16.0] - 2026-07-01
 
 ### Added
