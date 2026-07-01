@@ -5,6 +5,14 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.0] - 2026-07-01
+
+### Added
+- **On-page visual feedback widget.** In review mode, reviewers can drop pinned notes and checkable to-dos directly onto any page — each reviewer color-coded — and everything relays same-origin to the paired Hub (`/api/v1/connect/feedback*`), scoped per site. A new `includes/class-connect-feedback.php` exposes the WP REST relay (`author_is_agency` forced server-side; reply endpoints are agency-only so internal notes never reach client reviewers) and enqueues a vanilla-JS widget (`assets/js/feedback.js`) whose chrome is isolated in a Shadow DOM. The widget only loads for a logged-in editor or a valid `?pp_review=<token>`, and only when the site is Hub-connected — so it is dormant on sites that don't enable it. Requires Hub with the feedback API.
+
+### Fixed
+- **Relay omitted `Content-Type` on bodyless GET requests.** Hub routes a `GET` carrying `Content-Type: application/json` to the POST/store handler, which would have 422'd the pin-list and reply-list fetches. GETs now go out without it.
+
 ## [3.14.3] - 2026-06-22
 
 ### Added
