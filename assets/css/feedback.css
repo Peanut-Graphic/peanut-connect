@@ -1,0 +1,61 @@
+/*
+ * Peanut Connect — on-page feedback widget styles.
+ *
+ * NOT enqueued as a page stylesheet — it would not pierce the Shadow DOM
+ * boundary. Instead the PHP enqueue() reads this file's text and injects it
+ * into the widget's shadow root <style> tag (see assets/js/feedback.js).
+ */
+.pp-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483000;
+}
+
+.pp-pin {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  pointer-events: auto;
+  width: 26px;
+  height: 26px;
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  color: #fff;
+  font: 600 12px/22px system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+}
+
+.pp-pin.pp-done {
+  opacity: .45;
+}
+
+.pp-launcher {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483002;
+  pointer-events: auto;
+  background: #00234F;
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font: 600 13px system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+}
+
+.pp-panel { position: fixed; width: 300px; max-height: 60vh; overflow: auto; z-index: 2147483001;
+  background: #fff; border: 1px solid #d7dee6; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  font: 13px/1.4 system-ui, sans-serif; color: #1f2a37; pointer-events: auto; }
+.pp-panel.pp-collapsed .pp-list, .pp-panel.pp-collapsed .pp-filter { display: none; }
+.pp-panel-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: move;
+  background: #00234F; color: #fff; border-radius: 10px 10px 0 0; }
+.pp-panel-head .pp-grip { flex: 1; font-weight: 600; }
+.pp-add, .pp-toggle { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+.pp-filter { padding: 8px 10px; } .pp-by { width: 100%; padding: 4px; }
+.pp-list { list-style: none; margin: 0; padding: 4px 0; }
+.pp-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
+.pp-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.pp-txt { flex: 1; } .pp-strike { text-decoration: line-through; opacity: .55; }
