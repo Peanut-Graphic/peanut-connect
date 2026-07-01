@@ -1590,6 +1590,16 @@ class Peanut_Connect_API {
      * Force check for plugin updates by clearing cache
      */
     public function force_check_updates(WP_REST_Request $request): WP_REST_Response {
+        // REST requests don't load wp-admin includes, so wp_clean_plugins_cache(),
+        // wp_update_plugins() and get_plugin_data() are undefined here unless we
+        // pull them in — otherwise this endpoint fatals with a critical error.
+        if (! function_exists('get_plugin_data')) {
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        }
+        if (! function_exists('wp_clean_plugins_cache') || ! function_exists('wp_update_plugins')) {
+            require_once ABSPATH . 'wp-admin/includes/update.php';
+        }
+
         // Clear the self-updater cache
         $updater = new Peanut_Connect_Self_Updater();
         $updater->clear_update_cache();

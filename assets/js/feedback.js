@@ -114,8 +114,23 @@
   }
   function noteAnchor(it) {
     const s = it.anchor_selector || '';
-    if (s.charAt(0) === '{') { try { const d = JSON.parse(s); if (d && d.k === 'hl') return { kind: 'hl', d }; } catch (e) {} }
+    if (s.charAt(0) === '{') {
+      try {
+        const d = JSON.parse(s);
+        if (d && d.k === 'hl') return { kind: 'hl', d };
+        if (d && d.k === 'draw') return { kind: 'draw', d };
+      } catch (e) {}
+    }
     return { kind: 'point', selector: s };
+  }
+
+  // Freehand drawing: capture points in DOCUMENT coordinates (so they survive
+  // scrolling) plus the document width they were drawn at (so they scale if the
+  // page later reflows to a different width).
+  function docWidth() { return document.documentElement.scrollWidth || window.innerWidth; }
+  function drawPointsToViewport(d) {
+    const scale = (d.w && docWidth()) ? docWidth() / d.w : 1;
+    return (d.pts || []).map((p) => [p[0] * scale - window.scrollX, p[1] * scale - window.scrollY]);
   }
 
   // ---- shadow + overlay ----
@@ -128,6 +143,12 @@
   const overlay = document.createElement('div');
   overlay.className = 'pp-overlay';
   shadow.appendChild(overlay);
+
+  // SVG layer for saved freehand drawings (+ the live stroke while drawing).
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const drawSvg = document.createElementNS(SVGNS, 'svg');
+  drawSvg.setAttribute('class', 'pp-draw-svg');
+  overlay.appendChild(drawSvg);
 
   // ---- launcher with open-count badge ----
   const launcher = document.createElement('button');
@@ -144,7 +165,7 @@
 
   let placing = false;
   let items = [];
-  function enterPlaceMode() { placing = true; document.body.style.cursor = 'crosshair'; hideChip(); }
+  function enterPlaceMode() { if (drawing) setDrawMode(false); placing = true; document.body.style.cursor = 'crosshair'; hideChip(); }
 
   // ---- dark note tooltip (the "review question" look) ----
   const tip = document.createElement('div');
@@ -220,6 +241,67 @@
     }).then((res) => { if (res && res.feedback) { items.push({ anchor_selector: a.selector, anchor_x: nx, anchor_y: ny, ...res.feedback }); render(); } });
   }, true);
 
+  // ---- freehand drawing (circle/scribble, then add a note) ----
+  let drawing = false;      // draw MODE is on
+  let stroke = null;        // { pts: [[docX,docY],...] } while a stroke is in progress
+  let livePath = null;      // the <path> shown while dragging
+  const DRAW_COLOR = '#DC2626';
+
+  function setDrawMode(on) {
+    drawing = on;
+    overlay.classList.toggle('pp-drawing', on);
+    const btn = panel.querySelector('.pp-draw-btn');
+    if (btn) btn.classList.toggle('pp-on', on);
+    if (on) { placing = false; document.body.style.cursor = ''; hideChip(); hideTip(); }
+    else { endStroke(true); }
+  }
+  function strokeLen(pts) {
+    let d = 0;
+    for (let i = 1; i < pts.length; i++) { d += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); }
+    return d;
+  }
+  function ptsToViewportPath(pts) {
+    return pts.map((p, i) => (i ? 'L' : 'M') + (p[0] - window.scrollX).toFixed(1) + ' ' + (p[1] - window.scrollY).toFixed(1)).join(' ');
+  }
+  function endStroke(cancel) {
+    if (livePath) { livePath.remove(); livePath = null; }
+    stroke = null;
+    if (cancel) return;
+  }
+  overlay.addEventListener('pointerdown', (e) => {
+    if (!drawing) return;
+    e.preventDefault();
+    try { overlay.setPointerCapture(e.pointerId); } catch (err) {}
+    stroke = { pts: [[e.clientX + window.scrollX, e.clientY + window.scrollY]] };
+    livePath = document.createElementNS(SVGNS, 'path');
+    livePath.setAttribute('stroke', DRAW_COLOR);
+    drawSvg.appendChild(livePath);
+  });
+  overlay.addEventListener('pointermove', (e) => {
+    if (!drawing || !stroke) return;
+    stroke.pts.push([e.clientX + window.scrollX, e.clientY + window.scrollY]);
+    livePath.setAttribute('d', ptsToViewportPath(stroke.pts));
+  });
+  overlay.addEventListener('pointerup', (e) => {
+    if (!drawing || !stroke) return;
+    try { overlay.releasePointerCapture(e.pointerId); } catch (err) {}
+    const pts = stroke.pts;
+    endStroke(true);
+    if (pts.length < 2 || strokeLen(pts) < 20) return; // ignore stray taps
+    createDrawing(pts);
+  });
+
+  function createDrawing(pts) {
+    const body = window.prompt('Note for this drawing (optional):') || 'Drawing';
+    const d = { k: 'draw', w: docWidth(), pts: pts.map((p) => [Math.round(p[0]), Math.round(p[1])]) };
+    api('POST', '/feedback', {
+      page_url: pageKey(), page_title: document.title,
+      anchor_selector: JSON.stringify(d), anchor_x: 0, anchor_y: 0,
+      viewport_width: window.innerWidth, author_name: reviewerName(),
+      author_is_agency: !!cfg.isAgency, body: body,
+    }).then((res) => { if (res && res.feedback) { items.push({ ...res.feedback, anchor_selector: JSON.stringify(d) }); render(); } });
+  }
+
   // dismiss tooltip on any outside click (markers stopPropagation so they don't self-dismiss)
   document.addEventListener('click', () => { if (!tip.hidden) hideTip(); }, true);
 
@@ -236,13 +318,14 @@
   panel.style.top = panelState.y + 'px';
   panel.innerHTML =
     '<div class="pp-panel-head"><span class="pp-grip">Mark It Up</span>' +
+    '<button class="pp-draw-btn" type="button" title="Draw on the page" aria-label="Draw on the page">✎ Draw</button>' +
     '<button class="pp-help-btn" type="button" title="How to use" aria-label="How to use">?</button>' +
     '<button class="pp-toggle"></button></div>' +
     '<div class="pp-help" hidden><strong>How to use</strong><ol>' +
     '<li><strong>Select text</strong> on the page, then click <strong>+ Note on this</strong> — it highlights the text and adds your note.</li>' +
     '<li>Or click <strong>+ Mark it up</strong> and click a spot (for an image or button).</li>' +
-    '<li>Type your note. A yellow highlight + red <strong>?</strong> marker appears; click the marker to read it.</li>' +
-    '<li>Tick a note off in this list once it\'s handled.</li>' +
+    '<li>Or click <strong>✎ Draw</strong> and drag to circle or scribble on the page, then add a note. Click <strong>✎ Draw</strong> again to stop.</li>' +
+    '<li>Type your note. A marker appears; click it to read the note. Tick a note off in this list once it\'s handled.</li>' +
     '</ol></div>' +
     '<div class="pp-filter"><select class="pp-by"><option value="">Everyone</option></select></div>' +
     '<ul class="pp-list"></ul>';
@@ -252,6 +335,7 @@
   panel.querySelector('.pp-help-btn').addEventListener('click', () => {
     const h = panel.querySelector('.pp-help'); if (h) h.hidden = !h.hidden;
   });
+  panel.querySelector('.pp-draw-btn').addEventListener('click', () => setDrawMode(!drawing));
 
   function savePanel() { localStorage.setItem('ppFeedbackPanel', JSON.stringify(panelState)); }
   function applyCollapsed() {
@@ -307,6 +391,7 @@
   // ---- render highlights + markers ----
   function renderMarkers() {
     overlay.querySelectorAll('.pp-mark, .pp-hl').forEach((n) => n.remove());
+    drawSvg.querySelectorAll('path.pp-drawpath').forEach((n) => n.remove());
     items.filter((i) => !filterBy || i.author_name === filterBy).forEach((it) => {
       const a = noteAnchor(it);
       let mx, my;
@@ -323,8 +408,17 @@
           hl.style.width = rc.width + 'px'; hl.style.height = rc.height + 'px';
           overlay.appendChild(hl);
         }
-        const last = rects[rects.length - 1];
-        mx = last.right + 4; my = last.top - 2;
+        const first = rects[0];
+        mx = first.left; my = first.top;
+      } else if (a.kind === 'draw') {
+        const vp = drawPointsToViewport(a.d);
+        if (vp.length < 2) return;
+        const path = document.createElementNS(SVGNS, 'path');
+        path.setAttribute('class', 'pp-drawpath' + (it.status === 'done' ? ' pp-done' : ''));
+        path.setAttribute('stroke', it.color || '#DC2626');
+        path.setAttribute('d', vp.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' '));
+        drawSvg.appendChild(path);
+        mx = vp[0][0]; my = vp[0][1];
       } else {
         const pt = pointFromAnchor(it);
         if (!pt) return;

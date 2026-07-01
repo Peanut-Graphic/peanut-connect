@@ -4,7 +4,7 @@ Tags: campaigns, marketing, utm, popups, monitoring, updates, analytics, forms, 
 Requires at least: 6.0
 Tested up to: 6.4
 Requires PHP: 8.0
-Stable tag: 3.17.0
+Stable tag: 3.18.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,11 @@ Yes. Peanut End to End works on any WordPress site. If Peanut Suite is also inst
 No. The plugin only loads what each page needs — the tracker is a small first-party script, popups and banners are conditional, and admin endpoints only respond to authenticated API requests from your paired Hub.
 
 == Changelog ==
+
+= 3.18.0 =
+* Mark It Up now has **freehand drawing**: click **✎ Draw** in the panel, drag to circle or scribble on the page, then add a note — the drawing relays to Hub and re-renders (scaled to the page width) for everyone. Click ✎ Draw again to stop.
+* Fixed: the note tooltip could appear far from its marker (up in the header) once you'd scrolled down the page — it now opens right at the marker. The "?" marker also anchors to the start of the highlighted text.
+* Fixed: the "Check for updates" admin action returned a critical error (the endpoint called admin-only functions that aren't loaded in a REST request); it now loads them first.
 
 = 3.17.0 =
 * Mark It Up now supports **text highlighting**: select text on any page and click "Note on this" to highlight it (yellow) and attach a note — shown as a red "?" marker with a dark note tooltip when you click it. Point-at-a-spot notes still work for images and buttons. Highlights re-anchor after the page reloads.

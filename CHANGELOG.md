@@ -5,6 +5,15 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.18.0] - 2026-07-01
+
+### Added
+- **Freehand drawing.** A "✎ Draw" toggle in the Mark It Up panel lets a reviewer drag to circle or scribble on the page, then attach a note. Strokes are captured in document coordinates plus the document width, stored as `{k:'draw',w,pts}` in `anchor_selector` (no Hub schema change), and re-rendered as an SVG path scaled to the current page width. Rendered in the same fixed overlay as highlights/markers, so they track scroll.
+
+### Fixed
+- **Note tooltip position.** The dark note tooltip was `position: absolute` while its marker lives in a `position: fixed` overlay, so after scrolling down the tooltip rendered from the document top (up in the header) instead of next to the marker. Made the tooltip `position: fixed`. The highlight "?" marker now anchors to the **start** of the highlighted text rather than the end.
+- **`force_check_updates` REST fatal.** The admin "Check for updates" endpoint called `wp_clean_plugins_cache()`, `wp_update_plugins()`, and `get_plugin_data()` — all wp-admin includes that aren't loaded in a REST request — producing a critical-error 500. It now `require_once`s `wp-admin/includes/plugin.php` and `update.php` first. (The self-updater's own cron path was unaffected.)
+
 ## [3.17.0] - 2026-07-01
 
 ### Added
