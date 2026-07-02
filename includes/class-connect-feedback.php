@@ -226,7 +226,21 @@ class Peanut_Connect_Feedback {
             'before'
         );
 
+        // The widget needs the token for its REST calls (X-Peanut-Review-Token).
+        // It can arrive on this request's URL, or — for every page the reviewer
+        // visits after the first — from the pp_review cookie set by
+        // maybe_set_review_cookie(). The cookie is HttpOnly (the widget JS can
+        // never read document.cookie), so it MUST be re-emitted here server-side;
+        // before 3.19.2 cookie-borne reviewers got an empty token and every
+        // note POST after the first page failed with a 401.
         $token = isset($_GET['pp_review']) ? sanitize_text_field(wp_unslash($_GET['pp_review'])) : '';
+        if ($token === '' && isset($_COOKIE[self::REVIEW_COOKIE])) {
+            $cookie_token = sanitize_text_field(wp_unslash($_COOKIE[self::REVIEW_COOKIE]));
+            $expected     = (string) get_option('peanut_connect_feedback_review_token', '');
+            if ($expected !== '' && $cookie_token !== '' && hash_equals($expected, $cookie_token)) {
+                $token = $cookie_token;
+            }
+        }
         wp_localize_script('peanut-connect-feedback', 'peanutConnectFeedback', [
             'restUrl'     => esc_url_raw(rest_url('peanut-connect/v1/feedback')),
             'nonce'       => wp_create_nonce('wp_rest'),

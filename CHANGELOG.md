@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.19.2] - 2026-07-02
+
+### Fixed
+- **Cookie-borne reviewers could not post notes after their first page.** `enqueue()` localized `reviewToken` to the widget only from the `?pp_review` URL parameter. The 3.19.0 site-wide cookie is `HttpOnly` (correctly, so scripts cannot exfiltrate it), which means the widget JS could never read it as a fallback — on every page after the tokenized landing page the widget rendered but every note create returned 401 from the REST gate. The token (validated against the stored option with `hash_equals`) is now also re-emitted into the widget config when it arrives via the cookie. Found while diagnosing "the token is not working" on staging.cenhudpeakperks.com; also note that password-gate plugins can swallow the `?pp_review` parameter on redirect, so tokenized links should be opened after any site password prompt.
+
 ## [3.19.1] - 2026-07-01
 
 ### Fixed
