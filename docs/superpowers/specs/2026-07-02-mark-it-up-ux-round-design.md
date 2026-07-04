@@ -92,8 +92,12 @@ gracefully against an older HUB (see Degradation).
 ## Track 2 — HUB (one PR)
 
 ### 2.1 Schema
-- `site_feedbacks`: add `author_key` (string, nullable, indexed) and
+- `site_feedbacks`: add `author_key` (string 64, nullable, indexed),
+  `resolved_by_name` (string, nullable — resolver display name relayed from
+  the WP side, since resolvers are WP users with no HUB user id), and
   `deleted_at` (soft deletes). `resolved_by` / `resolved_at` already exist.
+- `sites`: add `review_token` (string 64, nullable) — synced from the plugin
+  so HUB can compose View-on-page links (2.3).
 - Legacy rows have `author_key = null` → never reviewer-editable. Correct.
 
 ### 2.2 Connect API
