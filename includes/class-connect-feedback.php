@@ -28,7 +28,8 @@ class Peanut_Connect_Feedback {
      */
     public static function build_store_payload(array $req, bool $is_agency): array {
         return [
-            'page_url'         => (string) ($req['page_url'] ?? ''),
+            // Only same-site paths — blocks javascript:/https?: values from ever being stored.
+            'page_url'         => (isset($req['page_url']) && is_string($req['page_url']) && strpos($req['page_url'], '/') === 0) ? $req['page_url'] : '/',
             'page_title'       => isset($req['page_title']) ? (string) $req['page_title'] : null,
             'anchor_selector'  => isset($req['anchor_selector']) ? (string) $req['anchor_selector'] : null,
             'anchor_x'         => (float) ($req['anchor_x'] ?? 0),
@@ -36,6 +37,7 @@ class Peanut_Connect_Feedback {
             'viewport_width'   => isset($req['viewport_width']) ? (int) $req['viewport_width'] : null,
             'author_name'      => (string) ($req['author_name'] ?? ''),
             'author_is_agency' => $is_agency, // forced server-side; never trust the request body.
+            'author_key'       => isset($req['author_key']) ? (string) $req['author_key'] : null,
             'body'             => (string) ($req['body'] ?? ''),
         ];
     }

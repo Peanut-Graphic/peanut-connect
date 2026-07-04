@@ -137,7 +137,7 @@ gracefully against an older HUB (see Degradation).
 | Feature | Behavior on older HUB |
 | --- | --- |
 | Handled ✓ line | Shows without name/date |
-| Edit/delete | Controls hidden after first 404/405 from PATCH-body or DELETE |
+| Edit/delete | As built: controls remain; failures surface the inline "couldn't save/delete — try again" error (accepted deviation 2026-07-02 — no data loss, no silent failure) |
 | All pages tab | "Not available yet" body |
 | Deep-link focus | Fully works (client-side only) |
 | Walkthrough, touch | Fully work (client-side only) |

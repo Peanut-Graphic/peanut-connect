@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Degradation vs pre-3.20 Hub
 Sites running this plugin against a Hub instance that predates 3.20's endpoints will see: the Handled line renders without a name or date (falls back to a bare "Handled ✓"); edit/delete actions return an inline error instead of silently failing; and the All pages tab shows "Not available yet." instead of a summary. Existing single-page note create/read/highlight/draw workflows are unaffected.
 
+### Fixed
+- **Deep-link visits listed zero notes.** The `pp_note` query param polluted the widget's page key, so a `?pp_note=…` URL queried a page nobody had notes on. `pp_note` is now stripped like `pp_review`/UTM params.
+
 ## [3.19.2] - 2026-07-02
 
 ### Fixed

@@ -79,6 +79,15 @@ No. The plugin only loads what each page needs — the tracker is a small first-
 
 == Changelog ==
 
+= 3.20.0 =
+* Mark It Up: reviewers can now edit or delete a note they authored, scoped per-browser — no login required.
+* Added a first-run walkthrough that introduces the review workflow once, then stays quiet on later visits.
+* Added a This page / All pages tab switch, so you can see a site-wide notes summary alongside the current page's notes; a `?pp_note=<id>` link now deep-links straight to a note and pulses its marker. Notes marked resolved on the Hub side also show a "Handled ✓ · name · date" line.
+* Touch polish: panel drag now works with touch (pointer events), and interactive targets are sized for touch input.
+
+= 3.19.2 =
+* Fix: reviewers arriving via the site-wide review cookie could not post notes after the first page — the widget now receives the validated token on every page.
+
 = 3.19.1 =
 * Fixed (for real this time): the "Check for updates" admin action still returned a critical error after 3.18.0 — the actual cause was an undefined `PEANUT_CONNECT_FILE` constant referenced in that endpoint, which fatals on PHP 8. It now uses the correct plugin-file path. (3.18.0 fixed a related missing-includes issue but not this one.)
 
