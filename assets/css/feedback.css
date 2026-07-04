@@ -124,7 +124,7 @@
 .pp-help { padding: 8px 12px; margin: 0; background: #f5f3ff; color: #3b2a63; border-bottom: 1px solid #e5e0f5; font-size: 12px; }
 .pp-help ol { margin: 6px 0 0; padding-left: 18px; } .pp-help li { margin: 2px 0; }
 .pp-panel-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: move;
-  background: #6D28D9; color: #fff; border-radius: 10px 10px 0 0; }
+  background: #6D28D9; color: #fff; border-radius: 10px 10px 0 0; touch-action: none; }
 .pp-panel-head .pp-grip { flex: 1; font-weight: 600; }
 .pp-add, .pp-toggle { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius: 6px; padding: 2px 8px; cursor: pointer; }
 .pp-filter { padding: 8px 10px; } .pp-by { width: 100%; padding: 4px; }
@@ -154,3 +154,10 @@
 
 @keyframes pp-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,.7); } 50% { box-shadow: 0 0 0 10px rgba(220,38,38,0); } }
 .pp-mark.pp-pulse { animation: pp-pulse .8s ease-out 2; }
+
+@media (pointer: coarse) {
+  .pp-mark { width: 28px; height: 28px; font-size: 14px; }
+  .pp-row input[type=checkbox] { width: 20px; height: 20px; }
+  .pp-selchip { padding: 10px 14px; font-size: 14px; }
+  .pp-tip-btn { padding: 8px 12px; font-size: 13px; }
+}

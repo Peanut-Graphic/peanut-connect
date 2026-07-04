@@ -278,17 +278,21 @@
   chip.addEventListener('click', () => { const r = pendingRange; hideChip(); if (r) createHighlight(r); });
   shadow.appendChild(chip);
   function hideChip() { chip.hidden = true; pendingRange = null; }
+  let selTimer = null;
   document.addEventListener('selectionchange', () => {
-    if (placing) return;
-    const sel = document.getSelection();
-    if (!sel || sel.isCollapsed || !sel.toString().trim() || sel.rangeCount === 0) { hideChip(); return; }
-    const range = sel.getRangeAt(0);
-    if (host.contains(range.commonAncestorContainer)) { hideChip(); return; } // ignore our own UI
-    pendingRange = range.cloneRange();
-    const r = range.getBoundingClientRect();
-    chip.style.left = Math.max(4, r.left) + 'px';
-    chip.style.top = Math.max(4, r.top - 34) + 'px';
-    chip.hidden = false;
+    if (selTimer) clearTimeout(selTimer);
+    selTimer = setTimeout(() => {
+      if (placing) return;
+      const sel = document.getSelection();
+      if (!sel || sel.isCollapsed || !sel.toString().trim() || sel.rangeCount === 0) { hideChip(); return; }
+      const range = sel.getRangeAt(0);
+      if (host.contains(range.commonAncestorContainer)) { hideChip(); return; } // ignore our own UI
+      pendingRange = range.cloneRange();
+      const r = range.getBoundingClientRect();
+      chip.style.left = Math.max(4, r.left) + 'px';
+      chip.style.top = Math.max(4, r.top - 34) + 'px';
+      chip.hidden = false;
+    }, 250);
   });
 
   function createHighlight(range) {
@@ -479,12 +483,14 @@
 
   (function drag() {
     const head = panel.querySelector('.pp-panel-head'); let sx, sy, ox, oy, on = false;
-    head.addEventListener('mousedown', (e) => {
+    head.addEventListener('pointerdown', (e) => {
       if (e.target.closest && e.target.closest('button')) return;
       on = true; sx = e.clientX; sy = e.clientY; ox = panelState.x; oy = panelState.y; e.preventDefault();
+      try { head.setPointerCapture(e.pointerId); } catch (err) {}
     });
-    window.addEventListener('mousemove', (e) => { if (!on) return; panelState.x = Math.max(0, ox + e.clientX - sx); panelState.y = Math.max(0, oy + e.clientY - sy); panel.style.left = panelState.x + 'px'; panel.style.top = panelState.y + 'px'; });
-    window.addEventListener('mouseup', () => { if (on) { on = false; savePanel(); } });
+    window.addEventListener('pointermove', (e) => { if (!on) return; panelState.x = Math.max(0, ox + e.clientX - sx); panelState.y = Math.max(0, oy + e.clientY - sy); panel.style.left = panelState.x + 'px'; panel.style.top = panelState.y + 'px'; });
+    window.addEventListener('pointerup', () => { if (on) { on = false; savePanel(); } });
+    window.addEventListener('pointercancel', () => { if (on) { on = false; savePanel(); } });
   })();
 
   let filterBy = '';
