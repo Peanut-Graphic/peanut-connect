@@ -25,6 +25,26 @@
     return n || 'Anonymous';
   }
 
+  const AUTHOR_KEY = 'ppFeedbackAuthorKey';
+  const MINE_KEY = 'ppFeedbackMyNotes';
+  function authorKey() {
+    let k = localStorage.getItem(AUTHOR_KEY);
+    if (!k) {
+      k = (crypto.randomUUID && crypto.randomUUID()) ||
+        (Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+      localStorage.setItem(AUTHOR_KEY, k);
+    }
+    return k;
+  }
+  function myNoteIds() {
+    try { return JSON.parse(localStorage.getItem(MINE_KEY) || '[]'); } catch (e) { return []; }
+  }
+  function rememberMine(id) {
+    const ids = myNoteIds();
+    if (ids.indexOf(id) === -1) { ids.push(id); localStorage.setItem(MINE_KEY, JSON.stringify(ids.slice(-500))); }
+  }
+  function isMine(id) { return myNoteIds().indexOf(id) !== -1; }
+
   function api(method, path, body) {
     const headers = { 'Content-Type': 'application/json' };
     if (cfg.isAgency && cfg.nonce) headers['X-WP-Nonce'] = cfg.nonce;
@@ -219,8 +239,8 @@
       page_url: pageKey(), page_title: document.title,
       anchor_selector: JSON.stringify(d), anchor_x: 0, anchor_y: 0,
       viewport_width: window.innerWidth, author_name: reviewerName(),
-      author_is_agency: !!cfg.isAgency, body: body,
-    }).then((res) => { if (res && res.feedback) { items.push({ ...res.feedback, anchor_selector: JSON.stringify(d) }); render(); } });
+      author_is_agency: !!cfg.isAgency, author_key: authorKey(), body: body,
+    }).then((res) => { if (res && res.feedback) { rememberMine(res.feedback.id); items.push({ ...res.feedback, anchor_selector: JSON.stringify(d) }); render(); } });
     try { document.getSelection().removeAllRanges(); } catch (e) {}
   }
 
@@ -237,8 +257,8 @@
     api('POST', '/feedback', {
       page_url: pageKey(), page_title: document.title, anchor_selector: a.selector,
       anchor_x: nx, anchor_y: ny, viewport_width: window.innerWidth,
-      author_name: reviewerName(), author_is_agency: !!cfg.isAgency, body: body,
-    }).then((res) => { if (res && res.feedback) { items.push({ anchor_selector: a.selector, anchor_x: nx, anchor_y: ny, ...res.feedback }); render(); } });
+      author_name: reviewerName(), author_is_agency: !!cfg.isAgency, author_key: authorKey(), body: body,
+    }).then((res) => { if (res && res.feedback) { rememberMine(res.feedback.id); items.push({ anchor_selector: a.selector, anchor_x: nx, anchor_y: ny, ...res.feedback }); render(); } });
   }, true);
 
   // ---- freehand drawing (circle/scribble, then add a note) ----
@@ -298,8 +318,8 @@
       page_url: pageKey(), page_title: document.title,
       anchor_selector: JSON.stringify(d), anchor_x: 0, anchor_y: 0,
       viewport_width: window.innerWidth, author_name: reviewerName(),
-      author_is_agency: !!cfg.isAgency, body: body,
-    }).then((res) => { if (res && res.feedback) { items.push({ ...res.feedback, anchor_selector: JSON.stringify(d) }); render(); } });
+      author_is_agency: !!cfg.isAgency, author_key: authorKey(), body: body,
+    }).then((res) => { if (res && res.feedback) { rememberMine(res.feedback.id); items.push({ ...res.feedback, anchor_selector: JSON.stringify(d) }); render(); } });
   }
 
   // dismiss tooltip on any outside click (markers stopPropagation so they don't self-dismiss)
