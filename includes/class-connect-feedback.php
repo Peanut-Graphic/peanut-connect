@@ -267,10 +267,14 @@ class Peanut_Connect_Feedback {
             ['methods' => 'GET',  'callback' => [self::class, 'list_feedback'], 'permission_callback' => [self::class, 'can_review']],
             ['methods' => 'POST', 'callback' => [self::class, 'create'],        'permission_callback' => [self::class, 'can_review']],
         ]);
-        register_rest_route($ns, '/feedback/(?P<id>\d+)', [
-            'methods'             => 'PATCH',
-            'callback'            => [self::class, 'update'],
+        register_rest_route($ns, '/feedback/summary', [
+            'methods'             => 'GET',
+            'callback'            => [self::class, 'summary'],
             'permission_callback' => [self::class, 'can_review'],
+        ]);
+        register_rest_route($ns, '/feedback/(?P<id>\d+)', [
+            ['methods' => 'PATCH',  'callback' => [self::class, 'update'],      'permission_callback' => [self::class, 'can_review']],
+            ['methods' => 'DELETE', 'callback' => [self::class, 'delete_item'], 'permission_callback' => [self::class, 'can_review']],
         ]);
         register_rest_route($ns, '/feedback/(?P<id>\d+)/replies', [
             ['methods' => 'GET',  'callback' => [self::class, 'list_replies'], 'permission_callback' => [self::class, 'can_review_agency']],
@@ -380,11 +384,29 @@ class Peanut_Connect_Feedback {
     public static function update(\WP_REST_Request $request) {
         $id = (int) $request['id'];
         $in = $request->get_json_params() ?: [];
-        // Token clients (review-link visitors) may only check a note off (status);
-        // only an authenticated agency caller may rewrite the note body itself.
-        $allowed = self::is_agency() ? ['status', 'body'] : ['status'];
+        // Token clients (review-link visitors) may only check a note off (status)
+        // or pass their author_key; only an authenticated agency caller may
+        // rewrite the note body itself. caller_is_agency is decided server-side
+        // and is the flag Hub's authorization actually trusts — never the widget.
+        $allowed = self::is_agency() ? ['status', 'body', 'author_key'] : ['status', 'author_key'];
         $body = array_intersect_key($in, array_flip($allowed));
+        $body['caller_is_agency'] = self::is_agency();
+        if (self::is_agency()) {
+            $u = wp_get_current_user();
+            $body['resolver_name'] = $u && $u->display_name ? $u->display_name : 'Web Team';
+        }
         return self::relay('PATCH', "/feedback/{$id}", $body);
+    }
+
+    public static function delete_item(\WP_REST_Request $request) {
+        $id   = (int) $request['id'];
+        $body = array_intersect_key($request->get_json_params() ?: [], array_flip(['author_key']));
+        $body['caller_is_agency'] = self::is_agency();
+        return self::relay('DELETE', '/feedback/' . $id, $body);
+    }
+
+    public static function summary(\WP_REST_Request $request) {
+        return self::relay('GET', '/feedback/summary', null);
     }
 
     public static function list_replies(\WP_REST_Request $request) {
