@@ -467,7 +467,7 @@
       summaryCache = res.pages;
       box.innerHTML = '';
       res.pages.forEach((pg) => {
-        if (!pg || typeof pg.page_url !== 'string' || pg.page_url.charAt(0) !== '/') return; // defense-in-depth: only same-site paths become hrefs
+        if (!pg || typeof pg.page_url !== 'string' || !/^\/(?!\/)/.test(pg.page_url)) return; // defense-in-depth: only same-site paths become hrefs
         const h = document.createElement('div'); h.className = 'pp-sw-page';
         h.textContent = (pg.page_title || pg.page_url) + ' — ' + pg.open_count + ' open, ' + pg.done_count + ' done';
         box.appendChild(h);

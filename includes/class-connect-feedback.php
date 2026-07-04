@@ -28,8 +28,8 @@ class Peanut_Connect_Feedback {
      */
     public static function build_store_payload(array $req, bool $is_agency): array {
         return [
-            // Only same-site paths — blocks javascript:/https?: values from ever being stored.
-            'page_url'         => (isset($req['page_url']) && is_string($req['page_url']) && strpos($req['page_url'], '/') === 0) ? $req['page_url'] : '/',
+            // Only same-site paths — blocks javascript:, https?: and protocol-relative (//) values.
+            'page_url'         => (isset($req['page_url']) && is_string($req['page_url']) && preg_match('#^/(?!/)#', $req['page_url']) === 1) ? $req['page_url'] : '/',
             'page_title'       => isset($req['page_title']) ? (string) $req['page_title'] : null,
             'anchor_selector'  => isset($req['anchor_selector']) ? (string) $req['anchor_selector'] : null,
             'anchor_x'         => (float) ($req['anchor_x'] ?? 0),
