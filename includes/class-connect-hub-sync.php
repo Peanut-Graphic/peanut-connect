@@ -409,6 +409,12 @@ class Peanut_Connect_Hub_Sync {
             'connect_version' => PEANUT_CONNECT_VERSION,
             'wp_version' => get_bloginfo('version'),
             'php_version' => PHP_VERSION,
+            // Mark It Up review token, so Hub can compose View-on-page links.
+            // This WP option is the single source of truth for the token, so
+            // it's always sent (including empty string when cleared) — Hub
+            // stores whatever is sent and only skips writing when the field
+            // is absent from the payload entirely (older/other callers).
+            'review_token' => (string) get_option('peanut_connect_feedback_review_token', ''),
         ]);
         $response = wp_remote_post($endpoint, [
             'headers' => array_merge(

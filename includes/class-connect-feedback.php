@@ -82,6 +82,16 @@ class Peanut_Connect_Feedback {
                 $token = sanitize_text_field(wp_unslash($_POST['pcf_review_token'] ?? ''));
             }
             update_option('peanut_connect_feedback_review_token', $token);
+
+            // Push the new token to Hub immediately (rather than waiting for
+            // the next 15-minute cron heartbeat) so View-on-page links are
+            // usable right away. Reuses the existing heartbeat sync — no new
+            // sync infrastructure. Best-effort: a failure here doesn't block
+            // saving locally, the periodic heartbeat will retry.
+            if (class_exists('Peanut_Connect_Hub_Sync')) {
+                Peanut_Connect_Hub_Sync::send_heartbeat();
+            }
+
             $notice = $token === ''
                 ? __('Review token cleared — client review links are now disabled.', 'peanut-connect')
                 : __('Review token saved.', 'peanut-connect');
