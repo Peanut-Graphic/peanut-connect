@@ -434,6 +434,16 @@
     toggle.setAttribute('aria-label', panelState.open ? 'Collapse notes' : 'Expand notes');
   }
   applyCollapsed();
+  const INTRO_KEY = 'ppFeedbackSeenIntro';
+  if (!localStorage.getItem(INTRO_KEY)) {
+    panelState.open = true; applyCollapsed();
+    const help = panel.querySelector('.pp-help');
+    help.hidden = false;
+    const got = document.createElement('button');
+    got.className = 'pp-tip-btn pp-primary pp-gotit'; got.textContent = 'Got it';
+    help.appendChild(got);
+    got.addEventListener('click', () => { help.hidden = true; got.remove(); localStorage.setItem(INTRO_KEY, '1'); });
+  }
   panel.querySelector('.pp-toggle').addEventListener('click', () => { panelState.open = !panelState.open; applyCollapsed(); savePanel(); });
 
   (function drag() {
