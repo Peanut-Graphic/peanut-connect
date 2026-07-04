@@ -151,3 +151,6 @@
 .pp-sw-page { font-weight: 600; font-size: 11px; margin: 8px 0 2px; }
 .pp-sw-note { display: block; font-size: 11px; padding: 2px 0 2px 10px; text-decoration: none; color: inherit; }
 .pp-sw-note:hover { text-decoration: underline; }
+
+@keyframes pp-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,.7); } 50% { box-shadow: 0 0 0 10px rgba(220,38,38,0); } }
+.pp-mark.pp-pulse { animation: pp-pulse .8s ease-out 2; }

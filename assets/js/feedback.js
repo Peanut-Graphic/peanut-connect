@@ -563,6 +563,7 @@
       mark.className = 'pp-mark' + (it.status === 'done' ? ' pp-done' : '');
       mark.style.left = mx + 'px'; mark.style.top = my + 'px';
       mark.textContent = '?';
+      mark.setAttribute('data-id', String(it.id));
       mark.setAttribute('aria-label', (it.author_name ? it.author_name + ': ' : '') + (it.body || 'note'));
       mark.addEventListener('click', (e) => { e.stopPropagation(); showTip(mark, it); });
       overlay.appendChild(mark);
@@ -571,9 +572,22 @@
 
   function render() { renderMarkers(); renderList(); updateBadge(); }
 
+  function focusNote(id) {
+    const it = items.find((x) => String(x.id) === String(id));
+    if (!it) return;
+    const mark = Array.from(overlay.querySelectorAll('.pp-mark')).find((m) => m.getAttribute('data-id') === String(it.id));
+    if (!mark) return;
+    const y = (parseFloat(mark.style.top) || 0) + window.scrollY - window.innerHeight / 2;
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    setTimeout(() => { renderMarkers(); const m2 = Array.from(overlay.querySelectorAll('.pp-mark')).find((m) => m.getAttribute('data-id') === String(it.id)); if (m2) { showTip(m2, it); m2.classList.add('pp-pulse'); setTimeout(() => m2.classList.remove('pp-pulse'), 1600); } }, 450);
+  }
   function load() {
     api('GET', '/feedback?page_url=' + encodeURIComponent(pageKey()))
-      .then((res) => { items = (res && res.feedback) || []; render(); });
+      .then((res) => {
+        items = (res && res.feedback) || []; render();
+        const m = location.search.match(/[?&]pp_note=(\d+)/);
+        if (m) focusNote(m[1]);
+      });
   }
   window.addEventListener('resize', () => { renderMarkers(); hideTip(); });
   window.addEventListener('scroll', () => { renderMarkers(); hideTip(); }, { passive: true });
