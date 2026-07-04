@@ -58,7 +58,7 @@
   function pageKey() {
     try {
       const u = new URL(location.href);
-      ['pp_review', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid']
+      ['pp_review', 'pp_note', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid']
         .forEach((k) => u.searchParams.delete(k));
       const qs = u.searchParams.toString();
       return u.pathname + (qs ? '?' + qs : '');
