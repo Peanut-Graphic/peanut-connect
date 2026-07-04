@@ -192,6 +192,11 @@
   tip.className = 'pp-tip';
   tip.hidden = true;
   shadow.appendChild(tip);
+  function fmtDate(s) {
+    try { const d = new Date(s); return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (e) { return ''; }
+  }
+  const ICON_EDIT = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11.3 1.7l3 3L5 14l-3.6.6L2 11z"/></svg>';
+  const ICON_TRASH = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M5.5 4V2.5h5V4M4 4l.8 10h6.4L12 4M6.5 7v4M9.5 7v4"/></svg>';
   function showTip(mark, it) {
     tip.innerHTML = '';
     const label = document.createElement('div');
@@ -201,9 +206,65 @@
     body.className = 'pp-tip-body';
     body.textContent = it.body || '';
     tip.append(label, body);
+    if (it.status === 'done') {
+      const done = document.createElement('div');
+      done.className = 'pp-tip-done';
+      const who = it.resolved_by_name ? ' · ' + it.resolved_by_name : '';
+      const when = it.resolved_at ? ' · ' + fmtDate(it.resolved_at) : '';
+      done.textContent = 'Handled ✓' + who + when;
+      tip.appendChild(done);
+    }
+    if (isMine(it.id) && it.status !== 'done') {
+      const bar = document.createElement('div');
+      bar.className = 'pp-tip-actions';
+      const editB = document.createElement('button'); editB.className = 'pp-tip-btn'; editB.innerHTML = ICON_EDIT + ' Edit';
+      const delB = document.createElement('button'); delB.className = 'pp-tip-btn'; delB.innerHTML = ICON_TRASH + ' Delete';
+      bar.append(editB, delB);
+      tip.appendChild(bar);
+      editB.addEventListener('click', (e) => { e.stopPropagation(); tipEditMode(it, body, bar); });
+      delB.addEventListener('click', (e) => { e.stopPropagation(); tipConfirmDelete(it, bar); });
+    }
     tip.style.left = (parseFloat(mark.style.left) || 0) + 'px';
     tip.style.top = ((parseFloat(mark.style.top) || 0) + 22) + 'px';
     tip.hidden = false;
+  }
+  function tipError(container, msg) {
+    let err = tip.querySelector('.pp-tip-err');
+    if (!err) { err = document.createElement('div'); err.className = 'pp-tip-err'; container.after(err); }
+    err.textContent = msg;
+  }
+  function tipEditMode(it, bodyEl, bar) {
+    bar.hidden = true;
+    const ta = document.createElement('textarea');
+    ta.className = 'pp-tip-edit'; ta.value = it.body || '';
+    const save = document.createElement('button'); save.className = 'pp-tip-btn pp-primary'; save.textContent = 'Save';
+    const cancel = document.createElement('button'); cancel.className = 'pp-tip-btn'; cancel.textContent = 'Cancel';
+    const row = document.createElement('div'); row.className = 'pp-tip-actions'; row.append(save, cancel);
+    bodyEl.replaceWith(ta); bar.before(row); ta.focus();
+    cancel.addEventListener('click', (e) => { e.stopPropagation(); ta.replaceWith(bodyEl); row.remove(); bar.hidden = false; });
+    save.addEventListener('click', (e) => {
+      e.stopPropagation();
+      api('PATCH', '/feedback/' + it.id, { body: ta.value, author_key: authorKey() }).then((res) => {
+        if (res && res.success) { it.body = ta.value; render(); hideTip(); }
+        else { tipError(row, "couldn't save — try again"); }
+      }).catch(() => tipError(row, "couldn't save — try again"));
+    });
+  }
+  function tipConfirmDelete(it, bar) {
+    bar.hidden = true;
+    const row = document.createElement('div'); row.className = 'pp-tip-actions';
+    const q = document.createElement('span'); q.className = 'pp-tip-q'; q.textContent = 'Delete this note?';
+    const yes = document.createElement('button'); yes.className = 'pp-tip-btn pp-danger'; yes.textContent = 'Delete';
+    const no = document.createElement('button'); no.className = 'pp-tip-btn'; no.textContent = 'Keep';
+    row.append(q, yes, no); bar.before(row);
+    no.addEventListener('click', (e) => { e.stopPropagation(); row.remove(); bar.hidden = false; });
+    yes.addEventListener('click', (e) => {
+      e.stopPropagation();
+      api('DELETE', '/feedback/' + it.id, { author_key: authorKey() }).then((res) => {
+        if (res && res.success) { items = items.filter((x) => x.id !== it.id); render(); hideTip(); }
+        else { tipError(row, "couldn't delete — try again"); }
+      }).catch(() => tipError(row, "couldn't delete — try again"));
+    });
   }
   function hideTip() { tip.hidden = true; }
 
@@ -322,8 +383,16 @@
     }).then((res) => { if (res && res.feedback) { rememberMine(res.feedback.id); items.push({ ...res.feedback, anchor_selector: JSON.stringify(d) }); render(); } });
   }
 
-  // dismiss tooltip on any outside click (markers stopPropagation so they don't self-dismiss)
-  document.addEventListener('click', () => { if (!tip.hidden) hideTip(); }, true);
+  // dismiss tooltip on any outside click (markers stopPropagation so they don't self-dismiss).
+  // This runs in the CAPTURE phase at `document`, which is visited before any listener on
+  // `tip` or its descendants — so a stopPropagation() inside the tooltip (e.g. on Edit/Delete/
+  // Save buttons) cannot prevent this from firing first. Instead, explicitly ignore clicks whose
+  // composed path passes through `tip` (same pattern as the `host` check for placing-mode clicks).
+  document.addEventListener('click', (e) => {
+    if (tip.hidden) return;
+    if (e.composedPath && e.composedPath().includes(tip)) return;
+    hideTip();
+  }, true);
 
   // ---- movable notes panel: draggable + collapsible + persisted, to-do list + filter ----
   let panelState;
@@ -404,6 +473,11 @@
       const txt = document.createElement('span'); txt.className = 'pp-txt'; txt.textContent = (it.author_name ? it.author_name + ': ' : '') + it.body;
       if (it.status === 'done') txt.classList.add('pp-strike');
       li.append(cb, dot, txt);
+      if (it.status === 'done' && (it.resolved_by_name || it.resolved_at)) {
+        const meta = document.createElement('span'); meta.className = 'pp-row-meta';
+        meta.textContent = 'Handled ✓' + (it.resolved_by_name ? ' · ' + it.resolved_by_name : '') + (it.resolved_at ? ' · ' + fmtDate(it.resolved_at) : '');
+        li.appendChild(meta);
+      }
       ul.appendChild(li);
     });
   }
