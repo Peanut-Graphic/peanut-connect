@@ -416,8 +416,10 @@
     '<li>Or click <strong>✎ Draw</strong> and drag to circle or scribble on the page, then add a note. Click <strong>✎ Draw</strong> again to stop.</li>' +
     '<li>Type your note. A marker appears; click it to read the note. Tick a note off in this list once it\'s handled.</li>' +
     '</ol></div>' +
-    '<div class="pp-filter"><select class="pp-by"><option value="">Everyone</option></select></div>' +
-    '<ul class="pp-list"></ul>';
+    '<div class="pp-tabs"><button class="pp-tab pp-tab-on" data-tab="page">This page</button><button class="pp-tab" data-tab="site">All pages</button></div>' +
+    '<div class="pp-tabbody" data-tab="page"><div class="pp-filter"><select class="pp-by"><option value="">Everyone</option></select></div>' +
+    '<ul class="pp-list"></ul></div>' +
+    '<div class="pp-tabbody" data-tab="site" hidden><div class="pp-sitewide"></div></div>';
   panel.setAttribute('role', 'region');
   panel.setAttribute('aria-label', 'Mark It Up feedback');
   shadow.appendChild(panel);
@@ -445,6 +447,35 @@
     got.addEventListener('click', () => { help.hidden = true; got.remove(); localStorage.setItem(INTRO_KEY, '1'); });
   }
   panel.querySelector('.pp-toggle').addEventListener('click', () => { panelState.open = !panelState.open; applyCollapsed(); savePanel(); });
+
+  // ---- panel tabs + site-wide view ----
+  let summaryCache = null;
+  panel.querySelectorAll('.pp-tab').forEach((b) => b.addEventListener('click', () => {
+    panel.querySelectorAll('.pp-tab').forEach((x) => x.classList.toggle('pp-tab-on', x === b));
+    panel.querySelectorAll('.pp-tabbody').forEach((body) => { body.hidden = body.getAttribute('data-tab') !== b.getAttribute('data-tab'); });
+    if (b.getAttribute('data-tab') === 'site' && !summaryCache) loadSummary();
+  }));
+  function loadSummary() {
+    const box = panel.querySelector('.pp-sitewide');
+    box.textContent = 'Loading…';
+    api('GET', '/feedback/summary').then((res) => {
+      if (!res || !res.pages) { box.textContent = 'Not available yet.'; return; }
+      summaryCache = res.pages;
+      box.innerHTML = '';
+      res.pages.forEach((pg) => {
+        const h = document.createElement('div'); h.className = 'pp-sw-page';
+        h.textContent = (pg.page_title || pg.page_url) + ' — ' + pg.open_count + ' open, ' + pg.done_count + ' done';
+        box.appendChild(h);
+        (pg.notes || []).forEach((n) => {
+          const a = document.createElement('a');
+          a.className = 'pp-sw-note' + (n.status === 'done' ? ' pp-strike' : '');
+          a.textContent = (n.author_name ? n.author_name + ': ' : '') + (n.body || '').slice(0, 80);
+          a.href = pg.page_url + (pg.page_url.indexOf('?') === -1 ? '?' : '&') + 'pp_note=' + n.id;
+          box.appendChild(a);
+        });
+      });
+    }).catch(() => { box.textContent = 'Not available yet.'; });
+  }
 
   (function drag() {
     const head = panel.querySelector('.pp-panel-head'); let sx, sy, ox, oy, on = false;

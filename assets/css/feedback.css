@@ -144,3 +144,10 @@
 .pp-tip-q { font-size: 11px; }
 .pp-mark.pp-done { background: #9CA3AF; opacity: .7; }
 .pp-gotit { margin-top: 8px; }
+
+.pp-tabs { display: flex; gap: 2px; margin: 4px 0; }
+.pp-tab { flex: 1; font-size: 11px; padding: 4px; border: none; background: rgba(0,0,0,.06); cursor: pointer; border-radius: 4px 4px 0 0; }
+.pp-tab-on { background: #2D6CDF; color: #fff; }
+.pp-sw-page { font-weight: 600; font-size: 11px; margin: 8px 0 2px; }
+.pp-sw-note { display: block; font-size: 11px; padding: 2px 0 2px 10px; text-decoration: none; color: inherit; }
+.pp-sw-note:hover { text-decoration: underline; }
