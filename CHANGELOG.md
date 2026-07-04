@@ -5,6 +5,22 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.0] - 2026-07-02
+
+### Added
+- **First-run walkthrough.** The Mark It Up panel introduces itself once per browser on first load — a short walkthrough of the review workflow — then stays quiet on subsequent visits.
+- **Edit/delete your own note.** Reviewers can now edit or delete a note they authored, scoped per-browser via an `author_key` (no login required). Handled inline in the panel/tooltip UI — no native `confirm()`/`prompt()` dialogs.
+- **"Handled ✓ · name · date" status line.** Notes marked resolved on the Hub side now surface who handled them and when, shown on both the note tooltip and the note list.
+- **This page / All pages panel tabs.** The panel gains a tab switch between the current page's notes and a site-wide summary view across all pages.
+- **`?pp_note=<id>` deep-link.** A URL carrying this parameter scrolls to the referenced note, opens it, and pulses the marker so a shared link lands the recipient directly on the note in question.
+- **Touch polish.** Panel drag now uses pointer events (not mouse-only), the text-selection chip has a brief settle delay before appearing (avoids firing on incidental touch selection), and interactive targets are sized for coarse-pointer (touch) input.
+
+### Changed
+- **Relay endpoints.** The Hub relay now proxies `DELETE` (for note deletion) and the summary endpoint (for the All pages view), and asserts `caller_is_agency` and `resolver_name` server-side on writes. Note-body edit ownership is enforced by Hub via `author_key`, not by the relay.
+
+### Degradation vs pre-3.20 Hub
+Sites running this plugin against a Hub instance that predates 3.20's endpoints will see: the Handled line renders without a name or date (falls back to a bare "Handled ✓"); edit/delete actions return an inline error instead of silently failing; and the All pages tab shows "Not available yet." instead of a summary. Existing single-page note create/read/highlight/draw workflows are unaffected.
+
 ## [3.19.2] - 2026-07-02
 
 ### Fixed
