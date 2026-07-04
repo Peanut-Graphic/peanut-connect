@@ -384,11 +384,10 @@ class Peanut_Connect_Feedback {
     public static function update(\WP_REST_Request $request) {
         $id = (int) $request['id'];
         $in = $request->get_json_params() ?: [];
-        // Token clients (review-link visitors) may only check a note off (status)
-        // or pass their author_key; only an authenticated agency caller may
-        // rewrite the note body itself. caller_is_agency is decided server-side
-        // and is the flag Hub's authorization actually trusts — never the widget.
-        $allowed = self::is_agency() ? ['status', 'body', 'author_key'] : ['status', 'author_key'];
+        // Forward status/body/author_key for every caller — ownership of body
+        // edits is enforced by Hub (author_key match) — plus caller_is_agency,
+        // decided server-side here; Hub trusts this flag, never the widget.
+        $allowed = ['status', 'body', 'author_key'];
         $body = array_intersect_key($in, array_flip($allowed));
         $body['caller_is_agency'] = self::is_agency();
         if (self::is_agency()) {
