@@ -144,6 +144,14 @@ class Peanut_Connect_Feedback {
             }
             update_option('peanut_connect_feedback_review_token', $token);
 
+            // Access mode + allowed users save on the same nonce/submit.
+            $mode_in = sanitize_key(wp_unslash($_POST['pcf_access_mode'] ?? 'editors'));
+            update_option(self::ACCESS_OPTION, self::normalize_access_mode($mode_in));
+            update_option(
+                self::ALLOWED_USERS_OPTION,
+                self::sanitize_allowed_user_ids(wp_unslash($_POST['pcf_allowed_users'] ?? []))
+            );
+
             // Push the new token to Hub immediately (rather than waiting for
             // the next 15-minute cron heartbeat) so View-on-page links are
             // usable right away. Reuses the existing heartbeat sync — no new
@@ -154,12 +162,24 @@ class Peanut_Connect_Feedback {
             }
 
             $notice = $token === ''
-                ? __('Review token cleared — client review links are now disabled.', 'peanut-connect')
-                : __('Review token saved.', 'peanut-connect');
+                ? __('Settings saved. Review token is blank — client review links are disabled.', 'peanut-connect')
+                : __('Settings saved.', 'peanut-connect');
         }
 
         $token   = (string) get_option('peanut_connect_feedback_review_token', '');
         $example = $token !== '' ? esc_url(add_query_arg('pp_review', $token, home_url('/'))) : '';
+
+        $mode        = self::access_mode();
+        $allowed_ids = self::sanitize_allowed_user_ids(get_option(self::ALLOWED_USERS_OPTION, []));
+        // Everyone who could review as a logged-in user. 'capability' needs
+        // WP 5.9+ (fleet floor is 6.0). Capped at 100 — these are agency and
+        // client editor accounts, not open-registration user bases.
+        $reviewers   = get_users([
+            'capability' => 'edit_posts',
+            'number'     => 100,
+            'orderby'    => 'display_name',
+            'order'      => 'ASC',
+        ]);
         ?>
         <div class="wrap">
             <h1><?php esc_html_e('Mark It Up — Client Review Link', 'peanut-connect'); ?></h1>
@@ -173,6 +193,58 @@ class Peanut_Connect_Feedback {
 
             <form method="post">
                 <?php wp_nonce_field('pcf_review_token'); ?>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Who can mark up this site', 'peanut-connect'); ?></th>
+                        <td>
+                            <fieldset>
+                                <label><input type="radio" name="pcf_access_mode" value="editors" <?php checked($mode, 'editors'); ?> />
+                                    <?php esc_html_e('Everyone with edit access + review link', 'peanut-connect'); ?></label>
+                                <p class="description"><?php esc_html_e('Logged-in users who can edit posts see the widget automatically. Default.', 'peanut-connect'); ?></p>
+
+                                <label><input type="radio" name="pcf_access_mode" value="users" <?php checked($mode, 'users'); ?> />
+                                    <?php esc_html_e('Specific users + review link', 'peanut-connect'); ?></label>
+                                <p class="description"><?php esc_html_e('Only the users checked below see the widget automatically.', 'peanut-connect'); ?></p>
+
+                                <div id="pcf-user-checklist" style="margin:4px 0 12px 24px; max-height:220px; overflow-y:auto; <?php echo $mode === 'users' ? '' : 'display:none;'; ?>">
+                                    <?php if (empty($reviewers)) : ?>
+                                        <p class="description"><?php esc_html_e('No users with edit access found.', 'peanut-connect'); ?></p>
+                                    <?php else : ?>
+                                        <?php foreach ($reviewers as $reviewer) : ?>
+                                            <label style="display:block; margin:2px 0;">
+                                                <input type="checkbox" name="pcf_allowed_users[]" value="<?php echo esc_attr((string) $reviewer->ID); ?>" <?php checked(in_array((int) $reviewer->ID, $allowed_ids, true)); ?> />
+                                                <?php echo esc_html($reviewer->display_name); ?>
+                                                <span class="description">(<?php echo esc_html($reviewer->user_login); ?>)</span>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </div>
+
+                                <label><input type="radio" name="pcf_access_mode" value="token" <?php checked($mode, 'token'); ?> />
+                                    <?php esc_html_e('Review link only', 'peanut-connect'); ?></label>
+                                <p class="description"><?php esc_html_e('Nobody sees the widget automatically — only visitors who open the review link below.', 'peanut-connect'); ?></p>
+
+                                <label><input type="radio" name="pcf_access_mode" value="off" <?php checked($mode, 'off'); ?> />
+                                    <?php esc_html_e('Off', 'peanut-connect'); ?></label>
+                                <p class="description"><?php esc_html_e('Mark It Up is disabled on this site. The review link stops working too.', 'peanut-connect'); ?></p>
+                            </fieldset>
+                            <script>
+                            (function () {
+                                var list = document.getElementById('pcf-user-checklist');
+                                var radios = document.querySelectorAll('input[name="pcf_access_mode"]');
+                                function sync() {
+                                    var checked = document.querySelector('input[name="pcf_access_mode"]:checked');
+                                    list.style.display = (checked && checked.value === 'users') ? '' : 'none';
+                                }
+                                for (var i = 0; i < radios.length; i++) {
+                                    radios[i].addEventListener('change', sync);
+                                }
+                            })();
+                            </script>
+                        </td>
+                    </tr>
+                </table>
+
                 <table class="form-table" role="presentation">
                     <tr>
                         <th scope="row"><label for="pcf_review_token"><?php esc_html_e('Review token', 'peanut-connect'); ?></label></th>
@@ -192,7 +264,7 @@ class Peanut_Connect_Feedback {
                     <?php endif; ?>
                 </table>
                 <p>
-                    <button type="submit" name="pcf_action" value="save" class="button button-primary"><?php esc_html_e('Save token', 'peanut-connect'); ?></button>
+                    <button type="submit" name="pcf_action" value="save" class="button button-primary"><?php esc_html_e('Save settings', 'peanut-connect'); ?></button>
                     <button type="submit" name="pcf_action" value="generate" class="button"><?php esc_html_e('Generate a new token', 'peanut-connect'); ?></button>
                 </p>
             </form>
