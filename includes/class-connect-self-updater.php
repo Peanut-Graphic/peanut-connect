@@ -46,7 +46,7 @@ class Peanut_Connect_Self_Updater {
      * signature over its exact bytes before WordPress is allowed to install it.
      * Fingerprint: faaad8d7a7d7eaa9.
      */
-    private const PEANUT_SIGNING_PUBKEY = 'NtHnWTBLVzCBKMAq9CO8LHDSD9ZfpGV0UloQdgToIwM=';
+    private const PEANUT_SIGNING_PUBKEY = 'NtHnWTBLVzCBKMAq9CO8LHDSD9ZfpGV0UloQdgToIwM='; // gitleaks:allow — Ed25519 PUBLIC verification key, safe to commit
 
     /**
      * Plugin file path
@@ -268,10 +268,10 @@ class Peanut_Connect_Self_Updater {
         }
         // Identify our signed GitHub-release packages (the manifest sidecar is
         // published next to the release asset). Case-insensitive: GitHub
-        // normalises owner case, so the URL may read Peanut-Graphic or
-        // peanut-graphic. Non-GitHub packages carry no manifest — don't gate
+        // normalises owner case, so the URL is lowercase peanutgraphic in the release URL;
+        // Non-GitHub packages carry no manifest — don't gate
         // them here (the host pin in get_remote_update_info still applies).
-        if (stripos($package, 'github.com/peanut-graphic/') === false) {
+        if (stripos($package, 'github.com/peanutgraphic/') === false) {
             return $reply; // not one of our signed packages — don't interfere
         }
 
