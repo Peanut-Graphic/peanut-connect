@@ -467,8 +467,31 @@ class Peanut_Connect_Feedback {
         return self::is_agency() && self::can_review($request);
     }
 
+    /**
+     * Capability that qualifies a logged-in user as an "agency" reviewer — the
+     * automatic pin-CRUD grant in the default 'editors' mode AND the gate on
+     * reading is_internal replies (can_review_agency).
+     *
+     * SECURITY (v3.21.1): this was `edit_posts`, which every Author and
+     * Contributor holds — so on any multi-author site the default mode silently
+     * handed feedback CRUD and internal-reply reads to low-trust roles. The
+     * default is now `edit_others_posts` (Editors + Admins), matching who the
+     * "agency" is meant to be. A site that genuinely wants the broader
+     * everyone-who-can-edit behaviour can opt back in via the
+     * `peanut_connect_feedback_agency_cap` filter. The review-token path is
+     * unaffected — it never runs through this capability.
+     *
+     * @since 3.21.1
+     */
+    private const AGENCY_CAPABILITY = 'edit_others_posts';
+
+    private static function agency_capability(): string {
+        $cap = apply_filters('peanut_connect_feedback_agency_cap', self::AGENCY_CAPABILITY);
+        return (is_string($cap) && $cap !== '') ? $cap : self::AGENCY_CAPABILITY;
+    }
+
     private static function is_agency(): bool {
-        return is_user_logged_in() && current_user_can('edit_posts');
+        return is_user_logged_in() && current_user_can(self::agency_capability());
     }
 
     /**
