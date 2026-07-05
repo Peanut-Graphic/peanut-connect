@@ -4,7 +4,7 @@ Tags: campaigns, marketing, utm, popups, monitoring, updates, analytics, forms, 
 Requires at least: 6.0
 Tested up to: 6.4
 Requires PHP: 8.0
-Stable tag: 3.21.0
+Stable tag: 3.21.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,13 @@ Yes. Peanut End to End works on any WordPress site. If Peanut Suite is also inst
 No. The plugin only loads what each page needs — the tracker is a small first-party script, popups and banners are conditional, and admin endpoints only respond to authenticated API requests from your paired Hub.
 
 == Changelog ==
+
+= 3.21.1 =
+Security hardening (microscope remediation, no functional changes):
+* Enforce signed Hub requests automatically after the first verified request (removes the legacy unsigned-Bearer fallback once the Hub has proven it can sign).
+* Fail closed when the Hub key cannot be encrypted at rest — never store it in plaintext.
+* Exact-match plugin resolution + version-suffix-aware protected-plugin guard, so a remote update/activate cannot be steered to the wrong plugin.
+* Public-endpoint hardening: rate-limit + opt-out on the GTM beacon, size bound on popup-interaction data, IPv4+IPv6 SSRF guard on Hub-host checks, auth rate-limit keyed on client IP, and feedback CRUD raised to Editor capability.
 
 = 3.21.0 =
 * New: Mark It Up per-site access modes — Everyone with edit access (default), Specific users, Review link only, or Off.
