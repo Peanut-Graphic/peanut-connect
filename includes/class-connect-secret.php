@@ -26,15 +26,18 @@ class Peanut_Connect_Secret {
     }
 
     /**
-     * Encrypt plaintext for storage. Degrades to returning the plaintext
-     * unchanged (with a logged warning) if libsodium or the salt is
-     * unavailable — encryption is on-by-default but never fatal.
+     * Encrypt plaintext for storage. FAILS CLOSED: returns null (never the
+     * plaintext) if libsodium or the salt is unavailable, so a caller can NOT
+     * silently persist the Hub key in cleartext at rest. The write path
+     * (Peanut_Connect_Auth::set_hub_api_key) treats null as "do not store" and
+     * surfaces the degraded state via an admin notice. A successful encrypt
+     * returns "enc:v1:"-prefixed ciphertext.
      */
-    public static function encrypt(string $plaintext): string {
+    public static function encrypt(string $plaintext): ?string {
         $key = self::derive_key();
         if ($key === null || !function_exists('sodium_crypto_secretbox')) {
-            error_log('Peanut Connect: encryption unavailable; storing Hub key unencrypted.');
-            return $plaintext;
+            error_log('Peanut Connect: encryption unavailable; refusing to store Hub key in cleartext.');
+            return null;
         }
         $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
         $cipher = sodium_crypto_secretbox($plaintext, $nonce, $key);

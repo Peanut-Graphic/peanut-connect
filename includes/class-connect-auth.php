@@ -222,7 +222,17 @@ class Peanut_Connect_Auth {
      * @return bool Whether the option was written.
      */
     public static function set_hub_api_key(string $key): bool {
-        $ok = (bool) update_option('peanut_connect_hub_api_key', Peanut_Connect_Secret::encrypt($key));
+        $ciphertext = Peanut_Connect_Secret::encrypt($key);
+        if ($ciphertext === null) {
+            // FAIL-CLOSED: encryption is unavailable (no libsodium or empty
+            // wp_salt). Do NOT persist the Hub key in cleartext — that would be
+            // a permanent plaintext secret in wp_options. Instead leave the
+            // stored key untouched and raise the existing admin notice so the
+            // degraded state is visible and remediable rather than silent.
+            update_option('peanut_connect_hub_key_undecryptable', 1);
+            return false;
+        }
+        $ok = (bool) update_option('peanut_connect_hub_api_key', $ciphertext);
         delete_option('peanut_connect_hub_key_undecryptable');
         return $ok;
     }
@@ -368,9 +378,12 @@ class Peanut_Connect_Auth {
         }
 
         // Legacy path: static Bearer token, for backward compatibility with
-        // Hubs/sites not yet emitting signed requests. A fully migrated site can
-        // set the `peanut_connect_require_signed_requests` option to reject
-        // unsigned requests — which makes a leaked bearer useless.
+        // Hubs/sites not yet emitting signed requests. Once this site has seen
+        // ONE fully-verified signed request, verify_signed_hub_request() flips
+        // `peanut_connect_require_signed_requests` on (self-gating, no fleet
+        // coordination) and this path is refused — which makes a leaked bearer
+        // useless. Until then the legacy path stays open so a not-yet-signing
+        // Hub is never locked out.
         if (get_option('peanut_connect_require_signed_requests', false)) {
             return new WP_Error(
                 'signature_required',
@@ -455,6 +468,21 @@ class Peanut_Connect_Auth {
         $claimed = add_option($nonce_key, (string) (time() + self::SIGNATURE_WINDOW * 2), '', 'no');
         if (!$claimed) {
             return new WP_Error('replayed_request', __('Signed request nonce has already been used.', 'peanut-connect'), ['status' => 401]);
+        }
+
+        // AUTONOMOUS self-gate (closes the legacy-unsigned-Bearer hole): the Hub
+        // has now proven, on this request, that it can produce a FULL valid
+        // signature (HMAC over method/route/timestamp/nonce/body + fresh
+        // timestamp + single-use nonce). From here on, require signed requests
+        // so a leaked-but-unsigned Bearer token alone can no longer authenticate
+        // a replayable privileged command. This flag flips ONLY after observing
+        // a Hub signature succeed, so a site can never lock ITSELF out: if the
+        // Hub cannot sign, the flag never flips and the legacy Bearer path stays
+        // available. (Deliberately NOT a blind default-flip / default-true — that
+        // could 403 an unsigned-but-legitimate Hub push and would need fleet
+        // coordination; this self-gates with zero coordination.)
+        if (!get_option('peanut_connect_require_signed_requests', false)) {
+            update_option('peanut_connect_require_signed_requests', true);
         }
 
         return true;
