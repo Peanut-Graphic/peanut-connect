@@ -37,6 +37,18 @@ class Peanut_Connect_Self_Updater {
     ];
 
     /**
+     * Ed25519 public key (base64) for the Peanut release-signing keypair. The
+     * private half lives only on the release machine (Peanut-meta
+     * scripts/publish-plugin.sh signs every release and ships a
+     * <asset>.manifest.json sidecar next to the zip). This is a PUBLIC key —
+     * embedding it is intentional and not a secret. Defence-in-depth ON TOP of
+     * the host pin above: even a trusted-host package must carry a valid
+     * signature over its exact bytes before WordPress is allowed to install it.
+     * Fingerprint: faaad8d7a7d7eaa9.
+     */
+    private const PEANUT_SIGNING_PUBKEY = 'NtHnWTBLVzCBKMAq9CO8LHDSD9ZfpGV0UloQdgToIwM='; // gitleaks:allow — Ed25519 PUBLIC verification key, safe to commit
+
+    /**
      * Plugin file path
      */
     private string $plugin_file;
@@ -63,6 +75,12 @@ class Peanut_Connect_Self_Updater {
 
         // Plugin information popup
         add_filter('plugins_api', [$this, 'plugin_info'], 20, 3);
+
+        // Verify the Ed25519 signature of OUR own release package before WP
+        // installs it. Returning a local file path here makes WP skip its own
+        // download and install from the verified file; returning a WP_Error
+        // aborts the update. Fail-CLOSED for our own packages.
+        add_filter('upgrader_pre_download', [$this, 'verify_package_signature'], 10, 4);
     }
 
     /**
@@ -221,6 +239,112 @@ class Peanut_Connect_Self_Updater {
     private static function sanitize_version(string $version): string {
         $version = trim($version);
         return preg_match('/^[0-9]+(\.[0-9]+){0,3}$/', $version) ? $version : '';
+    }
+
+    /**
+     * Verify the Ed25519 signature of our GitHub-release package before install.
+     *
+     * Hooked on 'upgrader_pre_download'. When WordPress is about to install an
+     * update for THIS plugin from one of our signed GitHub-release packages, we
+     * download the zip ourselves, confirm its bytes match the sha256 + Ed25519
+     * signature published in the sidecar manifest, and hand the verified local
+     * file back so WordPress installs from it. Any failure returns a WP_Error,
+     * which aborts the update. Fail-CLOSED for our own packages; everything
+     * else is passed through untouched.
+     *
+     * @param bool|WP_Error|string $reply      Short-circuit reply (usually false).
+     * @param string               $package    Package URL WP is about to download.
+     * @param mixed                $upgrader    The WP_Upgrader instance (unused).
+     * @param array                $hook_extra  Context; carries ['plugin'] on plugin updates.
+     * @return bool|WP_Error|string Verified local path, a WP_Error to abort, or $reply.
+     */
+    public function verify_package_signature($reply, $package, $upgrader = null, $hook_extra = array()) {
+        // Only gate OUR plugin's own update; let everything else pass untouched.
+        if (!empty($hook_extra['plugin']) && $hook_extra['plugin'] !== $this->plugin_file) {
+            return $reply;
+        }
+        if (!is_string($package) || $package === '') {
+            return $reply;
+        }
+        // Identify our signed GitHub-release packages (the manifest sidecar is
+        // published next to the release asset). Case-insensitive: GitHub
+        // normalises owner case, so the URL is lowercase peanutgraphic in the release URL;
+        // Non-GitHub packages carry no manifest — don't gate
+        // them here (the host pin in get_remote_update_info still applies).
+        if (stripos($package, 'github.com/peanutgraphic/') === false) {
+            return $reply; // not one of our signed packages — don't interfere
+        }
+
+        if (!function_exists('download_url')) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+        }
+
+        $zip = download_url($package);
+        if (is_wp_error($zip)) {
+            return $zip;
+        }
+
+        $fail = function ($msg) use ($zip) {
+            if (is_string($zip)) {
+                @unlink($zip);
+            }
+            return new WP_Error('peanut_update_signature', $msg);
+        };
+
+        $mresp = wp_remote_get($package . '.manifest.json', array('timeout' => 20));
+        if (is_wp_error($mresp)) {
+            return $fail(__('Update signature manifest could not be fetched — refusing to install.', 'peanut-connect'));
+        }
+        $manifest = json_decode(wp_remote_retrieve_body($mresp), true);
+
+        if (!is_array($manifest) || empty($manifest['sha256']) || empty($manifest['signature'])) {
+            return $fail(__('Update signature manifest missing — refusing to install an unsigned package.', 'peanut-connect'));
+        }
+        if (!function_exists('sodium_crypto_sign_verify_detached')) {
+            return $fail(__('Signature verification unavailable (libsodium) — refusing to install.', 'peanut-connect'));
+        }
+
+        $bytes = (string) file_get_contents($zip);
+        if (!self::verify_bytes($bytes, $manifest)) {
+            return $fail(__('Update package failed signature verification — refusing to install.', 'peanut-connect'));
+        }
+
+        return $zip; // verified — WP installs from this local file
+    }
+
+    /**
+     * Pure verification core: do the package bytes match BOTH the sha256 and
+     * the detached Ed25519 signature published in the manifest? No WordPress,
+     * no I/O — just the crypto, so it can be unit-tested in isolation.
+     *
+     * @param string      $zipBytes  Raw package bytes.
+     * @param array       $manifest  Decoded manifest: 'sha256' is the hex digest
+     *                               of the package, 'signature' is base64 of the
+     *                               detached Ed25519 signature over the raw bytes.
+     * @param string|null $pubkeyB64 Override signing public key (base64). Defaults
+     *                               to the embedded Peanut key; only tests inject
+     *                               a key here (they can't hold the private half
+     *                               of the production key to sign a fixture).
+     * @return bool True only when the hash matches AND the signature is valid.
+     */
+    public static function verify_bytes(string $zipBytes, array $manifest, ?string $pubkeyB64 = null): bool {
+        if (empty($manifest['sha256']) || empty($manifest['signature'])) {
+            return false;
+        }
+        if (!function_exists('sodium_crypto_sign_verify_detached')) {
+            return false;
+        }
+        if (!hash_equals((string) $manifest['sha256'], hash('sha256', $zipBytes))) {
+            return false;
+        }
+        $sig = base64_decode((string) $manifest['signature'], true);
+        $pub = base64_decode($pubkeyB64 ?? self::PEANUT_SIGNING_PUBKEY, true);
+        if ($sig === false || $pub === false
+            || strlen($sig) !== SODIUM_CRYPTO_SIGN_BYTES
+            || strlen($pub) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES) {
+            return false;
+        }
+        return sodium_crypto_sign_verify_detached($sig, $zipBytes, $pub);
     }
 
     /**
