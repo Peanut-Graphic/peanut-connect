@@ -50,8 +50,11 @@ Existing gates change to:
   the normal `wp_rest` nonce (cookie auth); `caller_is_agency` forwarded to
   HUB remains `is_agency()` — an allowed non-editor is a named reviewer, not
   agency, so ownership (author_key) applies to them. Correct and intended.
-- `can_review_agency()` (replies): `is_agency()` AND mode ≠ `off` (unchanged
-  otherwise — replies never open to non-agency).
+- `can_review_agency()` (replies): `is_agency()` AND `can_review($request)`.
+  Replies stay agency-only, and an agency user who has no pin access in the
+  current mode (e.g. a non-listed editor in `users` mode, or agency without
+  the token in `token` mode) can't reach replies either — closes the seam
+  where replies would outlive pin access.
 - `enqueue()`: unchanged localize payload (`isAgency` stays `is_agency()`).
 - **Widget seam (assets/js/feedback.js, one line):** `api()` currently sends
   `X-WP-Nonce` only when `cfg.isAgency` — an allowed non-editor in `users`
