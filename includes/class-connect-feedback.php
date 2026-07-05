@@ -4,9 +4,10 @@
  * the feedback widget (built in a later task) to Hub's
  * /api/v1/connect/feedback* API, signed with the site's existing Hub key.
  *
- * Pin endpoints (list/create/update) accept either a logged-in agency user
- * (current_user_can('edit_posts')) or a valid review token. The replies
- * endpoints are agency-only in v1 — Hub's reply index can include
+ * Pin endpoints accept callers per the site's access mode (option
+ * peanut_connect_feedback_access): the mode's automatic grant or a valid
+ * review token; 'off' rejects everyone. The replies endpoints additionally
+ * require an agency user (edit_posts) — Hub's reply index can include
  * is_internal replies, and review-token clients must never reach those.
  *
  * @package Peanut_Connect
@@ -20,6 +21,12 @@ class Peanut_Connect_Feedback {
 
     /** Cookie that carries a matched review token across the site for a reviewer. */
     const REVIEW_COOKIE = 'pp_review';
+
+    /** Option: who gets Mark It Up automatically. 'editors'|'users'|'token'|'off'. */
+    const ACCESS_OPTION = 'peanut_connect_feedback_access';
+
+    /** Option: WP user IDs granted access when ACCESS_OPTION is 'users'. */
+    const ALLOWED_USERS_OPTION = 'peanut_connect_feedback_allowed_users';
 
     /**
      * Whitelist + coerce the store payload; the agency flag is decided by
@@ -40,6 +47,60 @@ class Peanut_Connect_Feedback {
             'author_key'       => isset($req['author_key']) ? (string) $req['author_key'] : null,
             'body'             => (string) ($req['body'] ?? ''),
         ];
+    }
+
+    /**
+     * Normalize a raw option value to a known access mode. Anything
+     * unrecognized — including a missing option (false) on sites that
+     * updated from <=3.20.0 — means 'editors', today's behavior, so a
+     * fleet update changes nothing until someone touches the setting.
+     */
+    public static function normalize_access_mode($raw): string {
+        return in_array($raw, ['users', 'token', 'off'], true) ? $raw : 'editors';
+    }
+
+    /**
+     * Coerce a posted/stored allowed-user list to unique positive ints.
+     */
+    public static function sanitize_allowed_user_ids($raw): array {
+        $ids = array_map('intval', is_array($raw) ? $raw : []);
+        $ids = array_filter($ids, static function ($id) {
+            return $id > 0;
+        });
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * The AUTOMATIC access grant for the current visitor — pure so it can
+     * be unit-tested without WP state. The token/cookie path is separate
+     * and additive (handled by the callers); this decides only what a
+     * login gets you by itself. 'off' short-circuits in the callers too,
+     * where it must also defeat the token path.
+     */
+    public static function compute_user_grant(string $mode, bool $is_agency, bool $logged_in, int $user_id, array $allowed_ids): bool {
+        switch ($mode) {
+            case 'off':
+            case 'token':
+                return false;
+            case 'users':
+                return $logged_in && in_array($user_id, array_map('intval', $allowed_ids), true);
+            default: // 'editors'
+                return $is_agency;
+        }
+    }
+
+    private static function access_mode(): string {
+        return self::normalize_access_mode(get_option(self::ACCESS_OPTION, 'editors'));
+    }
+
+    private static function user_grant(string $mode): bool {
+        return self::compute_user_grant(
+            $mode,
+            self::is_agency(),
+            is_user_logged_in(),
+            (int) get_current_user_id(),
+            (array) get_option(self::ALLOWED_USERS_OPTION, [])
+        );
     }
 
     public static function init(): void {
@@ -158,7 +219,11 @@ class Peanut_Connect_Feedback {
      * with no token set never accidentally opens review mode to the public.
      */
     private static function review_active(): bool {
-        if (is_user_logged_in() && current_user_can('edit_posts')) {
+        $mode = self::access_mode();
+        if ($mode === 'off') {
+            return false; // off beats everything, including a valid token or cookie
+        }
+        if (self::user_grant($mode)) {
             return true;
         }
 
@@ -187,6 +252,9 @@ class Peanut_Connect_Feedback {
      * the link, so it grants no access they didn't already have.
      */
     public static function maybe_persist_review_cookie(): void {
+        if (self::access_mode() === 'off') {
+            return;
+        }
         if (empty($_GET['pp_review'])) {
             return;
         }
@@ -295,12 +363,17 @@ class Peanut_Connect_Feedback {
     }
 
     /**
-     * Pin-level gate: a logged-in agency user (can edit_posts) OR a request
-     * bearing a valid review token. Clients reviewing via a shared link use
-     * the token; they never get a WP login.
+     * Pin-level gate. 'off' rejects everyone. Otherwise: the mode's
+     * automatic grant (see compute_user_grant()) OR a valid
+     * X-Peanut-Review-Token header. In 'users' mode an allowed
+     * non-editor authenticates via the normal wp_rest cookie nonce.
      */
     public static function can_review(\WP_REST_Request $request): bool {
-        if (self::is_agency()) {
+        $mode = self::access_mode();
+        if ($mode === 'off') {
+            return false;
+        }
+        if (self::user_grant($mode)) {
             return true;
         }
 
@@ -311,12 +384,14 @@ class Peanut_Connect_Feedback {
     }
 
     /**
-     * Replies-level gate: agency only, in v1. Deliberately does NOT accept
-     * the review token — Hub's reply index can return is_internal replies,
-     * and a review-token client must never see those.
+     * Replies-level gate: agency only, AND the caller must hold pin access
+     * under the current mode — a non-listed editor in 'users' mode, or an
+     * agency user without the token in 'token' mode, can't reach replies
+     * either. Review-token-only clients still never qualify (not agency):
+     * Hub's reply index can return is_internal replies.
      */
     public static function can_review_agency(\WP_REST_Request $request): bool {
-        return self::is_agency();
+        return self::is_agency() && self::can_review($request);
     }
 
     private static function is_agency(): bool {
