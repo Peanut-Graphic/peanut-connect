@@ -4,7 +4,7 @@ Tags: campaigns, marketing, utm, popups, monitoring, updates, analytics, forms, 
 Requires at least: 6.0
 Tested up to: 6.4
 Requires PHP: 8.0
-Stable tag: 3.20.0
+Stable tag: 3.21.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,11 @@ Yes. Peanut End to End works on any WordPress site. If Peanut Suite is also inst
 No. The plugin only loads what each page needs — the tracker is a small first-party script, popups and banners are conditional, and admin endpoints only respond to authenticated API requests from your paired Hub.
 
 == Changelog ==
+
+= 3.21.0 =
+* New: Mark It Up per-site access modes — Everyone with edit access (default), Specific users, Review link only, or Off.
+* New: user checklist on the Mark It Up settings page for the Specific users mode.
+* Fix: logged-in reviewers without edit access (Specific users mode) now authenticate their widget requests correctly.
 
 = 3.20.0 =
 * Mark It Up: reviewers can now edit or delete a note they authored, scoped per-browser — no login required.

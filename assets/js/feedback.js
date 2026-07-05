@@ -47,7 +47,12 @@
 
   function api(method, path, body) {
     const headers = { 'Content-Type': 'application/json' };
-    if (cfg.isAgency && cfg.nonce) headers['X-WP-Nonce'] = cfg.nonce;
+    // Send the WP auth nonce for agency users (identity + attribution) and
+    // for logged-in reviewers with no token — the 'users'-mode path, where
+    // the REST gate authenticates them via the wp_rest cookie nonce. Token
+    // reviewers keep the token-only header: on page-cached sites a stale
+    // baked-in nonce would 403 an otherwise-valid token request.
+    if (cfg.nonce && (cfg.isAgency || !cfg.reviewToken)) headers['X-WP-Nonce'] = cfg.nonce;
     if (cfg.reviewToken) headers['X-Peanut-Review-Token'] = cfg.reviewToken;
     return fetch(cfg.restUrl.replace(/\/feedback$/, '') + path, {
       method, headers, credentials: 'same-origin',

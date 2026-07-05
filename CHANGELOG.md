@@ -5,6 +5,16 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.21.0] - 2026-07-04
+
+### Added
+- Mark It Up per-site access modes (`peanut_connect_feedback_access`): `editors` (default, today's behavior), `users` (checklist of WP accounts in `peanut_connect_feedback_allowed_users`), `token` (review link only), `off` (widget and review link fully disabled).
+- Access-mode radio group and specific-users checklist on the Mark It Up admin page, saved with the existing token form.
+
+### Changed
+- Replies endpoints now also require pin access under the current mode (still agency-only on top).
+- Widget sends the REST auth nonce for any logged-in reviewer without a review token, so `users`-mode reviewers without edit access authenticate correctly.
+
 ## [3.20.0] - 2026-07-02
 
 ### Added
