@@ -112,7 +112,11 @@ class Test_Connect_Feedback_Access extends Peanut_Connect_TestCase
         update_option('peanut_connect_feedback_review_token', 'secret-token-40chars');
         update_option(Peanut_Connect_Feedback::ACCESS_OPTION, 'token');
         $GLOBALS['pp_test_logged_in'] = true;
-        $GLOBALS['pp_test_user_caps'] = ['edit_posts' => true];
+        // A genuine agency user holds edit_others_posts (Editor/Admin) — see
+        // the v3.21.1 agency-capability tightening. edit_posts alone (Author/
+        // Contributor) no longer qualifies; that case is covered in
+        // Test_Public_Endpoint_Hardening.
+        $GLOBALS['pp_test_user_caps'] = ['edit_posts' => true, 'edit_others_posts' => true];
 
         $without_token = new WP_REST_Request([]);
         $this->assertFalse(Peanut_Connect_Feedback::can_review_agency($without_token));

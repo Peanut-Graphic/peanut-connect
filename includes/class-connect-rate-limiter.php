@@ -127,29 +127,26 @@ class Peanut_Connect_Rate_Limiter {
     /**
      * Get client identifier from request
      *
-     * Uses a combination of IP address and API key (if present) to identify clients.
-     * This helps prevent bypass attempts while still being fair to legitimate users.
+     * Keys the rate-limit bucket on the (trusted-proxy resolved) CLIENT IP
+     * ONLY — never on the credential under test.
+     *
+     * SECURITY (v3.21.1): earlier revisions folded a hash of the presented
+     * Bearer credential into the identifier "for more granular limiting". On
+     * the auth endpoints (verify/disconnect/hub) that DEFEATED the brute-force
+     * ceiling: every wrong key an attacker tried produced a different
+     * identifier, hence a fresh bucket, so the AUTH_LIMIT was never reached no
+     * matter how many keys were guessed from one source. The credential must
+     * never be part of the rate-limit key — repeated attempts from one source
+     * have to share a single bucket. When the IP can't be determined we fall
+     * back to a shared sentinel so those requests still share one bucket rather
+     * than each escaping into its own.
      *
      * @param WP_REST_Request $request The incoming request
      * @return string Unique client identifier
      */
     public static function get_client_identifier(WP_REST_Request $request): string {
-        $parts = [];
-
-        // Get IP address
         $ip = self::get_client_ip();
-        if ($ip) {
-            $parts[] = $ip;
-        }
-
-        // Include hashed API key if present (for more granular limiting)
-        $auth_header = $request->get_header('Authorization');
-        if ($auth_header && preg_match('/^Bearer\s+(.+)$/i', $auth_header, $matches)) {
-            // Hash the key to use as identifier (don't store actual key)
-            $parts[] = substr(md5($matches[1]), 0, 8);
-        }
-
-        return implode('_', $parts) ?: 'unknown';
+        return ($ip !== null && $ip !== '') ? $ip : 'unknown';
     }
 
     /**
@@ -273,6 +270,13 @@ class Peanut_Connect_Rate_Limiter {
             ],
             'popup_interaction' => [
                 'limit' => 60,
+                'window' => 60,
+            ],
+            // GTM beacon proxy — high-frequency browser beacon, same class as
+            // /track. Given its own bucket so it neither starves nor is starved
+            // by the /track limit.
+            'gtm_beacon' => [
+                'limit' => 120,
                 'window' => 60,
             ],
 

@@ -246,6 +246,15 @@ if (!class_exists('WP_Error')) {
     }
 }
 
+if (!function_exists('apply_filters')) {
+    // Standalone stub: no filters are registered in the mock suite, so return
+    // the value unchanged. Enough for code that reads a filterable default
+    // (e.g. trusted-proxy list, feedback agency capability).
+    function apply_filters($hook, $value, ...$args) {
+        return $value;
+    }
+}
+
 if (!function_exists('wp_parse_url')) {
     function wp_parse_url($url, $component = -1) {
         return parse_url($url, $component);

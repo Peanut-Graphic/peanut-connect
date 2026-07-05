@@ -1923,6 +1923,17 @@ class Peanut_Connect_API {
      * doesn't wait on the round-trip. Returns 204 regardless (mirrors Hub).
      */
     public function proxy_gtm_beacon(WP_REST_Request $request): WP_REST_Response {
+        // v3.21.1: run the same front gate as every other public tracking
+        // endpoint — rate-limit + the admin's tracking opt-out (GDPR/CCPA) +
+        // input bounds. Without it this public pass-through was an
+        // unauthenticated outbound-request lever (anyone could make the site
+        // POST to Hub, unthrottled) and it ignored the tracking opt-out that
+        // gates every sibling endpoint.
+        $pre = $this->tracking_precheck($request, 'gtm_beacon');
+        if ($pre) {
+            return $pre;
+        }
+
         $hub_url = get_option('peanut_connect_hub_url');
         if (empty($hub_url)) {
             // Not paired with a Hub yet — silently drop, same shape as Hub.
@@ -2007,9 +2018,21 @@ class Peanut_Connect_API {
         $action = $request->get_param('action');
         $visitor_id = $request->get_param('visitor_id');
 
+        // v3.21.1: bound the 'data' param the same way tracking_precheck() bounds
+        // 'metadata'. This field is stored as-is into a longtext row; without a
+        // ceiling an unauthenticated caller could write multi-MB rows (storage
+        // exhaustion + Hub-sync amplification). Mirror TRACK_METADATA_MAX_BYTES.
+        $form_data = $request->get_param('data');
+        if ($form_data !== null) {
+            $encoded = is_string($form_data) ? $form_data : (string) wp_json_encode($form_data);
+            if (strlen($encoded) > self::TRACK_METADATA_MAX_BYTES) {
+                return new WP_REST_Response(['success' => false, 'code' => 'data_too_large'], 413);
+            }
+        }
+
         $data = [
             'page_url' => $request->get_param('page_url'),
-            'form_data' => $request->get_param('data'),
+            'form_data' => $form_data,
         ];
 
         $interaction_id = Peanut_Connect_Tracker::record_popup_interaction($popup_id, $action, $visitor_id, $data);
@@ -2084,11 +2107,74 @@ class Peanut_Connect_API {
         $blocked_hosts = ['localhost', 'metadata.google.internal'];
         if (in_array($host, $blocked_hosts, true)) return false;
         if (str_ends_with($host, '.local') || str_ends_with($host, '.internal')) return false;
-        // Resolve once and reject if it points to a non-public address.
-        $resolved = gethostbyname($host);
-        if ($resolved !== $host) {
+        // Resolve BOTH address families and reject if ANY resolved address is
+        // private/reserved. v3.21.1: the old guard used gethostbyname(), which
+        // only ever returns a single IPv4 (A) record — so an AAAA-only internal
+        // target (or a multi-A DNS-rebind record whose first A was public) slid
+        // straight past. We now enumerate every A and AAAA record and require
+        // all of them to be public. This is a best-effort (validation-time)
+        // guard: the fetch happens later, so a rebind that flips the record
+        // between this resolve and the fetch is still theoretically possible —
+        // but this is an admin-reach setting (a compromised admin), so the
+        // residual TOCTOU window is low-severity; enumerating both families
+        // closes the practical bypass.
+        $addresses = self::resolve_host_addresses($host);
+        return self::addresses_all_public($addresses);
+    }
+
+    /**
+     * Resolve a hostname to every A (IPv4) and AAAA (IPv6) address it points
+     * at. gethostbyname() (the old path) only returns one IPv4 A record and
+     * never sees AAAA at all, so it can't guard IPv6-internal or multi-record
+     * rebind targets. Returns [] when nothing resolves (or DNS is restricted),
+     * in which case the caller treats the host as unresolved and permissive —
+     * matching the prior behaviour for names that don't resolve.
+     *
+     * @since 3.21.1
+     */
+    private static function resolve_host_addresses(string $host): array {
+        $ips = [];
+
+        if (function_exists('dns_get_record')) {
+            $a = @dns_get_record($host, DNS_A);
+            if (is_array($a)) {
+                foreach ($a as $rec) {
+                    if (!empty($rec['ip'])) $ips[] = $rec['ip'];
+                }
+            }
+            $aaaa = @dns_get_record($host, DNS_AAAA);
+            if (is_array($aaaa)) {
+                foreach ($aaaa as $rec) {
+                    if (!empty($rec['ipv6'])) $ips[] = $rec['ipv6'];
+                }
+            }
+        }
+
+        // Fallback (only when dns_get_record found nothing / is unavailable):
+        // gethostbyname still gives us at least the IPv4 A record so a purely
+        // IPv4-internal target is never left unchecked.
+        if ($ips === []) {
+            $resolved = gethostbyname($host);
+            if ($resolved !== $host && filter_var($resolved, FILTER_VALIDATE_IP)) {
+                $ips[] = $resolved;
+            }
+        }
+
+        return $ips;
+    }
+
+    /**
+     * True only if EVERY supplied address is a public, routable IP (no
+     * private/reserved/loopback/link-local, either address family). An empty
+     * list is treated as public (unresolved host — preserves prior behaviour).
+     * Pure — no DNS — so the reject decision is unit-testable.
+     *
+     * @since 3.21.1
+     */
+    private static function addresses_all_public(array $addresses): bool {
+        foreach ($addresses as $addr) {
             $public = filter_var(
-                $resolved,
+                $addr,
                 FILTER_VALIDATE_IP,
                 FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
             );
