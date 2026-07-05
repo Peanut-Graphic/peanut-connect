@@ -12,6 +12,22 @@ require_once dirname(__DIR__) . '/includes/class-connect-feedback.php';
 
 class Test_Connect_Feedback_Access extends Peanut_Connect_TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        global $mock_options;
+        $mock_options = [];
+        unset($GLOBALS['pp_test_logged_in'], $GLOBALS['pp_test_user_caps'], $GLOBALS['pp_test_user_id']);
+    }
+
+    protected function tearDown(): void
+    {
+        global $mock_options;
+        $mock_options = [];
+        unset($GLOBALS['pp_test_logged_in'], $GLOBALS['pp_test_user_caps'], $GLOBALS['pp_test_user_id']);
+        parent::tearDown();
+    }
+
     public function test_normalize_access_mode_accepts_known_modes(): void
     {
         $this->assertSame('editors', Peanut_Connect_Feedback::normalize_access_mode('editors'));
@@ -60,5 +76,63 @@ class Test_Connect_Feedback_Access extends Peanut_Connect_TestCase
     {
         $this->assertTrue(Peanut_Connect_Feedback::compute_user_grant('editors', true, true, 1, []));
         $this->assertFalse(Peanut_Connect_Feedback::compute_user_grant('editors', false, true, 5, [5]));
+    }
+
+    public function test_can_review_rejects_valid_token_when_mode_off(): void
+    {
+        update_option('peanut_connect_feedback_review_token', 'secret-token-40chars');
+        update_option(Peanut_Connect_Feedback::ACCESS_OPTION, 'off');
+        $request = new WP_REST_Request(['X-Peanut-Review-Token' => 'secret-token-40chars']);
+
+        $this->assertFalse(Peanut_Connect_Feedback::can_review($request));
+    }
+
+    public function test_can_review_accepts_valid_token_when_mode_token(): void
+    {
+        update_option('peanut_connect_feedback_review_token', 'secret-token-40chars');
+        update_option(Peanut_Connect_Feedback::ACCESS_OPTION, 'token');
+        $request = new WP_REST_Request(['X-Peanut-Review-Token' => 'secret-token-40chars']);
+
+        $this->assertTrue(Peanut_Connect_Feedback::can_review($request));
+    }
+
+    public function test_can_review_rejects_editor_login_in_token_mode_without_token(): void
+    {
+        update_option('peanut_connect_feedback_review_token', 'secret-token-40chars');
+        update_option(Peanut_Connect_Feedback::ACCESS_OPTION, 'token');
+        $GLOBALS['pp_test_logged_in'] = true;
+        $GLOBALS['pp_test_user_caps'] = ['edit_posts' => true];
+        $request = new WP_REST_Request([]);
+
+        $this->assertFalse(Peanut_Connect_Feedback::can_review($request));
+    }
+
+    public function test_can_review_agency_requires_pin_access(): void
+    {
+        update_option('peanut_connect_feedback_review_token', 'secret-token-40chars');
+        update_option(Peanut_Connect_Feedback::ACCESS_OPTION, 'token');
+        $GLOBALS['pp_test_logged_in'] = true;
+        $GLOBALS['pp_test_user_caps'] = ['edit_posts' => true];
+
+        $without_token = new WP_REST_Request([]);
+        $this->assertFalse(Peanut_Connect_Feedback::can_review_agency($without_token));
+
+        $with_token = new WP_REST_Request(['X-Peanut-Review-Token' => 'secret-token-40chars']);
+        $this->assertTrue(Peanut_Connect_Feedback::can_review_agency($with_token));
+    }
+
+    public function test_can_review_grants_listed_user_in_users_mode(): void
+    {
+        update_option(Peanut_Connect_Feedback::ACCESS_OPTION, 'users');
+        update_option(Peanut_Connect_Feedback::ALLOWED_USERS_OPTION, [7]);
+        $GLOBALS['pp_test_logged_in'] = true;
+        $GLOBALS['pp_test_user_caps'] = ['edit_posts' => false];
+        $request = new WP_REST_Request([]);
+
+        $GLOBALS['pp_test_user_id'] = 7;
+        $this->assertTrue(Peanut_Connect_Feedback::can_review($request));
+
+        $GLOBALS['pp_test_user_id'] = 8;
+        $this->assertFalse(Peanut_Connect_Feedback::can_review($request));
     }
 }

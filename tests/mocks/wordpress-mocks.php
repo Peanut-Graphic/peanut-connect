@@ -332,6 +332,41 @@ if (defined('ABSPATH')) {
     }
 }
 
+if (!function_exists('is_user_logged_in')) {
+    function is_user_logged_in() {
+        return $GLOBALS['pp_test_logged_in'] ?? false;
+    }
+}
+
+if (!function_exists('current_user_can')) {
+    function current_user_can($capability, ...$args) {
+        return $GLOBALS['pp_test_user_caps'][$capability] ?? false;
+    }
+}
+
+if (!function_exists('get_current_user_id')) {
+    function get_current_user_id() {
+        return $GLOBALS['pp_test_user_id'] ?? 0;
+    }
+}
+
+// Minimal stub covering only what Peanut_Connect_Feedback::can_review() needs
+// (a header bag). Tests that need query/body params should extend this or
+// use tests/phpunit/bootstrap.php's richer stub instead.
+if (!class_exists('WP_REST_Request')) {
+    class WP_REST_Request {
+        private array $headers;
+
+        public function __construct(array $headers = []) {
+            $this->headers = $headers;
+        }
+
+        public function get_header($name) {
+            return $this->headers[$name] ?? '';
+        }
+    }
+}
+
 // Initialize mock storage.
 global $mock_options, $mock_transients;
 $mock_options = [];

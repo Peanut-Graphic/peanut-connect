@@ -198,6 +198,7 @@ class Peanut_Connect_Feedback {
                         <th scope="row"><?php esc_html_e('Who can mark up this site', 'peanut-connect'); ?></th>
                         <td>
                             <fieldset>
+                                <legend class="screen-reader-text"><?php esc_html_e('Who can mark up this site', 'peanut-connect'); ?></legend>
                                 <label><input type="radio" name="pcf_access_mode" value="editors" <?php checked($mode, 'editors'); ?> />
                                     <?php esc_html_e('Everyone with edit access + review link', 'peanut-connect'); ?></label>
                                 <p class="description"><?php esc_html_e('Logged-in users who can edit posts see the widget automatically. Default.', 'peanut-connect'); ?></p>
