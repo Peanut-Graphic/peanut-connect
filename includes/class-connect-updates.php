@@ -39,11 +39,43 @@ class Peanut_Connect_Updates {
     /**
      * Is this plugin file protected from remote deactivation/deletion?
      *
+     * Matched on exact set membership of the plugin's folder slug — never a
+     * substring search (which would both over- and under-match). To stop a
+     * security plugin installed in a version-suffixed or re-zipped folder
+     * (e.g. "wordfence-7.11.0/wordfence.php") from slipping past the guard and
+     * being remotely disabled, the canonical slug (folder with a trailing
+     * "-<version>" removed) is checked too. Only a genuine version suffix is
+     * stripped, so unrelated slugs like "wordfence-assistant" or
+     * "my-peanut-connect-addon" never collapse into a protected slug.
+     *
      * @param string $plugin_file e.g. "wordfence/wordfence.php".
      */
     public static function is_protected_plugin(string $plugin_file): bool {
         $slug = strtolower(explode('/', trim($plugin_file), 2)[0]);
-        return in_array($slug, self::PROTECTED_PLUGIN_SLUGS, true);
+        if (in_array($slug, self::PROTECTED_PLUGIN_SLUGS, true)) {
+            return true;
+        }
+
+        // Version-suffixed / re-zipped folder: match on the canonical slug.
+        $canonical = self::canonical_plugin_slug($plugin_file);
+        return $canonical !== $slug
+            && in_array($canonical, self::PROTECTED_PLUGIN_SLUGS, true);
+    }
+
+    /**
+     * Canonical folder slug for a plugin file (or a bare slug): the folder
+     * segment, lower-cased, with a trailing "-<version>" suffix removed
+     * (e.g. "Wordfence-7.11.0/wordfence.php" → "wordfence",
+     * "peanut-connect-3.3.9" → "peanut-connect"). Only a version-like suffix —
+     * an optional "v" then a digit followed by digits/dots — is stripped, so
+     * real slugs that merely end in a word ("better-wp-security",
+     * "wordfence-assistant") are left intact and never collapse into another
+     * plugin's slug. This is the single normalisation both the protected-plugin
+     * guard and the slug→file resolver key on, so they can never disagree.
+     */
+    private static function canonical_plugin_slug(string $plugin_file): string {
+        $slug = strtolower(explode('/', trim($plugin_file), 2)[0]);
+        return (string) preg_replace('/-v?\d[\d.]*$/', '', $slug);
     }
 
     /**
@@ -307,12 +339,11 @@ class Peanut_Connect_Updates {
         }
 
         $all_plugins = get_plugins();
-        $slug_lower = strtolower($slug);
 
-        // Try direct match first (case-insensitive on dirname/file).
-        // Tolerates installs where the plugin folder is upper-cased
-        // (e.g. PEANUT-CONNECT/peanut-connect.php) or version-suffixed
-        // (e.g. peanut-connect-3.3.9/peanut-connect.php).
+        // Pass 1 — exact match (case-insensitive) on the full plugin file, its
+        // folder, or its basename. An exact hit is unambiguous, so it always
+        // wins over any fuzzy fallback below. Tolerates installs where the
+        // folder is upper-cased (e.g. PEANUT-CONNECT/peanut-connect.php).
         foreach ($all_plugins as $plugin_file => $plugin_data) {
             $dir = dirname($plugin_file);
             $base = basename($plugin_file, '.php');
@@ -324,11 +355,26 @@ class Peanut_Connect_Updates {
             ) {
                 return $plugin_file;
             }
+        }
 
-            // Versioned folder fallback: dirname starts with "<slug>-"
-            if (stripos($dir.'-', $slug_lower.'-') === 0) {
-                return $plugin_file;
+        // Pass 2 — versioned-folder fallback, but STRICT and UNAMBIGUOUS.
+        // Match a folder whose canonical slug (trailing "-<version>" stripped)
+        // equals the requested slug — e.g. "peanut-connect" ↔
+        // "peanut-connect-3.3.9/peanut-connect.php". A loose prefix like the
+        // old stripos("seo-") could resolve slug "seo" to an unrelated
+        // "seo-pack" (or pick an arbitrary one of several matches), letting a
+        // Hub caller update/activate the WRONG plugin (confused deputy). So we
+        // require an exact canonical-slug match and refuse to guess when more
+        // than one installed plugin canonicalises to it.
+        $slug_canonical = self::canonical_plugin_slug($slug);
+        $canonical_matches = [];
+        foreach ($all_plugins as $plugin_file => $plugin_data) {
+            if (strcasecmp(self::canonical_plugin_slug($plugin_file), $slug_canonical) === 0) {
+                $canonical_matches[] = $plugin_file;
             }
+        }
+        if (count($canonical_matches) === 1) {
+            return $canonical_matches[0];
         }
 
         // Try matching by slug from update data (also case-insensitive)
