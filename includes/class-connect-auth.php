@@ -101,7 +101,7 @@ class Peanut_Connect_Auth {
         }
 
         $provided_key = $matches[1];
-        $stored_key = get_option('peanut_connect_site_key');
+        $stored_key = self::get_site_key();
 
         if (empty($stored_key)) {
             return new WP_Error(
@@ -243,6 +243,52 @@ class Peanut_Connect_Auth {
     public static function clear_hub_api_key(): void {
         delete_option('peanut_connect_hub_api_key');
         delete_option('peanut_connect_hub_key_undecryptable');
+    }
+
+    /**
+     * Read the site key, decrypting if it is stored encrypted at rest.
+     *
+     * The site key is the inbound Bearer credential the manager presents to
+     * this site. It must remain recoverable (it is displayed on the settings
+     * page for pairing), so it is encrypted — not hashed — mirroring
+     * get_hub_api_key(). Legacy plaintext values are migrated to ciphertext on
+     * first read. Returns '' if unset or undecryptable.
+     */
+    public static function get_site_key(): string {
+        $stored = (string) get_option('peanut_connect_site_key', '');
+        if ($stored === '') {
+            return '';
+        }
+        if (Peanut_Connect_Secret::is_ciphertext($stored)) {
+            $plain = Peanut_Connect_Secret::decrypt($stored);
+            if ($plain === null) {
+                update_option('peanut_connect_site_key_undecryptable', 1);
+                return '';
+            }
+            return $plain;
+        }
+        // Legacy plaintext: return it, and migrate to encrypted on this read.
+        self::set_site_key($stored);
+        return $stored;
+    }
+
+    /**
+     * Store the site key encrypted at rest. Fails closed (does not persist
+     * cleartext) when encryption is unavailable, mirroring set_hub_api_key().
+     *
+     * @param string $key The raw site key.
+     * @return bool Whether the option was written.
+     */
+    public static function set_site_key(string $key): bool {
+        $ciphertext = Peanut_Connect_Secret::encrypt($key);
+        if ($ciphertext === null) {
+            // FAIL-CLOSED: never persist the site key in cleartext.
+            update_option('peanut_connect_site_key_undecryptable', 1);
+            return false;
+        }
+        $ok = (bool) update_option('peanut_connect_site_key', $ciphertext);
+        delete_option('peanut_connect_site_key_undecryptable');
+        return $ok;
     }
 
     /**
