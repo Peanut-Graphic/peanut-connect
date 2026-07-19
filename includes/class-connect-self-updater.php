@@ -255,59 +255,29 @@ class Peanut_Connect_Self_Updater {
      * @return bool|WP_Error|string Verified local path, a WP_Error to abort, or $reply.
      */
     public function verify_package_signature($reply, $package, $upgrader = null, $hook_extra = array()) {
-        // Only gate OUR plugin's own update; let everything else pass untouched.
-        if (!empty($hook_extra['plugin']) && $hook_extra['plugin'] !== $this->plugin_file) {
-            return $reply;
-        }
-        if (!is_string($package) || $package === '') {
-            return $reply;
-        }
-        // Identify our signed release packages by TRUSTED HOST, not by a
-        // literal URL substring. Our real assets are redirected to and served
-        // from GitHub's CDN (codeload.github.com / objects.githubusercontent.com),
-        // so a substring match on "github.com/peanutgraphic/" skipped signature
-        // verification for the very hosts our packages come from. Gate on the
-        // host allowlist instead; packages from any other host carry no manifest
-        // and aren't gated here (the host pin in get_remote_update_info applies).
-        if (! self::is_trusted_package_url($package)) {
-            return $reply; // not one of our signed packages — don't interfere
-        }
+        return $this->update_gate()->verifyPackageSignature($reply, $package, $upgrader, $hook_extra);
+    }
 
-        if (!function_exists('download_url')) {
-            require_once ABSPATH . 'wp-admin/includes/file.php';
-        }
-
-        $zip = download_url($package);
-        if (is_wp_error($zip)) {
-            return $zip;
-        }
-
-        $fail = function ($msg) use ($zip) {
-            if (is_string($zip)) {
-                @unlink($zip);
-            }
-            return new WP_Error('peanut_update_signature', $msg);
-        };
-
-        $mresp = wp_remote_get($package . '.manifest.json', array('timeout' => 20));
-        if (is_wp_error($mresp)) {
-            return $fail(__('Update signature manifest could not be fetched — refusing to install.', 'peanut-connect'));
-        }
-        $manifest = json_decode(wp_remote_retrieve_body($mresp), true);
-
-        if (!is_array($manifest) || empty($manifest['sha256']) || empty($manifest['signature'])) {
-            return $fail(__('Update signature manifest missing — refusing to install an unsigned package.', 'peanut-connect'));
-        }
-        if (!function_exists('sodium_crypto_sign_verify_detached')) {
-            return $fail(__('Signature verification unavailable (libsodium) — refusing to install.', 'peanut-connect'));
-        }
-
-        $bytes = (string) file_get_contents($zip);
-        if (!self::verify_bytes($bytes, $manifest)) {
-            return $fail(__('Update package failed signature verification — refusing to install.', 'peanut-connect'));
-        }
-
-        return $zip; // verified — WP installs from this local file
+    /**
+     * The shared signed-update gate (peanut/formflow-core), configured for this
+     * plugin. Completes the Phase-2 migration: the crypto and host-trust rules
+     * already delegate, and now the download + manifest + verify orchestration
+     * does too, so no part of this security path is a private copy any more.
+     *
+     * The shared gate is slightly STRICTER than the code it replaces: a package
+     * identified as OURS but served from an untrusted host is refused rather
+     * than skipped. Skipping meant "install it unverified", which is the exact
+     * shape of the bypass this file shipped with before #72.
+     *
+     * @return \Peanut\FormCore\Update\SignedUpdateGate
+     */
+    private function update_gate(): \Peanut\FormCore\Update\SignedUpdateGate {
+        return new \Peanut\FormCore\Update\SignedUpdateGate(
+            (string) $this->plugin_file,
+            self::TRUSTED_PACKAGE_HOSTS,
+            self::PEANUT_SIGNING_PUBKEY,
+            'peanut-connect'
+        );
     }
 
     /**
