@@ -35,7 +35,10 @@ frontend/coverage/
 .phpunit.cache/
 
 # Composer
-composer.lock
+# composer.lock IS committed: since 3.21.3 this plugin has a RUNTIME dependency
+# (peanut/formflow-core — the update signature verifier). Pinning it makes the
+# shipped verifier version reproducible instead of whatever resolves at build time.
+!composer.lock
 composer.phar
 composer-setup.php
 
