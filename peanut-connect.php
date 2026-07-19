@@ -21,6 +21,23 @@ define('PEANUT_CONNECT_VERSION', '3.21.2');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
+// Composer autoload — bundles peanut/formflow-core, which carries the shared
+// signed-update verifier this plugin's self-updater delegates to. Guarded so a
+// package built without `composer install --no-dev` surfaces an admin notice
+// instead of fataling.
+if (file_exists(PEANUT_CONNECT_PLUGIN_DIR . 'vendor/autoload.php')) {
+    require_once PEANUT_CONNECT_PLUGIN_DIR . 'vendor/autoload.php';
+} else {
+    add_action('admin_notices', function () {
+        if (!current_user_can('update_plugins')) {
+            return;
+        }
+        echo '<div class="notice notice-error"><p><strong>Peanut Connect:</strong> '
+            . esc_html__('vendor/ is missing, so update signature verification cannot run. Reinstall from an official release package.', 'peanut-connect')
+            . '</p></div>';
+    });
+}
+
 /**
  * Early Hub Mode filter registration
  * Must happen at file load time (before Suite checks the filter)

@@ -226,11 +226,7 @@ class Peanut_Connect_Self_Updater {
      * (exact match — no suffix games like "peanutgraphic.com.evil.test").
      */
     private static function is_trusted_package_url(string $url): bool {
-        $parts = wp_parse_url($url);
-        if (empty($parts['scheme']) || strtolower($parts['scheme']) !== 'https' || empty($parts['host'])) {
-            return false;
-        }
-        return in_array(strtolower($parts['host']), self::TRUSTED_PACKAGE_HOSTS, true);
+        return \Peanut\FormCore\Update\PackageVerifier::isTrustedPackageUrl($url, self::TRUSTED_PACKAGE_HOSTS);
     }
 
     /**
@@ -330,23 +326,11 @@ class Peanut_Connect_Self_Updater {
      * @return bool True only when the hash matches AND the signature is valid.
      */
     public static function verify_bytes(string $zipBytes, array $manifest, ?string $pubkeyB64 = null): bool {
-        if (empty($manifest['sha256']) || empty($manifest['signature'])) {
-            return false;
-        }
-        if (!function_exists('sodium_crypto_sign_verify_detached')) {
-            return false;
-        }
-        if (!hash_equals((string) $manifest['sha256'], hash('sha256', $zipBytes))) {
-            return false;
-        }
-        $sig = base64_decode((string) $manifest['signature'], true);
-        $pub = base64_decode($pubkeyB64 ?? self::PEANUT_SIGNING_PUBKEY, true);
-        if ($sig === false || $pub === false
-            || strlen($sig) !== SODIUM_CRYPTO_SIGN_BYTES
-            || strlen($pub) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES) {
-            return false;
-        }
-        return sodium_crypto_sign_verify_detached($sig, $zipBytes, $pub);
+        return \Peanut\FormCore\Update\PackageVerifier::verifyBytes(
+            $zipBytes,
+            $manifest,
+            $pubkeyB64 ?? self::PEANUT_SIGNING_PUBKEY
+        );
     }
 
     /**
