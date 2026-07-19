@@ -493,7 +493,7 @@ final class Peanut_Connect {
      * Render settings page
      */
     public function render_settings_page(): void {
-        $site_key = get_option('peanut_connect_site_key');
+        $site_key = Peanut_Connect_Auth::get_site_key();
         $manager_url = get_option('peanut_connect_manager_url');
         $permissions = Peanut_Connect_Auth::get_permissions();
         $last_sync = get_option('peanut_connect_last_sync');
@@ -650,7 +650,7 @@ final class Peanut_Connect {
      */
     public function generate_site_key(): string {
         $site_key = wp_generate_password(64, false);
-        update_option('peanut_connect_site_key', $site_key);
+        Peanut_Connect_Auth::set_site_key($site_key);
         return $site_key;
     }
 
@@ -659,6 +659,7 @@ final class Peanut_Connect {
      */
     public function disconnect(): void {
         delete_option('peanut_connect_site_key');
+        delete_option('peanut_connect_site_key_undecryptable');
         delete_option('peanut_connect_manager_url');
         delete_option('peanut_connect_last_sync');
     }
@@ -756,7 +757,7 @@ register_activation_hook(__FILE__, function() {
     // Generate site key on activation if not exists
     if (!get_option('peanut_connect_site_key')) {
         $key = wp_generate_password(64, false);
-        update_option('peanut_connect_site_key', $key);
+        Peanut_Connect_Auth::set_site_key($key);
     }
 
     // Set default permissions from the single canonical source of truth so the

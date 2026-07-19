@@ -67,7 +67,7 @@ After activation, configure the plugin at **Settings > Peanut End to End** (menu
 ## Security
 
 - All Hub-facing API endpoints require authentication (HMAC-SHA256 signed request, or a static Bearer site key as fallback)
-- The shared Hub key is held in `wp_options` and used as the HMAC signing secret — so signed requests never put the key on the wire. (It is stored as-is, not hashed, because an HMAC secret must be recoverable to verify a signature; protect it with database/transport security. A future hardening track is encryption-at-rest + a verification token distinct from the signing secret.)
+- Secrets are encrypted at rest in `wp_options` via libsodium (see `Peanut_Connect_Secret`): the site key (the inbound Bearer credential) and the shared Hub key are both stored as ciphertext and decrypted only when needed. Storage fails closed — if encryption is unavailable, the key is not persisted in cleartext and a degraded-state admin notice is raised. The Hub key is recoverable by design (it is the HMAC signing secret, so signed requests never put the key on the wire); the site key is recoverable so it can be shown on the settings page for pairing.
 - High-impact capabilities (remote updates, content publishing, remote restore, the outbound proxy) are gated by per-site permission flags that default to OFF — the owner opts in
 - Communication should always use HTTPS
 - Rate limiting prevents brute force attacks
@@ -335,7 +335,7 @@ add_filter('peanut_connect_allowed_plugins', function($plugins) {
 When the plugin is deleted (not just deactivated):
 
 1. All stored settings are removed
-2. The site key hash is deleted
+2. The site key is deleted
 3. No data is left in the database
 
 ## Support

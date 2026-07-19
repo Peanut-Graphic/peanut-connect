@@ -46,6 +46,23 @@ class Test_Self_Updater_Trust extends TestCase {
         }
     }
 
+    /**
+     * P2 regression: our real release assets are redirected to and served from
+     * GitHub's CDN (codeload.github.com / objects.githubusercontent.com), not
+     * from a literal "github.com/peanutgraphic/" URL. The pre-download gate
+     * previously matched on that literal substring and so SKIPPED signature
+     * verification for the very hosts our packages actually come from. These
+     * CDN hosts must be trusted so the gate verifies rather than skips them.
+     */
+    public function test_github_cdn_hosts_are_trusted_so_gate_verifies(): void {
+        foreach ([
+            'https://codeload.github.com/Peanut-Graphic/peanut-connect/zip/refs/tags/v1.5.0',
+            'https://objects.githubusercontent.com/github-production-release-asset/x/peanut-connect.zip',
+        ] as $url) {
+            $this->assertTrue($this->call_private_static('is_trusted_package_url', $url), $url);
+        }
+    }
+
     public function test_version_sanitisation_accepts_dotted_numeric(): void {
         $this->assertSame('3.11.5', $this->call_private_static('sanitize_version', '3.11.5'));
         $this->assertSame('1', $this->call_private_static('sanitize_version', '1'));

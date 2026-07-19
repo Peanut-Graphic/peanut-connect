@@ -266,12 +266,14 @@ class Peanut_Connect_Self_Updater {
         if (!is_string($package) || $package === '') {
             return $reply;
         }
-        // Identify our signed GitHub-release packages (the manifest sidecar is
-        // published next to the release asset). Case-insensitive: GitHub
-        // normalises owner case, so the URL is lowercase peanutgraphic in the release URL;
-        // Non-GitHub packages carry no manifest — don't gate
-        // them here (the host pin in get_remote_update_info still applies).
-        if (stripos($package, 'github.com/peanutgraphic/') === false) {
+        // Identify our signed release packages by TRUSTED HOST, not by a
+        // literal URL substring. Our real assets are redirected to and served
+        // from GitHub's CDN (codeload.github.com / objects.githubusercontent.com),
+        // so a substring match on "github.com/peanutgraphic/" skipped signature
+        // verification for the very hosts our packages come from. Gate on the
+        // host allowlist instead; packages from any other host carry no manifest
+        // and aren't gated here (the host pin in get_remote_update_info applies).
+        if (! self::is_trusted_package_url($package)) {
             return $reply; // not one of our signed packages — don't interfere
         }
 
