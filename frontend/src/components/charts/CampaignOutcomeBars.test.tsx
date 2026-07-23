@@ -3,8 +3,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { CampaignOutcomeBars } from './CampaignOutcomeBars';
 
 const data = [
-  { campaign: 'DOME2620RS3', converted: 3, in_progress: 8, abandoned: 89 },
-  { campaign: 'USA_Display', converted: 0, in_progress: 2, abandoned: 40 },
+  { campaign: 'DOME2620RS3', converted: 3, not_converted: 97 },
+  { campaign: 'USA_Display', converted: 0, not_converted: 42 },
 ];
 
 describe('CampaignOutcomeBars', () => {

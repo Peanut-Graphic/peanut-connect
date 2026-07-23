@@ -1,11 +1,10 @@
 export interface CampaignOutcome {
   campaign: string;
   converted: number;
-  in_progress: number;
-  abandoned: number;
+  not_converted: number;
 }
 
-export type Outcome = 'converted' | 'in_progress' | 'abandoned';
+export type Outcome = 'converted' | 'not_converted';
 
 interface Props {
   data: CampaignOutcome[];
@@ -15,12 +14,11 @@ interface Props {
 
 const SEGMENTS: { key: Outcome; label: string; color: string }[] = [
   { key: 'converted', label: 'Converted', color: 'bg-emerald-500' },
-  { key: 'in_progress', label: 'In progress', color: 'bg-violet-500' },
-  { key: 'abandoned', label: 'Abandoned', color: 'bg-slate-300' },
+  { key: 'not_converted', label: 'Not converted', color: 'bg-slate-300' },
 ];
 
 function total(c: CampaignOutcome): number {
-  return c.converted + c.in_progress + c.abandoned;
+  return c.converted + c.not_converted;
 }
 
 export function CampaignOutcomeBars({ data, onSegmentClick, onCampaignClick }: Props) {
