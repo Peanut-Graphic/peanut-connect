@@ -91,6 +91,7 @@ final class Peanut_Connect {
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-error-log.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-api.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-self-updater.php';
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-roles.php';
 
         // Hub tracking and sync classes (v2.3.0+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-database.php';
@@ -173,6 +174,7 @@ final class Peanut_Connect {
         // default-priority handler fires after the plugin has loaded.
         add_action('init', ['Peanut_Connect_Videos', 'register_block']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
+        Peanut_Connect_Roles::boot(); // scoped UTM Builder role: cap filter + upgrade-safe install
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('admin_head', [$this, 'hide_admin_notices_on_react_page']);
@@ -789,6 +791,10 @@ register_activation_hook(__FILE__, function() {
     // Create Hub tracking database tables (v2.3.0+)
     require_once plugin_dir_path(__FILE__) . 'includes/class-connect-database.php';
     Peanut_Connect_Database::create_tables();
+
+    // Create the scoped "UTM Builder" role.
+    require_once plugin_dir_path(__FILE__) . 'includes/class-connect-roles.php';
+    Peanut_Connect_Roles::install();
 });
 
 /**
