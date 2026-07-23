@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Journeys from './Journeys';
 
@@ -16,10 +17,13 @@ vi.mock('@/api', () => ({
 
 describe('Journeys "Entered enrollment portal" control', () => {
   it('shows the honest label and links to the funnel entered view, not a click_to_portal filter', () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
-      <MemoryRouter>
-        <Journeys />
-      </MemoryRouter>,
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <Journeys />
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
     const link = screen.getByRole('link', { name: /Entered enrollment portal/i });
     expect(link).toHaveAttribute('href', '/analytics/dominion-funnel?stage=entered');
