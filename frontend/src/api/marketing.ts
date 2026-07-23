@@ -161,7 +161,13 @@ export interface JourneyStats {
     utm_campaign: string;
     journeys: number;
     conversions: number;
+    // Phase 4 (Hub >= outcome-split deploy): the 3-way status breakdown.
+    // Optional — older Hub deploys omit these; treat absent as 0.
+    in_progress?: number;
+    abandoned?: number;
   }>;
+  // Phase 4: time-of-day distribution, 24 buckets (UTC hour of started_at).
+  by_hour?: Array<{ hour: number; journeys: number }>;
   by_channel?: Array<{
     channel: string;
     journeys: number;
