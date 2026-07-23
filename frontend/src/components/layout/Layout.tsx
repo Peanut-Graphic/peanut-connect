@@ -15,6 +15,7 @@ import {
   Code2,
   Film,
   Footprints,
+  Filter,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -32,6 +33,7 @@ const navigation = [
   { name: 'Videos', href: '/videos', icon: Film },
   { name: 'Tracking', href: '/tracking', icon: Code2 },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Dominion Funnel', href: '/analytics/dominion-funnel', icon: Filter },
   { name: 'Journeys', href: '/analytics?focus=journeys', icon: Footprints },
   { name: 'Health', href: '/health', icon: Activity },
   { name: 'Updates', href: '/updates', icon: Download },
