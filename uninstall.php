@@ -43,3 +43,9 @@ $wpdb->query(
 
 // Delete the slug cache transient (and its timeout sibling).
 delete_transient('peanut_connect_short_link_slugs');
+
+// Remove the scoped "UTM Builder" role.
+require_once plugin_dir_path(__FILE__) . 'includes/class-connect-roles.php';
+if (class_exists('Peanut_Connect_Roles')) {
+    Peanut_Connect_Roles::uninstall();
+}
