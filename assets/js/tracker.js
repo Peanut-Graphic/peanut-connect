@@ -201,6 +201,27 @@
         return null;
     }
 
+    // "click_to_portal" (Hub's "reached the enrollment portal" funnel stage)
+    // must fire whenever someone heads into the enrollment portal — NOT only
+    // when a button's text happens to START with a primary CTA word. The
+    // anchored primary regex missed real portal links like "Customer Portal"
+    // and "online customer portal", so the funnel under-counted. Detect portal
+    // intent from the element text, its href, OR an explicit author marker.
+    const portalTextPattern = /portal|enroll|my ?account|customer ?(portal|account)|log ?in to (enroll|apply)/i;
+    const portalHrefPattern = /portal|enroll|myaccount|my-account|customer-portal/i;
+
+    function isPortalBound(el, text, href) {
+        // Explicit, deterministic opt-in — an author can tag the exact element
+        // (or an ancestor) with data-peanut-cta="portal" to force the beacon,
+        // regardless of wording. This is the reliable per-site escape hatch.
+        if (el && typeof el.closest === 'function' && el.closest('[data-peanut-cta="portal"]')) {
+            return true;
+        }
+        if (text && portalTextPattern.test(text)) return true;
+        if (href && portalHrefPattern.test(href)) return true;
+        return false;
+    }
+
     function getFormName(form) {
         if (!form) return 'Unknown Form';
         // Try various form identifiers
@@ -270,10 +291,11 @@
                 });
 
                 // Funnel-stage event: Hub's "Clicked enroll" stage matches a
-                // custom event named click_to_portal. Emit it for any primary
-                // CTA (Enroll / Apply / Register / Sign-up / Get-started / …)
-                // so the campaign funnel ticks without per-site wiring.
-                if (ctaType === 'primary') {
+                // custom event named click_to_portal. Emit it for a primary CTA
+                // OR any element that heads into the enrollment portal (text /
+                // marker), so the funnel ticks even for "Customer Portal"-style
+                // wording the anchored primary regex would miss.
+                if (ctaType === 'primary' || isPortalBound(button, buttonText, null)) {
                     trackEvent('custom', 'click_to_portal', {
                         element: 'button',
                         text: buttonText,
@@ -346,11 +368,15 @@
                 });
 
                 // Funnel-stage event: Hub's "Clicked enroll" stage matches a
-                // custom event named click_to_portal. Emit it for any primary
-                // CTA (Enroll / Apply / Register / Sign-up / Get-started / …)
-                // so the campaign funnel ticks without per-site wiring.
-                // Skip phone/email/download — those aren't conversion intent.
-                if (ctaType === 'primary' && !isPhone && !isEmail && !isDownload) {
+                // custom event named click_to_portal. Emit it for a primary CTA
+                // OR any link that heads into the enrollment portal (text / href
+                // / marker) — this is what catches real "Customer Portal" and
+                // "online customer portal" links the anchored primary regex
+                // missed. Skip phone/email/download — those aren't portal intent.
+                if ((ctaType === 'primary' || isPortalBound(link, linkText, href)) && !isPhone && !isEmail && !isDownload) {
+                    // Portal-bound links also get the click_id forwarded so
+                    // attribution survives the hop into the portal SPA.
+                    if (ctaType !== 'primary') appendClickIdToHref(link);
                     trackEvent('custom', 'click_to_portal', {
                         element: 'link',
                         text: linkText,
