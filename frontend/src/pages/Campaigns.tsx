@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { Layout } from '@/components/layout';
-import { Card, CardHeader, Button, Input, Alert } from '@/components/common';
+import { Card, CardHeader, Button, Input, Alert, InfoPanel } from '@/components/common';
 import { useToast } from '@/components/common/Toast';
 import {
   marketingApi,
@@ -452,6 +452,21 @@ function BasicsStep({
   return (
     <Card>
       <CardHeader title="Step 1 — Campaign basics" description={STEPS[0].description} />
+
+      <InfoPanel variant="guide" title="New here? How this works" collapsible defaultOpen={false} className="mb-4">
+        <p className="mb-2">
+          You're building a <b>tracked link</b> for a campaign. Fill in the fields below, and the
+          builder gives you a short link and a QR code to use on print, email, or social — every
+          click and scan is counted in reporting.
+        </p>
+        <ul className="list-disc pl-5 space-y-1 text-sm">
+          <li><b>Three fields are required:</b> Source, Medium, and Campaign. The rest are optional but make reports richer.</li>
+          <li>Already have a full UTM link? Paste it in the first box and everything auto-fills.</li>
+          <li>Hover the small hint under each field for what it means. Keep names consistent (same spelling every time).</li>
+          <li>You'll get the short link and QR code on the last step ("Done").</li>
+        </ul>
+      </InfoPanel>
+
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -494,7 +509,7 @@ function BasicsStep({
             required
             value={state.utm_source}
             onChange={(e) => update('utm_source', e.target.value)}
-            hint="Where it appears."
+            hint="Where the traffic came from — e.g. mail, facebook, postcard. Becomes utm_source."
           />
           <Input
             label="Medium"
@@ -502,7 +517,7 @@ function BasicsStep({
             required
             value={state.utm_medium}
             onChange={(e) => update('utm_medium', e.target.value)}
-            hint="Channel type."
+            hint="The kind of channel — e.g. postcard, email, social, cpc. Becomes utm_medium."
           />
           <Input
             label="Campaign"
@@ -510,7 +525,7 @@ function BasicsStep({
             required
             value={state.utm_campaign}
             onChange={(e) => update('utm_campaign', e.target.value)}
-            hint="Identifier."
+            hint="Short identifier that groups this campaign together — e.g. ptr_postcard_2024. Becomes utm_campaign."
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -519,14 +534,14 @@ function BasicsStep({
             placeholder="blue_design"
             value={state.utm_content}
             onChange={(e) => update('utm_content', e.target.value)}
-            hint="Variant or creative."
+            hint="Which version/creative, to tell two of the same link apart (A/B, different postcards). Becomes utm_content."
           />
           <Input
             label="Term (optional)"
             placeholder="agency tools"
             value={state.utm_term}
             onChange={(e) => update('utm_term', e.target.value)}
-            hint="Keyword, if any."
+            hint="A keyword, mostly for paid search. Becomes utm_term."
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
