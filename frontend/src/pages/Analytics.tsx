@@ -11,6 +11,7 @@ import {
   type CampaignOutcome,
   type Outcome,
 } from '@/components/charts/CampaignOutcomeBars';
+import { HourOfDayChart } from '@/components/charts/HourOfDayChart';
 import { marketingApi, type JourneyStats, type JourneyRow } from '@/api';
 import { ChevronDown, X } from 'lucide-react';
 
@@ -119,24 +120,28 @@ export default function Analytics() {
     return Array.from(names).sort();
   }, [utmsActiveQuery.data, utmsArchivedQuery.data, allQuery.data]);
 
-  // Per-campaign Converted vs Not-converted, from data already on the page
-  // (by_campaign carries journeys + conversions; the non-converted remainder
-  // is a single bucket — a 3-way in-progress/abandoned split would need a HUB
-  // field, tracked separately).
+  // Per-campaign 3-way outcome split from the Hub by_campaign fields. Older Hub
+  // deploys omit in_progress/abandoned — fall back to a single not-converted
+  // bucket (as in_progress) so the bar still renders while the deploy catches up.
   const outcomeData: CampaignOutcome[] = useMemo(
     () =>
-      (allQuery.data?.by_campaign ?? []).map((c) => ({
-        campaign: c.utm_campaign,
-        converted: c.conversions,
-        not_converted: Math.max(c.journeys - c.conversions, 0),
-      })),
+      (allQuery.data?.by_campaign ?? []).map((c) => {
+        const hasSplit = c.in_progress != null || c.abandoned != null;
+        const remainder = Math.max(c.journeys - c.conversions, 0);
+        return {
+          campaign: c.utm_campaign,
+          converted: c.conversions,
+          in_progress: hasSplit ? c.in_progress ?? 0 : remainder,
+          abandoned: hasSplit ? c.abandoned ?? 0 : 0,
+        };
+      }),
     [allQuery.data],
   );
 
   const navigate = useNavigate();
   const goToJourneys = (campaign: string, outcome?: Outcome) => {
     const p = new URLSearchParams({ campaign });
-    if (outcome === 'converted') p.set('status', 'converted');
+    if (outcome) p.set('status', outcome); // 'converted' | 'in_progress' | 'abandoned' all map to journeys status
     navigate(`/analytics/journeys?${p.toString()}`);
   };
 
@@ -306,6 +311,15 @@ export default function Analytics() {
             <DevicesCard data={currentData} loading={isLoading} />
             <RegionsCard data={currentData} loading={isLoading} />
           </div>
+
+          <Card className="mt-4">
+            <CardHeader title="Time of day" description="When journeys start (UTC)." />
+            {isLoading ? (
+              <div className="text-sm text-slate-500">Loading…</div>
+            ) : (
+              <HourOfDayChart data={currentData?.by_hour ?? []} />
+            )}
+          </Card>
 
           <Card className="mt-4">
             <CardHeader

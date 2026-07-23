@@ -3,8 +3,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { CampaignOutcomeBars } from './CampaignOutcomeBars';
 
 const data = [
-  { campaign: 'DOME2620RS3', converted: 3, not_converted: 97 },
-  { campaign: 'USA_Display', converted: 0, not_converted: 42 },
+  { campaign: 'DOME2620RS3', converted: 3, in_progress: 8, abandoned: 89 },
+  { campaign: 'USA_Display', converted: 0, in_progress: 2, abandoned: 40 },
 ];
 
 describe('CampaignOutcomeBars', () => {
@@ -14,11 +14,18 @@ describe('CampaignOutcomeBars', () => {
     expect(labels).toEqual(['DOME2620RS3', 'USA_Display']);
   });
 
+  it('renders all three outcome segments', () => {
+    render(<CampaignOutcomeBars data={data} />);
+    expect(screen.getByTestId('seg-DOME2620RS3-converted')).toBeInTheDocument();
+    expect(screen.getByTestId('seg-DOME2620RS3-in_progress')).toBeInTheDocument();
+    expect(screen.getByTestId('seg-DOME2620RS3-abandoned')).toBeInTheDocument();
+  });
+
   it('calls onSegmentClick with the campaign + outcome when a segment is clicked', () => {
     const onSegmentClick = vi.fn();
     render(<CampaignOutcomeBars data={data} onSegmentClick={onSegmentClick} />);
-    fireEvent.click(screen.getByTestId('seg-DOME2620RS3-converted'));
-    expect(onSegmentClick).toHaveBeenCalledWith({ campaign: 'DOME2620RS3', outcome: 'converted' });
+    fireEvent.click(screen.getByTestId('seg-DOME2620RS3-in_progress'));
+    expect(onSegmentClick).toHaveBeenCalledWith({ campaign: 'DOME2620RS3', outcome: 'in_progress' });
   });
 
   it('calls onCampaignClick when the bar label is clicked', () => {
