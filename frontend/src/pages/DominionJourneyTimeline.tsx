@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { marketingApi } from '@/api';
 import Layout from '@/components/layout/Layout';
 import { Card } from '@/components/common';
+import { JourneyContextPanel } from '@/components/journey/JourneyContextPanel';
 
 const PORTAL_STEPS = ['validation', 'login', 'dashboard', 'enrolled'] as const;
 
@@ -92,6 +93,16 @@ export default function DominionJourneyTimeline() {
             <Stat label="Source" value={data.journey.utm_source ?? '—'} />
             <Stat label="Status" value={converted ? 'Enrolled' : (data.journey.status ?? '—')} />
             <Stat label="Total time" value={fmtDuration(data.journey.duration_seconds)} />
+          </div>
+
+          <div className="mb-4">
+            <JourneyContextPanel
+              events={data.events}
+              journey={{
+                pages_viewed: data.journey.pages_viewed,
+                duration_seconds: data.journey.duration_seconds,
+              }}
+            />
           </div>
 
           <Card className="p-6">

@@ -89,8 +89,6 @@ export default function Journeys() {
 
   const clearAll = () => setParams(new URLSearchParams(), { replace: false });
 
-  const toggleEnrollPill = () =>
-    setFilter('event_name', eventName === 'click_to_portal' ? '' : 'click_to_portal');
 
   const onSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,21 +151,13 @@ export default function Journeys() {
             className="border border-slate-300 rounded-lg text-sm py-2 px-3"
           />
 
-          <button
-            type="button"
-            onClick={toggleEnrollPill}
-            className={
-              'inline-flex items-center gap-1.5 border rounded-lg text-sm py-2 px-3 transition-colors ' +
-              (eventName === 'click_to_portal'
-                ? 'bg-amber-100 border-amber-300 text-amber-800'
-                : 'border-slate-300 text-slate-700 hover:bg-slate-50')
-            }
-            title="Show only journeys whose visitor clicked the enroll / primary CTA"
+          <Link
+            to="/analytics/dominion-funnel?stage=entered"
+            className="inline-flex items-center gap-1.5 border border-slate-300 rounded-lg text-sm py-2 px-3 text-slate-700 hover:bg-slate-50"
+            title="See everyone who reached the enrollment portal — the reliable signal. (The raw enroll-CTA click beacon under-fires, so it can't be trusted as a filter here.)"
           >
-            <span aria-hidden="true">⇥</span>
-            Clicked enroll
-            {eventName === 'click_to_portal' && <span aria-hidden="true">·×</span>}
-          </button>
+            Entered enrollment portal →
+          </Link>
 
           {(status || campaign || startDate || endDate || eventName || search) && (
             <button

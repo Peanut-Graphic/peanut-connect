@@ -3,7 +3,6 @@ import { Layout } from '@/components/layout';
 import {
   Card,
   CardHeader,
-  StatCard,
   Badge,
   Button,
   InfoPanel,
@@ -13,14 +12,14 @@ import {
   HelpTooltip,
   DashboardSkeleton,
 } from '@/components/common';
-import { dashboardApi, settingsApi } from '@/api';
+import { dashboardApi, settingsApi, marketingApi, errorLogApi } from '@/api';
+import { OverviewPerformancePanel } from '@/components/overview/OverviewPerformancePanel';
+import { OverviewHealthPanel } from '@/components/overview/OverviewHealthPanel';
 import {
-  Cloud,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   Download,
-  Activity,
   RefreshCw,
   Shield,
   Eye,
@@ -42,6 +41,21 @@ export default function Dashboard() {
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: settingsApi.get,
+  });
+
+  // Overview data: the Dominion funnel drives the KPI row + Performance panel;
+  // error counts and GTM captures feed the Health panel's real signals.
+  const { data: funnel, isLoading: funnelLoading } = useQuery({
+    queryKey: ['overview-funnel'],
+    queryFn: () => marketingApi.dominionFunnel({}),
+  });
+  const { data: errorCounts } = useQuery({
+    queryKey: ['overview-error-counts'],
+    queryFn: errorLogApi.getCounts,
+  });
+  const { data: gtmCoverage } = useQuery({
+    queryKey: ['overview-gtm-coverage'],
+    queryFn: () => marketingApi.gtmCoverage({ per_page: 1 }),
   });
 
   const getStatusIcon = (status: string) => {
@@ -72,7 +86,7 @@ export default function Dashboard() {
 
   if (isLoading) {
     return (
-      <Layout title="Dashboard" description="Site connection overview">
+      <Layout title="Overview" description="Performance and health at a glance">
         <DashboardSkeleton />
       </Layout>
     );
@@ -80,7 +94,7 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <Layout title="Dashboard" description="Site connection overview">
+      <Layout title="Overview" description="Performance and health at a glance">
         <Card>
           <div className="text-center py-8">
             <XCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
@@ -106,7 +120,7 @@ export default function Dashboard() {
   const showWelcome = !isConnected;
 
   return (
-    <Layout title="Dashboard" description="Site connection overview">
+    <Layout title="Overview" description="Performance and health at a glance">
       {/* Welcome Panel for New Users */}
       {showWelcome && (
         <InfoPanel
@@ -170,48 +184,26 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <StatCard
-          title={
-            <span className="flex items-center gap-1.5">
-              Hub Connection
-              <HelpTooltip content="Shows whether this site is connected to Peanut Hub. A connected site can be monitored and managed remotely from your agency dashboard." />
-            </span>
-          }
-          value={dashboard?.hub?.connected ? 'Connected' : 'Disconnected'}
-          icon={<Cloud className="w-5 h-5" />}
+      {/* Performance KPI row — each tile drills into the Dominion Funnel */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <KpiTile to="/analytics/dominion-funnel" label="Landed" value={funnel?.kpis.landed} />
+        <KpiTile to="/analytics/dominion-funnel?stage=entered" label="Entered" value={funnel?.kpis.entered} />
+        <KpiTile to="/analytics/dominion-funnel?stage=enrolled" label="Enrolled" value={funnel?.kpis.enrolled} accent />
+        <KpiTile
+          to="/analytics/dominion-funnel"
+          label="Conversion"
+          value={funnel ? `${(funnel.kpis.conversion_rate * 100).toFixed(2)}%` : undefined}
         />
-        <StatCard
-          title={
-            <span className="flex items-center gap-1.5">
-              Health Status
-              <HelpTooltip content="Overall health assessment based on WordPress version, PHP version, SSL status, pending updates, and security checks." />
-            </span>
-          }
-          value={dashboard?.health_summary.status === 'healthy' ? 'Healthy' :
-                 dashboard?.health_summary.status === 'warning' ? 'Warning' : 'Critical'}
-          icon={<Activity className="w-5 h-5" />}
-        />
-        <StatCard
-          title={
-            <span className="flex items-center gap-1.5">
-              Available Updates
-              <HelpTooltip content="Total number of available updates for plugins, themes, and WordPress core. Keep your site updated for security and performance." />
-            </span>
-          }
-          value={totalUpdates}
-          icon={<Download className="w-5 h-5" />}
-        />
-        <StatCard
-          title={
-            <span className="flex items-center gap-1.5">
-              Marketing Suite
-              <HelpTooltip content="Peanut Suite is an optional companion plugin with extra marketing tools (UTM tracking, link management, contacts, analytics). 'Not installed' here refers to that companion plugin, not End-to-End itself." />
-            </span>
-          }
-          value={dashboard?.peanut_suite?.installed ? 'Companion active' : 'Companion not installed'}
-          icon={<Sparkles className="w-5 h-5" />}
+      </div>
+
+      {/* Two panels: Performance | Health */}
+      <div className="grid gap-4 lg:grid-cols-2 mb-8">
+        <OverviewPerformancePanel funnel={funnel} loading={funnelLoading} />
+        <OverviewHealthPanel
+          connected={!!dashboard?.hub?.connected}
+          trackingFiring={(gtmCoverage?.totals?.total_captures ?? 0) > 0}
+          errorCount={errorCounts?.last_24h?.total ?? 0}
+          updatesAvailable={totalUpdates}
         />
       </div>
 
@@ -556,5 +548,29 @@ export default function Dashboard() {
         </div>
       )}
     </Layout>
+  );
+}
+
+function KpiTile({
+  to,
+  label,
+  value,
+  accent,
+}: {
+  to: string;
+  label: string;
+  value: number | string | undefined;
+  accent?: boolean;
+}) {
+  return (
+    <Link
+      to={to}
+      className="block bg-white border border-slate-200 rounded-lg p-4 hover:border-indigo-300 transition-colors"
+    >
+      <div className={'text-2xl font-bold ' + (accent ? 'text-emerald-600' : 'text-slate-800')}>
+        {value === undefined ? '—' : typeof value === 'number' ? value.toLocaleString() : value}
+      </div>
+      <div className="text-xs text-slate-500 mt-1">{label}</div>
+    </Link>
   );
 }

@@ -217,6 +217,14 @@ export interface JourneyEventRow {
   page_title: string | null;
   event_at: string;
   event_data?: Record<string, unknown> | null;
+  // Context fields Hub captures per event (present on the journey-detail
+  // payload; optional because older/imported events may omit them).
+  device_type?: string | null;
+  browser?: string | null;
+  os?: string | null;
+  country?: string | null;
+  region?: string | null;
+  referrer?: string | null;
 }
 
 export interface JourneyDetailResponse {
