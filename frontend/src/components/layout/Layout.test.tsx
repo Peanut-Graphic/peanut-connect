@@ -28,4 +28,18 @@ describe('Layout', () => {
       '/analytics/dominion-funnel',
     );
   });
+
+  it('hides the sidebar in builder mode', () => {
+    (window as any).peanutConnect = { mode: 'builder' };
+    render(
+      <MemoryRouter>
+        <Layout title="Build">
+          <div>content</div>
+        </Layout>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('heading', { name: 'Performance' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Build' })).toBeInTheDocument();
+    (window as any).peanutConnect = undefined;
+  });
 });

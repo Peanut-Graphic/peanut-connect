@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import Sidebar from './Sidebar';
+import { getAppMode } from '@/config/appMode';
 
 interface LayoutProps {
   children: ReactNode;
@@ -29,7 +30,9 @@ export default function Layout({ children, title, description, action }: LayoutP
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 flex">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+      {getAppMode() !== 'builder' && (
+        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+      )}
 
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="bg-white border-b border-slate-200">
