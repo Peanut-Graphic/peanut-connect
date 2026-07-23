@@ -31,6 +31,7 @@ const droppedDetail = {
 const journeyDetail = vi.fn();
 vi.mock('@/api', () => ({
   marketingApi: { journeyDetail: (...a: any[]) => journeyDetail(...a) },
+  getVersion: () => '0.0.0-test', // consumed by the Layout sidebar chrome
 }));
 
 function wrap(ui: ReactNode, path = '/analytics/dominion-funnel/journey/abc123') {

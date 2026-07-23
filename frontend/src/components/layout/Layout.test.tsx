@@ -3,18 +3,29 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Layout from './Layout';
 
-describe('Layout nav', () => {
-  it('exposes the Dominion Funnel tab pointing at /analytics/dominion-funnel', () => {
-    render(
-      <MemoryRouter>
-        <Layout title="Test">
-          <div>content</div>
-        </Layout>
-      </MemoryRouter>,
+function renderLayout() {
+  return render(
+    <MemoryRouter>
+      <Layout title="Test Page" description="desc">
+        <div>page content</div>
+      </Layout>
+    </MemoryRouter>,
+  );
+}
+
+describe('Layout', () => {
+  it('renders the page header and content', () => {
+    renderLayout();
+    expect(screen.getByRole('heading', { name: 'Test Page' })).toBeInTheDocument();
+    expect(screen.getByText('page content')).toBeInTheDocument();
+  });
+
+  it('renders the grouped sidebar (nav is now the sidebar, not top tabs)', () => {
+    renderLayout();
+    expect(screen.getByRole('heading', { name: 'Performance' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Dominion Funnel/i })).toHaveAttribute(
+      'href',
+      '/analytics/dominion-funnel',
     );
-    // This is the VISIBLE top-tab nav (Layout), not the secondary Sidebar —
-    // the Dominion Funnel entry must live here to actually be reachable.
-    const link = screen.getByRole('link', { name: /Dominion Funnel/i });
-    expect(link).toHaveAttribute('href', '/analytics/dominion-funnel');
   });
 });

@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/contexts';
 
 // Mock the API
 vi.mock('@/api', () => ({
+  getVersion: () => '0.0.0-test', // consumed by the Layout sidebar chrome
   settingsApi: {
     get: vi.fn(),
     generateKey: vi.fn(),
