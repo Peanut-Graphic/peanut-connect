@@ -46,6 +46,7 @@ const fixture = {
 const dominionFunnel = vi.fn();
 vi.mock('@/api', () => ({
   marketingApi: { dominionFunnel: (...a: any[]) => dominionFunnel(...a) },
+  getVersion: () => '0.0.0-test', // consumed by the Layout sidebar chrome
 }));
 
 function wrap(ui: ReactNode) {
