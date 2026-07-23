@@ -1,12 +1,16 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { Layout } from '@/components/layout';
 import { Card, CardHeader, StatCard, Alert } from '@/components/common';
 import { Funnel } from '@/components/charts/Funnel';
 import { TimeSeries } from '@/components/charts/TimeSeries';
 import { Donut } from '@/components/charts/Donut';
-import { Sankey } from '@/components/charts/Sankey';
+import {
+  CampaignOutcomeBars,
+  type CampaignOutcome,
+  type Outcome,
+} from '@/components/charts/CampaignOutcomeBars';
 import { marketingApi, type JourneyStats, type JourneyRow } from '@/api';
 import { ChevronDown, X } from 'lucide-react';
 
@@ -114,6 +118,27 @@ export default function Analytics() {
     }
     return Array.from(names).sort();
   }, [utmsActiveQuery.data, utmsArchivedQuery.data, allQuery.data]);
+
+  // Per-campaign Converted vs Not-converted, from data already on the page
+  // (by_campaign carries journeys + conversions; the non-converted remainder
+  // is a single bucket — a 3-way in-progress/abandoned split would need a HUB
+  // field, tracked separately).
+  const outcomeData: CampaignOutcome[] = useMemo(
+    () =>
+      (allQuery.data?.by_campaign ?? []).map((c) => ({
+        campaign: c.utm_campaign,
+        converted: c.conversions,
+        not_converted: Math.max(c.journeys - c.conversions, 0),
+      })),
+    [allQuery.data],
+  );
+
+  const navigate = useNavigate();
+  const goToJourneys = (campaign: string, outcome?: Outcome) => {
+    const p = new URLSearchParams({ campaign });
+    if (outcome === 'converted') p.set('status', 'converted');
+    navigate(`/analytics/journeys?${p.toString()}`);
+  };
 
   function toggleCampaign(c: string) {
     setSelectedCampaigns((prev) =>
@@ -284,15 +309,16 @@ export default function Analytics() {
 
           <Card className="mt-4">
             <CardHeader
-              title="Campaign → channel → outcome"
-              description="Where journeys started, how they reached the site, and how they ended."
+              title="Campaign outcomes"
+              description="Converted vs not-converted per campaign. Click a segment to see those journeys."
             />
             {isLoading ? (
               <div className="text-sm text-slate-500">Loading…</div>
             ) : (
-              <Sankey
-                nodes={currentData?.sankey?.nodes ?? []}
-                links={currentData?.sankey?.links ?? []}
+              <CampaignOutcomeBars
+                data={outcomeData}
+                onSegmentClick={({ campaign, outcome }) => goToJourneys(campaign, outcome)}
+                onCampaignClick={(campaign) => goToJourneys(campaign)}
               />
             )}
           </Card>
