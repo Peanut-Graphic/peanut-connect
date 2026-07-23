@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { ToastProvider, ErrorBoundary } from './components/common';
 import { ThemeProvider } from './contexts';
 import Dashboard from './pages/Dashboard';
@@ -36,6 +36,12 @@ import Settings from './pages/Settings';
  * instead of the plugin's assets dir. Reverted to eager imports in
  * 3.7.23 pending a proper Vite `base` + WP runtime-path solution.
  */
+// Legacy /journeys/:clickId → canonical /analytics/journeys/:clickId (param preserved).
+export function RedirectJourneyDetail() {
+  const { clickId } = useParams();
+  return <Navigate to={`/analytics/journeys/${clickId}`} replace />;
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -72,8 +78,9 @@ export default function App() {
             {/* Legacy aliases (3.9.6) — keep working until next major to
                 avoid breaking any bookmarks. The active routes above are
                 under /analytics so Journeys reads as a section of Analytics. */}
-            <Route path="/journeys" element={<Journeys />} />
-            <Route path="/journeys/:clickId" element={<JourneyDetail />} />
+            {/* Legacy aliases now redirect to the canonical /analytics/journeys paths */}
+            <Route path="/journeys" element={<Navigate to="/analytics/journeys" replace />} />
+            <Route path="/journeys/:clickId" element={<RedirectJourneyDetail />} />
             <Route path="/tracking" element={<Tracking />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
