@@ -249,7 +249,7 @@ export default function DominionFunnel() {
                         </td>
                         <td className="px-4 py-2 text-right">
                           <Link
-                            to={`/analytics/journeys/${j.click_id}`}
+                            to={`/analytics/dominion-funnel/journey/${j.click_id}`}
                             className="text-indigo-600 hover:text-indigo-800"
                           >
                             View timeline →

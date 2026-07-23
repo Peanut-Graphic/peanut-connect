@@ -18,6 +18,7 @@ import VideoAnalyticsDetail from './pages/VideoAnalyticsDetail';
 import GtmCoverage from './pages/GtmCoverage';
 import CampaignStory from './pages/CampaignStory';
 import DominionFunnel from './pages/DominionFunnel';
+import DominionJourneyTimeline from './pages/DominionJourneyTimeline';
 import Tracking from './pages/Tracking';
 import Settings from './pages/Settings';
 
@@ -63,6 +64,10 @@ export default function App() {
             <Route path="/analytics/videos/:id" element={<VideoAnalyticsDetail />} />
             <Route path="/analytics/gtm-coverage" element={<GtmCoverage />} />
             <Route path="/analytics/dominion-funnel" element={<DominionFunnel />} />
+            <Route
+              path="/analytics/dominion-funnel/journey/:clickId"
+              element={<DominionJourneyTimeline />}
+            />
             <Route path="/analytics/campaign/:campaign" element={<CampaignStory />} />
             {/* Legacy aliases (3.9.6) — keep working until next major to
                 avoid breaking any bookmarks. The active routes above are
