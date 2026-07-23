@@ -4,6 +4,8 @@ interface FunnelProps {
   stages: FunnelStage[];
   /** Compact mode: smaller text, no inline drop-off text. For grid/compare layouts. */
   compact?: boolean;
+  /** When provided, each stage becomes a button that reports its stage id on click. */
+  onStageClick?: (stage: string) => void;
 }
 
 /**
@@ -48,7 +50,7 @@ function colorFor(stage: string) {
   return STAGE_COLORS[stage] ?? FALLBACK;
 }
 
-export function Funnel({ stages, compact = false }: FunnelProps) {
+export function Funnel({ stages, compact = false, onStageClick }: FunnelProps) {
   if (stages.length === 0) {
     return <div className="text-sm text-slate-500">No funnel data.</div>;
   }
@@ -84,8 +86,8 @@ export function Funnel({ stages, compact = false }: FunnelProps) {
               ? Math.round(((prev.count - s.count) / prev.count) * 100)
               : null;
 
-          return (
-            <li key={s.stage}>
+          const body = (
+            <>
               <div className="flex items-baseline justify-between mb-1">
                 <span
                   className={
@@ -121,6 +123,23 @@ export function Funnel({ stages, compact = false }: FunnelProps) {
                   style={{ width: `${widthPct}%` }}
                 />
               </div>
+            </>
+          );
+
+          return (
+            <li key={s.stage}>
+              {onStageClick ? (
+                <button
+                  type="button"
+                  onClick={() => onStageClick(s.stage)}
+                  aria-label={s.label}
+                  className="block w-full text-left cursor-pointer rounded px-1 -mx-1 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                >
+                  {body}
+                </button>
+              ) : (
+                body
+              )}
             </li>
           );
         })}
