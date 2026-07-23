@@ -95,6 +95,63 @@ export interface FunnelStage {
   count: number;
 }
 
+// ===== Dominion PTR enrollment funnel =====
+
+export interface DominionFunnelKpis {
+  landed: number;
+  entered: number;
+  enrolled: number;
+  conversion_rate: number;
+}
+
+export interface DominionCampaignCount {
+  campaign: string;
+  landed: number;
+}
+
+export interface DominionJourneyRow {
+  click_id: string;
+  campaign: string | null;
+  entered_at: string | null;
+  furthest_step: string;
+  duration_seconds: number;
+  status: string;
+}
+
+export interface DominionJourneysPage {
+  data: DominionJourneyRow[];
+  meta: { current_page: number; last_page: number; per_page: number; total: number };
+}
+
+export interface DominionFunnelMeta {
+  from: string;
+  to: string;
+  campaign: string | null;
+  include_test: boolean;
+  attribution_note: string;
+  enrolled_note: string;
+  generated_at: string;
+}
+
+export interface DominionFunnelResponse {
+  kpis: DominionFunnelKpis;
+  reaching: FunnelStage[];
+  inside: FunnelStage[];
+  campaigns: DominionCampaignCount[];
+  journeys: DominionJourneysPage;
+  meta: DominionFunnelMeta;
+}
+
+export interface DominionFunnelParams {
+  from?: string;
+  to?: string;
+  campaign?: string;
+  include_test?: boolean;
+  stage?: string;
+  page?: number;
+  per_page?: number;
+}
+
 export interface JourneyStats {
   total_journeys: number;
   conversions: number;
@@ -428,5 +485,27 @@ export const marketingApi = {
     const res = await api.get(`/marketing/campaign/${encodeURIComponent(campaign)}/story`);
     const payload = (res.data?.data ?? res.data) as CampaignStoryResponse;
     return payload;
+  },
+
+  dominionFunnel: async (
+    params: DominionFunnelParams = {},
+  ): Promise<DominionFunnelResponse> => {
+    const res = await api.get('/marketing/dominion-funnel', { params });
+    const body = (res.data ?? {}) as Record<string, any>;
+    // Flattened runtime: kpis/…/meta already at top level (body.data undefined).
+    // Raw (mocked client, interceptor not run): inner under body.data, meta sibling.
+    const d = (body.data ?? body) as Record<string, any>;
+    const metaObj = (body.meta ?? d.meta ?? {}) as DominionFunnelMeta;
+    return {
+      kpis: d.kpis ?? { landed: 0, entered: 0, enrolled: 0, conversion_rate: 0 },
+      reaching: d.reaching ?? [],
+      inside: d.inside ?? [],
+      campaigns: d.campaigns ?? [],
+      journeys: d.journeys ?? {
+        data: [],
+        meta: { current_page: 1, last_page: 1, per_page: 0, total: 0 },
+      },
+      meta: metaObj,
+    };
   },
 };

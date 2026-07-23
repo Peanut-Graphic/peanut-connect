@@ -30,6 +30,13 @@ export type {
   TrackingSetup,
   Paginated,
   FunnelStage,
+  DominionFunnelKpis,
+  DominionCampaignCount,
+  DominionJourneyRow,
+  DominionJourneysPage,
+  DominionFunnelMeta,
+  DominionFunnelResponse,
+  DominionFunnelParams,
 } from './marketing';
 export { videosApi } from './videos';
 export type { Video, VideoInput, VideoAnalytics } from './videos';

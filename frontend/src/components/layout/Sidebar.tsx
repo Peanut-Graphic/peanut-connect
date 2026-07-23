@@ -15,6 +15,7 @@ import {
   BarChart3,
   Code2,
   Footprints,
+  Filter,
 } from 'lucide-react';
 import { getVersion } from '@/api';
 
@@ -37,6 +38,7 @@ const navigation: NavItem[] = [
   { name: 'Tracking', href: '/tracking', icon: Code2 },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Journeys', href: '/analytics?focus=journeys', icon: Footprints },
+  { name: 'Dominion Funnel', href: '/analytics/dominion-funnel', icon: Filter },
   { name: 'Health', href: '/health', icon: Activity },
   { name: 'Updates', href: '/updates', icon: Download },
   { name: 'Activity', href: '/activity', icon: History },

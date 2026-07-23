@@ -137,6 +137,14 @@ class Peanut_Connect_Marketing {
             'permission_callback' => $perms,
         ]);
 
+        // Dominion PTR enrollment funnel — proxies to Hub's site-scoped
+        // /api/v1/marketing/dominion-funnel (marketing → portal → enrolled).
+        register_rest_route($ns, '/marketing/dominion-funnel', [
+            'methods'             => 'GET',
+            'callback'            => [self::class, 'dominion_funnel'],
+            'permission_callback' => $perms,
+        ]);
+
         // Campaign lifecycle story — proxies to Hub's
         // /api/v1/marketing/campaign/{campaign}/story.
         register_rest_route($ns, '/marketing/campaign/(?P<campaign>[A-Za-z0-9_.\-]+)/story', [
@@ -240,6 +248,10 @@ class Peanut_Connect_Marketing {
 
     public static function gtm_coverage(WP_REST_Request $request) {
         return self::forward('GET', '/marketing/gtm-coverage', null, $request->get_query_params());
+    }
+
+    public static function dominion_funnel(WP_REST_Request $request) {
+        return self::forward('GET', '/marketing/dominion-funnel', null, $request->get_query_params());
     }
 
     public static function campaign_story(WP_REST_Request $request) {
