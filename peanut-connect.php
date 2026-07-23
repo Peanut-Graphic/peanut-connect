@@ -407,6 +407,8 @@ final class Peanut_Connect {
             'apiUrl' => rest_url('peanut-connect/v1'),
             'nonce' => wp_create_nonce('wp_rest'),
             'version' => PEANUT_CONNECT_VERSION,
+            // 'full' for admins; 'builder' for the scoped UTM Builder role.
+            'mode' => current_user_can('manage_options') ? 'full' : 'builder',
         ]);
     }
 
@@ -429,7 +431,7 @@ final class Peanut_Connect {
         add_menu_page(
             __('End-to-End', 'peanut-connect'),
             __('End-to-End', 'peanut-connect'),
-            'manage_options',
+            Peanut_Connect_Roles::BUILDER_CAP, // admins have it via runtime filter; UTM Builders via the role
             'peanut-connect-app',
             [$this, 'render_react_app'],
             'dashicons-admin-links',

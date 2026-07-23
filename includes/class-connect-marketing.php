@@ -26,12 +26,14 @@ class Peanut_Connect_Marketing {
         $ns = PEANUT_CONNECT_API_NAMESPACE;
 
         $perms = [self::class, 'check_admin_permission'];
+        // Builder gate for the scoped UTM Builder role — create+list only.
+        $builderPerms = [self::class, 'check_builder_permission'];
 
         // Campaign builder
         register_rest_route($ns, '/marketing/campaigns', [
             'methods'             => 'POST',
             'callback'            => [self::class, 'create_campaign'],
-            'permission_callback' => $perms,
+            'permission_callback' => $builderPerms,
         ]);
 
         // UTMs
@@ -39,12 +41,12 @@ class Peanut_Connect_Marketing {
             [
                 'methods'             => 'GET',
                 'callback'            => [self::class, 'list_utms'],
-                'permission_callback' => $perms,
+                'permission_callback' => $builderPerms,
             ],
             [
                 'methods'             => 'POST',
                 'callback'            => [self::class, 'create_utm'],
-                'permission_callback' => $perms,
+                'permission_callback' => $builderPerms,
             ],
         ]);
         register_rest_route($ns, '/marketing/utms/(?P<id>\d+)', [
@@ -75,12 +77,12 @@ class Peanut_Connect_Marketing {
             [
                 'methods'             => 'GET',
                 'callback'            => [self::class, 'list_links'],
-                'permission_callback' => $perms,
+                'permission_callback' => $builderPerms,
             ],
             [
                 'methods'             => 'POST',
                 'callback'            => [self::class, 'create_link'],
-                'permission_callback' => $perms,
+                'permission_callback' => $builderPerms,
             ],
         ]);
         register_rest_route($ns, '/marketing/links/(?P<id>\d+)', [
@@ -156,6 +158,16 @@ class Peanut_Connect_Marketing {
 
     public static function check_admin_permission(): bool {
         return current_user_can('manage_options');
+    }
+
+    /**
+     * Builder gate: admins (via manage_options, also granted the cap at runtime)
+     * OR the scoped UTM Builder capability. Guards ONLY the builder endpoints
+     * (campaign/utm/link create+list); every other route stays admin-only.
+     */
+    public static function check_builder_permission(): bool {
+        return current_user_can('manage_options')
+            || current_user_can('peanut_connect_build_utms');
     }
 
     // ===== Campaign builder =====
