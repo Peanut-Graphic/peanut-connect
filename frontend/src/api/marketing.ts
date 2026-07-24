@@ -143,6 +143,13 @@ export interface DominionContinuity {
   bridged: { count: number; by_campaign: Array<{ campaign: string; count: number }> };
 }
 
+export interface DominionEngagementStep {
+  step: string;
+  journeys: number;
+  avg_scroll: number;
+  exit_intent_pct: number;
+}
+
 export interface DominionFunnelResponse {
   kpis: DominionFunnelKpis;
   reaching: FunnelStage[];
@@ -151,6 +158,9 @@ export interface DominionFunnelResponse {
   journeys: DominionJourneysPage;
   // Phase 2 anonymous visitor continuity. Optional/defaulted for older Hub.
   continuity: DominionContinuity;
+  // Phase 3: spend/CPA + engagement-by-step. Optional/defaulted for older Hub.
+  cost: { cost_total: number; cpa: number | null };
+  engagement_by_step: DominionEngagementStep[];
   meta: DominionFunnelMeta;
 }
 
@@ -537,6 +547,8 @@ export const marketingApi = {
         unknown: 0,
         bridged: { count: 0, by_campaign: [] },
       },
+      cost: d.cost ?? { cost_total: 0, cpa: null },
+      engagement_by_step: d.engagement_by_step ?? [],
       meta: metaObj,
     };
   },

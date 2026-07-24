@@ -186,11 +186,23 @@ export default function DominionFunnel() {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
             <Kpi label="Landed" value={data.kpis.landed.toLocaleString()} />
             <Kpi label="Entered portal" value={data.kpis.entered.toLocaleString()} />
             <Kpi label="Enrolled" value={data.kpis.enrolled.toLocaleString()} accent />
             <Kpi label="Conversion" value={`${(data.kpis.conversion_rate * 100).toFixed(2)}%`} />
+            <Kpi
+              label="Spend"
+              value={
+                data.cost.cost_total > 0
+                  ? `$${data.cost.cost_total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : '—'
+              }
+            />
+            <Kpi
+              label="Cost / enrollment"
+              value={data.cost.cpa != null ? `$${data.cost.cpa.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+            />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2 mb-2">
@@ -250,6 +262,40 @@ export default function DominionFunnel() {
                 </p>
               </Card>
             </div>
+          )}
+
+          {data.engagement_by_step.length > 0 && (
+            <Card className="p-4 mb-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                Engagement by furthest step
+              </h3>
+              <p className="text-[11px] text-slate-400 mb-3">
+                Did people who dropped early engage less? Avg landing-page scroll depth and exit-intent
+                rate, by how far each journey got.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-slate-500 border-b border-slate-100">
+                      <th className="px-3 py-2 font-medium">Furthest step</th>
+                      <th className="px-3 py-2 font-medium text-right">Journeys</th>
+                      <th className="px-3 py-2 font-medium text-right">Avg scroll</th>
+                      <th className="px-3 py-2 font-medium text-right">Showed exit intent</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.engagement_by_step.map((s) => (
+                      <tr key={s.step} className="border-b border-slate-50">
+                        <td className="px-3 py-2 capitalize">{s.step}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{s.journeys.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{s.avg_scroll}%</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{s.exit_intent_pct}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           )}
 
           <div className="text-xs text-slate-400 space-y-1 mb-4">
