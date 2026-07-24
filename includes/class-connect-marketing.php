@@ -147,6 +147,13 @@ class Peanut_Connect_Marketing {
             'permission_callback' => $perms,
         ]);
 
+        // Shareable enrolled-report PDF (base64 in a JSON envelope from Hub).
+        register_rest_route($ns, '/marketing/dominion-funnel/enrolled-report', [
+            'methods'             => 'GET',
+            'callback'            => [self::class, 'dominion_enrolled_report'],
+            'permission_callback' => $perms,
+        ]);
+
         // Campaign lifecycle story — proxies to Hub's
         // /api/v1/marketing/campaign/{campaign}/story.
         register_rest_route($ns, '/marketing/campaign/(?P<campaign>[A-Za-z0-9_.\-]+)/story', [
@@ -264,6 +271,10 @@ class Peanut_Connect_Marketing {
 
     public static function dominion_funnel(WP_REST_Request $request) {
         return self::forward('GET', '/marketing/dominion-funnel', null, $request->get_query_params());
+    }
+
+    public static function dominion_enrolled_report(WP_REST_Request $request) {
+        return self::forward('GET', '/marketing/dominion-funnel/enrolled-report', null, $request->get_query_params());
     }
 
     public static function campaign_story(WP_REST_Request $request) {

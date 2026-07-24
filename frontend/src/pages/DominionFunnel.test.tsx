@@ -11,11 +11,10 @@ const fixture = {
     { stage: 'landed', label: 'Landed', count: 2263 },
     { stage: 'entered', label: 'Entered portal', count: 56 },
   ],
+  // Inside bars are the real gates only (login/dashboard are post-enrollment).
   inside: [
     { stage: 'entered', label: 'Entered', count: 56 },
     { stage: 'validation', label: 'Validation', count: 32 },
-    { stage: 'login', label: 'Login', count: 30 },
-    { stage: 'dashboard', label: 'Dashboard', count: 9 },
     { stage: 'enrolled', label: 'Enrolled', count: 6 },
   ],
   campaigns: [{ campaign: 'DOME2620RS1', landed: 1800 }],
@@ -56,8 +55,12 @@ const fixture = {
 };
 
 const dominionFunnel = vi.fn();
+const dominionEnrolledReport = vi.fn();
 vi.mock('@/api', () => ({
-  marketingApi: { dominionFunnel: (...a: any[]) => dominionFunnel(...a) },
+  marketingApi: {
+    dominionFunnel: (...a: any[]) => dominionFunnel(...a),
+    dominionEnrolledReport: (...a: any[]) => dominionEnrolledReport(...a),
+  },
   getVersion: () => '0.0.0-test', // consumed by the Layout sidebar chrome
 }));
 
@@ -74,6 +77,12 @@ describe('DominionFunnel', () => {
   beforeEach(() => {
     dominionFunnel.mockReset();
     dominionFunnel.mockResolvedValue(fixture);
+    dominionEnrolledReport.mockReset();
+    dominionEnrolledReport.mockResolvedValue({
+      filename: 'dominion-enrolled-2026-06-23-to-2026-07-23.pdf',
+      mime: 'application/pdf',
+      base64: btoa('%PDF-1.4 fake'),
+    });
   });
 
   it('renders KPIs, both funnels, footnotes, and the journeys table', async () => {
@@ -108,12 +117,39 @@ describe('DominionFunnel', () => {
   it('re-queries with a stage filter when a funnel stage is clicked', async () => {
     wrap(<DominionFunnel />);
     await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: /Dashboard/i }).length).toBeGreaterThan(0),
+      expect(screen.getAllByRole('button', { name: /Validation/i }).length).toBeGreaterThan(0),
     );
-    fireEvent.click(screen.getAllByRole('button', { name: /Dashboard/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /Validation/i })[0]);
     await waitFor(() =>
-      expect(dominionFunnel).toHaveBeenCalledWith(expect.objectContaining({ stage: 'dashboard' })),
+      expect(dominionFunnel).toHaveBeenCalledWith(expect.objectContaining({ stage: 'validation' })),
     );
+  });
+
+  it('downloads the enrolled-report PDF for the current filters', async () => {
+    // jsdom lacks URL.createObjectURL / anchor navigation — stub them.
+    const createUrl = vi.fn(() => 'blob:fake');
+    const revokeUrl = vi.fn();
+    (URL as any).createObjectURL = createUrl;
+    (URL as any).revokeObjectURL = revokeUrl;
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
+
+    wrap(<DominionFunnel />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Download enrolled PDF/i })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Download enrolled PDF/i }));
+
+    await waitFor(() => expect(dominionEnrolledReport).toHaveBeenCalledTimes(1));
+    // The report request must carry the active date-range + campaign filters.
+    expect(dominionEnrolledReport).toHaveBeenCalledWith(
+      expect.objectContaining({ from: expect.any(String), to: expect.any(String) }),
+    );
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled());
+    expect(createUrl).toHaveBeenCalled();
+
+    clickSpy.mockRestore();
   });
 
   it('shows the empty state when there are no journeys', async () => {

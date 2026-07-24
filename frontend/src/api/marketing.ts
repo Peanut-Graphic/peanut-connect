@@ -174,6 +174,21 @@ export interface DominionFunnelParams {
   per_page?: number;
 }
 
+/** Server-rendered enrolled-report PDF, returned base64 inside the JSON envelope. */
+export interface DominionEnrolledReport {
+  filename: string;
+  mime: string;
+  base64: string;
+}
+
+/** Filters for the enrolled-report PDF (no stage/pagination — the report is the full set). */
+export interface DominionEnrolledReportParams {
+  from?: string;
+  to?: string;
+  campaign?: string;
+  include_test?: boolean;
+}
+
 export interface JourneyStats {
   total_journeys: number;
   conversions: number;
@@ -550,6 +565,20 @@ export const marketingApi = {
       cost: d.cost ?? { cost_total: 0, cpa: null },
       engagement_by_step: d.engagement_by_step ?? [],
       meta: metaObj,
+    };
+  },
+
+  dominionEnrolledReport: async (
+    params: DominionEnrolledReportParams = {},
+  ): Promise<DominionEnrolledReport> => {
+    const res = await api.get('/marketing/dominion-funnel/enrolled-report', { params });
+    const body = (res.data ?? {}) as Record<string, any>;
+    // Same dual-shape handling as dominionFunnel: flattened at runtime, nested when raw.
+    const d = (body.data ?? body) as Record<string, any>;
+    return {
+      filename: (d.filename as string) ?? 'dominion-enrolled-report.pdf',
+      mime: (d.mime as string) ?? 'application/pdf',
+      base64: (d.base64 as string) ?? '',
     };
   },
 };
