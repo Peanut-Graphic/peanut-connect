@@ -32,6 +32,12 @@ const fixture = {
     ],
     meta: { current_page: 1, last_page: 1, per_page: 50, total: 1 },
   },
+  continuity: {
+    new: 40,
+    returning: 12,
+    unknown: 4,
+    bridged: { count: 3, by_campaign: [{ campaign: 'DOME2620RS1', count: 3 }] },
+  },
   meta: {
     from: '2026-06-23',
     to: '2026-07-23',
@@ -39,6 +45,7 @@ const fixture = {
     include_test: false,
     attribution_note: 'Attribution can undercount.',
     enrolled_note: 'Enrolled = portal success, not IS-confirmed.',
+    continuity_note: 'Anonymous visitor id; bridged shown separately.',
     generated_at: '2026-07-23T00:00:00+00:00',
   },
 };
@@ -73,6 +80,15 @@ describe('DominionFunnel', () => {
     expect(screen.getByText('0.27%')).toBeInTheDocument(); // conversion KPI
     expect(screen.getByText('Attribution can undercount.')).toBeInTheDocument();
     expect(screen.getByText('View timeline →')).toBeInTheDocument();
+  });
+
+  it('shows the new-vs-returning breakdown and a labeled bridged figure', async () => {
+    wrap(<DominionFunnel />);
+    await waitFor(() => expect(screen.getByText('New vs returning')).toBeInTheDocument());
+    expect(screen.getByText('40')).toBeInTheDocument(); // new
+    expect(screen.getByText('12')).toBeInTheDocument(); // returning
+    // Bridged is its own labeled figure, not merged into Enrolled.
+    expect(screen.getByText(/3 bridged/i)).toBeInTheDocument();
   });
 
   it('re-queries with a stage filter when a funnel stage is clicked', async () => {

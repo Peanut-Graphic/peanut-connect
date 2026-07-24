@@ -208,9 +208,54 @@ export default function DominionFunnel() {
             </Card>
           </div>
 
+          {data.continuity && (
+            <div className="grid gap-4 md:grid-cols-2 mb-4">
+              <Card className="p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                  New vs returning
+                </h3>
+                <div className="flex gap-6 text-sm">
+                  <div>
+                    <div className="text-2xl font-bold text-slate-800">
+                      {data.continuity.new.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-slate-500">New</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-slate-800">
+                      {data.continuity.returning.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-slate-500">Returning</div>
+                  </div>
+                  {data.continuity.unknown > 0 && (
+                    <div>
+                      <div className="text-2xl font-bold text-slate-400">
+                        {data.continuity.unknown.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-slate-500">Unknown</div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+              <Card className="p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                  Late-conversion attribution
+                </h3>
+                <div className="text-2xl font-bold text-violet-700">
+                  {data.continuity.bridged.count} bridged
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Enrollments whose click attribution expired, matched to the visitor's prior
+                  campaign. A strong inference — shown separately, not added to the enrolled total.
+                </p>
+              </Card>
+            </div>
+          )}
+
           <div className="text-xs text-slate-400 space-y-1 mb-4">
             <p>{data.meta.attribution_note}</p>
             <p>{data.meta.enrolled_note}</p>
+            {data.meta.continuity_note && <p>{data.meta.continuity_note}</p>}
           </div>
 
           <Card>
