@@ -130,7 +130,17 @@ export interface DominionFunnelMeta {
   include_test: boolean;
   attribution_note: string;
   enrolled_note: string;
+  // Phase 2 (Hub >= visitor-continuity deploy): note on the anonymous
+  // new/returning + bridged figures. Optional — older Hub omits it.
+  continuity_note?: string;
   generated_at: string;
+}
+
+export interface DominionContinuity {
+  new: number;
+  returning: number;
+  unknown: number;
+  bridged: { count: number; by_campaign: Array<{ campaign: string; count: number }> };
 }
 
 export interface DominionFunnelResponse {
@@ -139,6 +149,8 @@ export interface DominionFunnelResponse {
   inside: FunnelStage[];
   campaigns: DominionCampaignCount[];
   journeys: DominionJourneysPage;
+  // Phase 2 anonymous visitor continuity. Optional/defaulted for older Hub.
+  continuity: DominionContinuity;
   meta: DominionFunnelMeta;
 }
 
@@ -518,6 +530,12 @@ export const marketingApi = {
       journeys: d.journeys ?? {
         data: [],
         meta: { current_page: 1, last_page: 1, per_page: 0, total: 0 },
+      },
+      continuity: d.continuity ?? {
+        new: 0,
+        returning: 0,
+        unknown: 0,
+        bridged: { count: 0, by_campaign: [] },
       },
       meta: metaObj,
     };
