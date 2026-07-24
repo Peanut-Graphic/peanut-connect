@@ -38,6 +38,11 @@ const fixture = {
     unknown: 4,
     bridged: { count: 3, by_campaign: [{ campaign: 'DOME2620RS1', count: 3 }] },
   },
+  cost: { cost_total: 750, cpa: 125 },
+  engagement_by_step: [
+    { step: 'validation', journeys: 20, avg_scroll: 30, exit_intent_pct: 45 },
+    { step: 'enrolled', journeys: 6, avg_scroll: 88, exit_intent_pct: 0 },
+  ],
   meta: {
     from: '2026-06-23',
     to: '2026-07-23',
@@ -89,6 +94,15 @@ describe('DominionFunnel', () => {
     expect(screen.getByText('12')).toBeInTheDocument(); // returning
     // Bridged is its own labeled figure, not merged into Enrolled.
     expect(screen.getByText(/3 bridged/i)).toBeInTheDocument();
+  });
+
+  it('shows spend/CPA and the engagement-by-step table', async () => {
+    wrap(<DominionFunnel />);
+    await waitFor(() => expect(screen.getByText('Cost / enrollment')).toBeInTheDocument());
+    expect(screen.getByText('$750.00')).toBeInTheDocument(); // spend
+    expect(screen.getByText('$125.00')).toBeInTheDocument(); // CPA
+    expect(screen.getByText('Engagement by furthest step')).toBeInTheDocument();
+    expect(screen.getByText('45%')).toBeInTheDocument(); // validation exit-intent
   });
 
   it('re-queries with a stage filter when a funnel stage is clicked', async () => {
