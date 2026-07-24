@@ -16,6 +16,7 @@ import {
   buildFormTrackSnippet,
   buildConversionSnippet,
 } from '@/utils/trackingSnippets';
+import { getAppMode } from '@/config/appMode';
 import { Copy, Check, ExternalLink, ArrowLeft, ArrowRight, RotateCcw, Download } from 'lucide-react';
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -130,9 +131,14 @@ export default function Campaigns() {
   const queryClient = useQueryClient();
   const toast = useToast();
 
+  // The GTM tracking-setup endpoint is admin-only (manage_options). The scoped
+  // UTM Builder role can't reach it — and can't act on connection status anyway —
+  // so skip the query in builder mode rather than 403 on every load. Least-
+  // privilege: does NOT widen the builder's gated surface.
   const { data: tracking } = useQuery({
     queryKey: ['marketing', 'tracking-setup'],
     queryFn: () => marketingApi.trackingSetup(),
+    enabled: getAppMode() !== 'builder',
   });
 
   const build = useMutation({
