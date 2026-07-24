@@ -47,6 +47,41 @@ class Peanut_Connect_Rate_Limiter {
         $config = self::get_endpoint_config($endpoint);
         $key = self::get_cache_key($identifier, $endpoint);
 
+        // Atomic fast-path: with an external object cache (Redis/Memcached),
+        // wp_cache_incr is atomic, closing the read-then-write (TOCTOU) race
+        // where parallel requests all read the same count and slip past the
+        // limit. This is the only backstop on the unauthenticated write surface,
+        // so the race matters. Falls back to the transient path below only when
+        // no external cache is present — never weaker than before.
+        if (
+            function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache()
+            && function_exists('wp_cache_incr') && function_exists('wp_cache_add')
+        ) {
+            $group = 'peanut_connect_ratelimit';
+            // Seed the counter atomically (no-op if the key already exists), with
+            // the window as TTL — a clean fixed window: when the key expires the
+            // next request re-seeds it.
+            wp_cache_add($key, 0, $group, $config['window']);
+            $count = wp_cache_incr($key, 1, $group);
+            if ($count === false) {
+                // Key expired between add and incr — re-seed and count this one.
+                wp_cache_add($key, 1, $group, $config['window']);
+                $count = 1;
+            }
+            if ($count > $config['limit']) {
+                return new WP_Error(
+                    'rate_limit_exceeded',
+                    sprintf(
+                        /* translators: %d: seconds until rate limit resets */
+                        __('Rate limit exceeded. Please try again in %d seconds.', 'peanut-connect'),
+                        $config['window']
+                    ),
+                    ['status' => 429, 'retry_after' => $config['window']]
+                );
+            }
+            return true;
+        }
+
         $data = get_transient($key);
 
         if ($data === false) {

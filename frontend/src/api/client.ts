@@ -40,6 +40,35 @@ const api: AxiosInstance = axios.create({
 });
 
 /**
+ * Normalize boolean query params to '1' / '0' before they hit the wire.
+ *
+ * Axios serializes a JS boolean to the strings "true"/"false", which Laravel's
+ * `boolean` VALIDATION rule rejects (it only accepts 1/0/true/false as native,
+ * not the strings "true"/"false") — the exact shape that 422'd the Dominion
+ * funnel on `include_test`. '1'/'0' is the universally-safe form: it passes both
+ * the strict `boolean` rule AND `$request->boolean()`. Doing it here kills the
+ * whole class (archived, active, valid_only, include_test, any future flag) at
+ * one point instead of per-call. Exported for unit testing.
+ */
+export function normalizeBooleanParams(
+  params: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!params || typeof params !== 'object') return params;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(params)) {
+    out[k] = typeof v === 'boolean' ? (v ? '1' : '0') : v;
+  }
+  return out;
+}
+
+api.interceptors.request.use((cfg) => {
+  if (cfg.params) {
+    cfg.params = normalizeBooleanParams(cfg.params as Record<string, unknown>);
+  }
+  return cfg;
+});
+
+/**
  * Flatten a Hub success envelope into a single object for callers.
  *
  * Hub's API is not uniform: list/setup endpoints nest the payload under
