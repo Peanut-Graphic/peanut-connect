@@ -7,6 +7,22 @@ import Layout from '@/components/layout/Layout';
 import { Card } from '@/components/common';
 import { Funnel } from '@/components/charts/Funnel';
 
+/** Decode a base64 PDF payload and trigger a browser download. */
+function downloadBase64Pdf(base64: string, filename: string): void {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 const RANGES = [
   { label: 'Last 7 days', value: 7 },
   { label: 'Last 30 days', value: 30 },
@@ -43,6 +59,8 @@ export default function DominionFunnel() {
   const [showTest, setShowTest] = useState(false);
   const [stage, setStage] = useState('');
   const [page, setPage] = useState(1);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
 
   const isCustomRange = customFrom !== '' && customTo !== '';
   const range = isCustomRange ? { from: customFrom, to: customTo } : rangeFromDays(days);
@@ -85,6 +103,26 @@ export default function DominionFunnel() {
   };
   const onStageClick = (s: string) =>
     withPageReset(() => setStage((cur) => (cur === s ? '' : s)));
+
+  // Download the enrolled-report PDF for the CURRENT window + campaign filter.
+  const onDownloadPdf = async () => {
+    setDownloadError('');
+    setDownloading(true);
+    try {
+      const report = await marketingApi.dominionEnrolledReport({
+        from: range.from,
+        to: range.to,
+        campaign: campaign || undefined,
+        include_test: showTest,
+      });
+      if (!report.base64) throw new Error('Empty report');
+      downloadBase64Pdf(report.base64, report.filename);
+    } catch {
+      setDownloadError('Could not generate the PDF. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <Layout
@@ -174,7 +212,19 @@ export default function DominionFunnel() {
               Clear stage: {STEP_LABELS[stage] ?? stage} ×
             </button>
           )}
+          <button
+            type="button"
+            onClick={onDownloadPdf}
+            disabled={downloading}
+            className="ml-auto inline-flex items-center gap-1.5 border border-slate-300 rounded-lg text-sm py-2 px-3 text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            title="Download a shareable PDF of the enrolled journeys for the current filters"
+          >
+            {downloading ? 'Preparing…' : 'Download enrolled PDF'}
+          </button>
         </div>
+        {downloadError && (
+          <p className="px-4 pb-3 -mt-1 text-xs text-red-600">{downloadError}</p>
+        )}
       </Card>
 
       {isLoading && <Card className="p-6 text-sm text-slate-500">Loading funnel…</Card>}
