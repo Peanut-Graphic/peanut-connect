@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.27.1] - 2026-07-25
+
+### Added
+- Opt-in security response headers (`peanut_connect_security_headers`). When enabled, front-end page responses carry `Referrer-Policy: strict-origin-when-cross-origin`, a restrictive `Permissions-Policy` (geolocation/camera/microphone/payment/usb denied), and `X-Content-Type-Options: nosniff`. Values are overridable via the `peanut_connect_security_headers` filter, and any header already set by an upstream (edge WAF or server) is left untouched so no duplicate/conflicting header is emitted. Default off; intended mainly for sites without an edge that already sets these. Exposed in `Peanut_Connect_Security::get_settings()`.
+
 ## [3.21.0] - 2026-07-04
 
 ### Added
