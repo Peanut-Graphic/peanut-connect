@@ -33,4 +33,16 @@ describe('JourneyContextPanel', () => {
     render(<JourneyContextPanel events={[]} journey={{ pages_viewed: null, duration_seconds: null }} />);
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
+
+  it('coerces a numeric-string scroll depth (sync path stores depth as a string)', () => {
+    const stringDepth = [
+      {
+        id: 1, event_type: 'event', event_name: null, page_url: 'x', page_title: null,
+        event_at: '2026-07-22T12:00:00Z', event_data: { depth: '25' },
+      },
+    ] as any;
+    render(<JourneyContextPanel events={stringDepth} journey={{ pages_viewed: 2, duration_seconds: 262 }} />);
+    // Was "—" before the fix because typeof "25" !== 'number'.
+    expect(screen.getByText('25%')).toBeInTheDocument();
+  });
 });
