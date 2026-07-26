@@ -46,8 +46,12 @@ export function JourneyContextPanel({ events, journey }: Props) {
   const referrer = hostOf(firstDefined(events, (e) => e.referrer ?? undefined));
 
   const maxScroll = events.reduce((max, e) => {
-    const d = (e.event_data as { depth?: number } | null | undefined)?.depth;
-    return typeof d === 'number' && d > max ? d : max;
+    // depth arrives as a number OR a numeric string (the sync path stores it as a
+    // string, e.g. {"depth":"25"}), so coerce before comparing — otherwise a real
+    // scroll reading renders "—".
+    const raw = (e.event_data as { depth?: number | string } | null | undefined)?.depth;
+    const d = typeof raw === 'string' ? Number(raw) : raw;
+    return typeof d === 'number' && Number.isFinite(d) && d > max ? d : max;
   }, 0);
   const exitIntent = events.some(
     (e) => e.event_name === 'exit_intent' || e.event_type === 'exit_intent',
