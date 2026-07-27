@@ -21,6 +21,7 @@ import DominionFunnel from './pages/DominionFunnel';
 import DominionJourneyTimeline from './pages/DominionJourneyTimeline';
 import Tracking from './pages/Tracking';
 import Settings from './pages/Settings';
+import Help from './pages/Help';
 
 /**
  * Main Application Component
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="/errors" element={<ErrorLog />} />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/utms" element={<Utms />} />
+            <Route path="/help" element={<Help />} />
             <Route path="/links" element={<Links />} />
             <Route path="/videos" element={<Videos />} />
             <Route path="/analytics" element={<Analytics />} />
