@@ -48,7 +48,7 @@ export default function CampaignBuilderGuide({ showLogin = true }: { showLogin?:
           <H>Logging in</H>
           <ol className="space-y-2.5">
             <Step n={1} title="Open the sign-in page">
-              Go to <span className="font-semibold text-slate-800">www.dominionenergyptr.com/wp-admin</span> and
+              Go to <span className="font-semibold text-slate-800">www.dominionenergyptr.com/itron-login</span> and
               sign in with the username and password you were given.
             </Step>
             <Step n={2} title="Open the builder">
