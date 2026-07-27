@@ -14,6 +14,7 @@ import {
   History,
   Download,
   Settings,
+  HelpCircle,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -49,6 +50,7 @@ export const NAV: NavGroup[] = [
       { label: 'UTM Builder', href: '/utms', icon: Tag },
       { label: 'Short Links', href: '/links', icon: LinkIcon },
       { label: 'Tracking Code', href: '/tracking', icon: Code2 },
+      { label: 'Help', href: '/help', icon: HelpCircle },
     ],
   },
   {

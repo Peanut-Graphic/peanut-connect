@@ -7,7 +7,7 @@ import { NAV } from './nav';
 const KNOWN_ROUTES = new Set([
   '/', '/analytics', '/campaigns', '/analytics/journeys',
   '/analytics/dominion-funnel', '/videos', '/utms', '/links', '/tracking',
-  '/health', '/analytics/gtm-coverage', '/errors', '/activity', '/updates',
+  '/help', '/health', '/analytics/gtm-coverage', '/errors', '/activity', '/updates',
   '/settings',
 ]);
 

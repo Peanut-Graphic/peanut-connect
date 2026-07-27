@@ -17,6 +17,7 @@ import {
   buildConversionSnippet,
 } from '@/utils/trackingSnippets';
 import { getAppMode } from '@/config/appMode';
+import CampaignBuilderGuide from '@/components/CampaignBuilderGuide';
 import { Copy, Check, ExternalLink, ArrowLeft, ArrowRight, RotateCcw, Download } from 'lucide-react';
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -459,18 +460,8 @@ function BasicsStep({
     <Card>
       <CardHeader title="Step 1 — Campaign basics" description={STEPS[0].description} />
 
-      <InfoPanel variant="guide" title="New here? How this works" collapsible defaultOpen={false} className="mb-4">
-        <p className="mb-2">
-          You're building a <b>tracked link</b> for a campaign. Fill in the fields below, and the
-          builder gives you a short link and a QR code to use on print, email, or social — every
-          click and scan is counted in reporting.
-        </p>
-        <ul className="list-disc pl-5 space-y-1 text-sm">
-          <li><b>Three fields are required:</b> Source, Medium, and Campaign. The rest are optional but make reports richer.</li>
-          <li>Already have a full UTM link? Paste it in the first box and everything auto-fills.</li>
-          <li>Hover the small hint under each field for what it means. Keep names consistent (same spelling every time).</li>
-          <li>You'll get the short link and QR code on the last step ("Done").</li>
-        </ul>
+      <InfoPanel variant="guide" title="New here? Read the step-by-step guide" collapsible defaultOpen={false} className="mb-4">
+        <CampaignBuilderGuide showLogin={false} />
       </InfoPanel>
 
       <form
