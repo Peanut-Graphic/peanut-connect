@@ -17,6 +17,12 @@ describe('CampaignBuilderGuide', () => {
     expect(screen.getByText(/Download SVG/i)).toBeInTheDocument();
   });
 
+  it('points the login step at the dedicated /itron-login entry (not raw /wp-admin)', () => {
+    render(<CampaignBuilderGuide />);
+    expect(screen.getByText(/www\.dominionenergyptr\.com\/itron-login/)).toBeInTheDocument();
+    expect(screen.queryByText(/wp-admin/)).not.toBeInTheDocument();
+  });
+
   it('shows the login steps by default and hides them when showLogin is false', () => {
     const { rerender } = render(<CampaignBuilderGuide />);
     expect(screen.getByText(/Logging in/i)).toBeInTheDocument();
