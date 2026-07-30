@@ -52,6 +52,8 @@ export interface Link {
   title: string | null;
   description: string | null;
   is_active: boolean;
+  /** True when the destination is a tel: number (click-to-call), not a web page. */
+  is_call?: boolean;
   click_count: number;
   expires_at: string | null;
   short_url?: string;

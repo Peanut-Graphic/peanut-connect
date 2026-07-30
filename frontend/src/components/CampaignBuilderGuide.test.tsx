@@ -17,6 +17,13 @@ describe('CampaignBuilderGuide', () => {
     expect(screen.getByText(/Download SVG/i)).toBeInTheDocument();
   });
 
+  it('documents the click-to-call option', () => {
+    render(<CampaignBuilderGuide />);
+    expect(screen.getByText(/Making a click-to-call link/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Phone number/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Taps and scans are still counted/i)).toBeInTheDocument();
+  });
+
   it('points the login step at the dedicated /itron-login entry (not raw /wp-admin)', () => {
     render(<CampaignBuilderGuide />);
     expect(screen.getByText(/www\.dominionenergyptr\.com\/itron-login/)).toBeInTheDocument();

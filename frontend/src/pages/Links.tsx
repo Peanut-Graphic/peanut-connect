@@ -120,7 +120,17 @@ function LinkRow({
   return (
     <tr className="hover:bg-slate-50">
       <td className="px-4 py-3">
-        <div className="font-mono text-slate-900">/{link.slug}</div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-slate-900">/{link.slug}</span>
+          {link.is_call && (
+            <span
+              className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-700"
+              title="Click-to-call — dials a phone number. Its clicks are counted but kept out of campaign conversion rates."
+            >
+              Call
+            </span>
+          )}
+        </div>
         {link.title && <div className="text-xs text-slate-500">{link.title}</div>}
       </td>
       <td className="px-4 py-3">

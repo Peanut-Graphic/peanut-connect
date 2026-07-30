@@ -84,6 +84,21 @@ export default function CampaignBuilderGuide({ showLogin = true }: { showLogin?:
         Step 1 and every field fills in automatically. Then click <b>Continue</b>.
       </p>
 
+      <H>Making a click-to-call link?</H>
+      <p>
+        If your campaign should <b>dial a phone number</b> instead of opening a web page, check{' '}
+        <b>“This is a click-to-call link”</b> in Step 1. The <b>Destination URL</b> field becomes a{' '}
+        <b>Phone number</b> field — enter the number with its country code (e.g. <span className="font-mono text-xs">+1 555 123 4567</span>).
+      </p>
+      <ul className="mt-1.5 list-disc pl-5 space-y-1 text-slate-600">
+        <li>You still get a short link and QR code — tapping or scanning it dials the number.</li>
+        <li><b>Taps and scans are still counted</b>, so you'll see the click totals in reporting.</li>
+        <li>
+          There's no on-site journey (a phone call has nothing to land on), and Step 3 (Tracking) has nothing to
+          install for a call link.
+        </li>
+      </ul>
+
       <H>Step 2 — Get your short link</H>
       <p>
         The builder <b>automatically creates a short link</b> (a random 6-character code). Prefer a memorable one?
@@ -101,8 +116,8 @@ export default function CampaignBuilderGuide({ showLogin = true }: { showLogin?:
 
       <H>Step 3 — Tracking (nothing to do)</H>
       <p>
-        This step shows tracking code for the website. <b>It's already installed</b>, so you don't need to touch
-        anything here — just click <b>Create campaign</b> to save.
+        This step shows tracking code for the website. <b>It's already installed</b> (and a click-to-call link has
+        nothing to install), so you don't need to touch anything here — just click <b>Create campaign</b> to save.
       </p>
 
       <H>Step 4 — Grab your link and QR code</H>
