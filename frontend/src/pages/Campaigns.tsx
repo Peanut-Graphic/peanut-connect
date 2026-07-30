@@ -32,6 +32,8 @@ const STEPS: { label: string; description: string }[] = [
 interface WizardState {
   name: string;
   base_url: string;
+  is_call: boolean;
+  phone: string;
   utm_source: string;
   utm_medium: string;
   utm_campaign: string;
@@ -45,6 +47,8 @@ interface WizardState {
 const INITIAL_STATE: WizardState = {
   name: '',
   base_url: '',
+  is_call: false,
+  phone: '',
   utm_source: '',
   utm_medium: '',
   utm_campaign: '',
@@ -54,6 +58,19 @@ const INITIAL_STATE: WizardState = {
   send_count: '',
   campaign_cost: '',
 };
+
+/** Normalize a typed phone number to a tel: URL (keep a leading +, digits only). */
+export function toTelUrl(phone: string): string {
+  const trimmed = phone.trim();
+  const plus = trimmed.startsWith('+') ? '+' : '';
+  return 'tel:' + plus + trimmed.replace(/[^\d]/g, '');
+}
+
+/** A dialable number has 7–15 digits (E.164 range). */
+export function isValidPhone(phone: string): boolean {
+  const digits = phone.replace(/[^\d]/g, '');
+  return digits.length >= 7 && digits.length <= 15;
+}
 
 const DRAFT_KEY = 'peanut-connect:campaign-wizard-draft';
 
@@ -182,7 +199,9 @@ export default function Campaigns() {
   function handleSubmit() {
     const payload: CampaignBuildInput = {
       name: state.name.trim(),
-      base_url: state.base_url.trim(),
+      // Click-to-call campaigns target a phone number; the click is still
+      // tracked, but the destination is a tel: link (no landing page).
+      base_url: state.is_call ? toTelUrl(state.phone) : state.base_url.trim(),
       utm_source: state.utm_source.trim().toLowerCase(),
       utm_medium: state.utm_medium.trim().toLowerCase(),
       utm_campaign: state.utm_campaign.trim(),
@@ -224,7 +243,7 @@ export default function Campaigns() {
 
   const step0Valid =
     state.name.trim() !== '' &&
-    state.base_url.trim() !== '' &&
+    (state.is_call ? isValidPhone(state.phone) : state.base_url.trim() !== '') &&
     state.utm_source.trim() !== '' &&
     state.utm_medium.trim() !== '' &&
     state.utm_campaign.trim() !== '';
@@ -318,6 +337,7 @@ export default function Campaigns() {
           {step === 2 && (
             <TrackingStep
               tracking={tracking}
+              isCall={state.is_call}
               onBack={() => setStep(1)}
               onSubmit={handleSubmit}
               submitting={build.isPending}
@@ -471,16 +491,20 @@ function BasicsStep({
           if (valid) onNext();
         }}
       >
-        <Input
-          label="Already have a UTM URL? Paste it here"
-          placeholder="https://example.com/page?utm_source=...&utm_medium=...&utm_campaign=..."
-          type="text"
-          value={pastedUrl}
-          onChange={(e) => handlePasteUrl(e.target.value)}
-          hint="Auto-fills the destination URL and all UTM fields below."
-        />
-        {pasteError && (
-          <p className="text-sm text-red-600 -mt-2">{pasteError}</p>
+        {!state.is_call && (
+          <>
+            <Input
+              label="Already have a UTM URL? Paste it here"
+              placeholder="https://example.com/page?utm_source=...&utm_medium=...&utm_campaign=..."
+              type="text"
+              value={pastedUrl}
+              onChange={(e) => handlePasteUrl(e.target.value)}
+              hint="Auto-fills the destination URL and all UTM fields below."
+            />
+            {pasteError && (
+              <p className="text-sm text-red-600 -mt-2">{pasteError}</p>
+            )}
+          </>
         )}
         <Input
           label="Campaign name"
@@ -490,15 +514,44 @@ function BasicsStep({
           onChange={(e) => update('name', e.target.value)}
           hint="Human-readable label that shows up in reports."
         />
-        <Input
-          label="Destination URL"
-          placeholder="https://example.com/landing"
-          type="url"
-          required
-          value={state.base_url}
-          onChange={(e) => update('base_url', e.target.value)}
-          hint="Where the link should send people."
-        />
+
+        <label className="flex items-start gap-2.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-0.5 rounded border-slate-300"
+            checked={state.is_call}
+            onChange={(e) => update('is_call', e.target.checked)}
+          />
+          <span className="text-sm text-slate-700">
+            <span className="font-medium text-slate-800">This is a click-to-call link</span>
+            <span className="block text-xs text-slate-500 mt-0.5">
+              The link dials a phone number instead of opening a web page. Taps and QR scans are still
+              counted — but there's no on-site journey (nothing to land on).
+            </span>
+          </span>
+        </label>
+
+        {state.is_call ? (
+          <Input
+            label="Phone number"
+            placeholder="+1 555 123 4567"
+            type="tel"
+            required
+            value={state.phone}
+            onChange={(e) => update('phone', e.target.value)}
+            hint="The number to dial. Include the country code (e.g. +1). Digits, spaces, and dashes are fine."
+          />
+        ) : (
+          <Input
+            label="Destination URL"
+            placeholder="https://example.com/landing"
+            type="url"
+            required
+            value={state.base_url}
+            onChange={(e) => update('base_url', e.target.value)}
+            hint="Where the link should send people."
+          />
+        )}
         <div className="grid gap-4 sm:grid-cols-3">
           <Input
             label="Source"
@@ -619,11 +672,13 @@ function ShortLinkStep({
 
 function TrackingStep({
   tracking,
+  isCall = false,
   onBack,
   onSubmit,
   submitting,
 }: {
   tracking: TrackingSetup | undefined;
+  isCall?: boolean;
   onBack: () => void;
   onSubmit: () => void;
   submitting: boolean;
@@ -634,6 +689,31 @@ function TrackingStep({
   );
   const formTrackSnippet = buildFormTrackSnippet();
   const conversionSnippet = buildConversionSnippet();
+
+  // Click-to-call links have no landing page, so the on-page GTM tags don't
+  // apply. Clicks are still counted by the short link itself.
+  if (isCall) {
+    return (
+      <Card>
+        <CardHeader title="Step 3 — Tracking" description="Nothing to install for a click-to-call link." />
+        <div className="space-y-5">
+          <p className="text-sm text-slate-600">
+            A click-to-call link dials a phone number — there's no landing page to add tracking code to.
+            Every tap and QR scan is still counted by the short link itself, so you'll see the click totals in
+            reporting. Just create the campaign.
+          </p>
+          <div className="flex justify-between pt-2">
+            <Button variant="ghost" onClick={onBack} icon={<ArrowLeft className="w-4 h-4" />}>
+              Back
+            </Button>
+            <Button onClick={onSubmit} disabled={submitting}>
+              {submitting ? 'Building…' : 'Create campaign'}
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card>
