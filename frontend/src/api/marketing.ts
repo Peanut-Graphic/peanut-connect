@@ -170,6 +170,8 @@ export interface DominionFunnelParams {
   from?: string;
   to?: string;
   campaign?: string;
+  /** Multi-select filter: comma-separated campaign names (CSV survives the WP proxy). */
+  campaigns?: string;
   include_test?: boolean;
   stage?: string;
   page?: number;
@@ -188,6 +190,8 @@ export interface DominionEnrolledReportParams {
   from?: string;
   to?: string;
   campaign?: string;
+  /** Multi-select filter: comma-separated campaign names (CSV survives the WP proxy). */
+  campaigns?: string;
   include_test?: boolean;
 }
 

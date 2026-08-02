@@ -114,6 +114,44 @@ describe('DominionFunnel', () => {
     expect(screen.getByText('45%')).toBeInTheDocument(); // validation exit-intent
   });
 
+  it('filters by multiple campaigns via the checkbox picker (CSV param)', async () => {
+    dominionFunnel.mockResolvedValue({
+      ...fixture,
+      campaigns: [
+        { campaign: 'DOME2620RS1', landed: 1800 },
+        { campaign: 'USA_Display', landed: 300 },
+      ],
+    });
+    wrap(<DominionFunnel />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /All campaigns/i })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /All campaigns/i }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'DOME2620RS1' }));
+    await waitFor(() =>
+      expect(dominionFunnel).toHaveBeenCalledWith(
+        expect.objectContaining({ campaigns: 'DOME2620RS1' }),
+      ),
+    );
+
+    // Second selection joins as CSV; the picker button now shows the count.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'USA_Display' }));
+    await waitFor(() =>
+      expect(dominionFunnel).toHaveBeenCalledWith(
+        expect.objectContaining({ campaigns: 'DOME2620RS1,USA_Display' }),
+      ),
+    );
+
+    // Clear returns to the unfiltered view.
+    fireEvent.click(screen.getByRole('button', { name: /^Clear$/i }));
+    await waitFor(() =>
+      expect(dominionFunnel).toHaveBeenCalledWith(
+        expect.objectContaining({ campaigns: undefined }),
+      ),
+    );
+  });
+
   it('re-queries with a stage filter when a funnel stage is clicked', async () => {
     wrap(<DominionFunnel />);
     await waitFor(() =>

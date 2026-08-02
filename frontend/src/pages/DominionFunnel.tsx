@@ -5,6 +5,7 @@ import { marketingApi } from '@/api';
 import type { DominionFunnelParams } from '@/api';
 import Layout from '@/components/layout/Layout';
 import { Card } from '@/components/common';
+import { CampaignFilter } from '@/components/common/CampaignFilter';
 import { Funnel } from '@/components/charts/Funnel';
 
 /** Decode a base64 PDF payload and trigger a browser download. */
@@ -55,7 +56,7 @@ export default function DominionFunnel() {
   const [days, setDays] = useState<(typeof RANGES)[number]['value']>(30);
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
-  const [campaign, setCampaign] = useState('');
+  const [campaigns, setCampaigns] = useState<string[]>([]);
   const [showTest, setShowTest] = useState(false);
   const [stage, setStage] = useState('');
   const [page, setPage] = useState(1);
@@ -82,10 +83,12 @@ export default function DominionFunnel() {
     [campaignsQuery.data],
   );
 
+  // Multi-select filter travels as a CSV `campaigns` param (survives the WP
+  // proxy's query forwarding); empty selection = all campaigns.
   const params: DominionFunnelParams = {
     from: range.from,
     to: range.to,
-    campaign: campaign || undefined,
+    campaigns: campaigns.length > 0 ? campaigns.join(',') : undefined,
     include_test: showTest,
     stage: stage || undefined,
     page,
@@ -103,6 +106,11 @@ export default function DominionFunnel() {
   };
   const onStageClick = (s: string) =>
     withPageReset(() => setStage((cur) => (cur === s ? '' : s)));
+  const onToggleCampaign = (c: string) =>
+    withPageReset(() =>
+      setCampaigns((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c])),
+    );
+  const onClearCampaigns = () => withPageReset(() => setCampaigns([]));
 
   // Download the enrolled-report PDF for the CURRENT window + campaign filter.
   const onDownloadPdf = async () => {
@@ -112,7 +120,7 @@ export default function DominionFunnel() {
       const report = await marketingApi.dominionEnrolledReport({
         from: range.from,
         to: range.to,
-        campaign: campaign || undefined,
+        campaigns: campaigns.length > 0 ? campaigns.join(',') : undefined,
         include_test: showTest,
       });
       if (!report.base64) throw new Error('Empty report');
@@ -177,19 +185,6 @@ export default function DominionFunnel() {
               className="border border-slate-300 rounded text-xs py-1 px-2"
             />
           </div>
-          <select
-            value={campaign}
-            onChange={(e) => withPageReset(() => setCampaign(e.target.value))}
-            className="border border-slate-300 rounded-lg text-sm py-2 pl-3 pr-8 max-w-[14rem]"
-            aria-label="Campaign"
-          >
-            <option value="">All campaigns</option>
-            {campaignOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
           <button
             type="button"
             onClick={() => withPageReset(() => setShowTest((v) => !v))}
@@ -221,6 +216,15 @@ export default function DominionFunnel() {
           >
             {downloading ? 'Preparing…' : 'Download enrolled PDF'}
           </button>
+        </div>
+        <div className="px-4 pb-3 -mt-1">
+          <CampaignFilter
+            all={campaignOptions}
+            selected={campaigns}
+            onToggle={onToggleCampaign}
+            onClear={onClearCampaigns}
+            hint="Check one or more campaigns to filter the funnel."
+          />
         </div>
         {downloadError && (
           <p className="px-4 pb-3 -mt-1 text-xs text-red-600">{downloadError}</p>
