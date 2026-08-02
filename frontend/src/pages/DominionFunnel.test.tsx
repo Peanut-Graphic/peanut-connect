@@ -114,6 +114,18 @@ describe('DominionFunnel', () => {
     expect(screen.getByText('45%')).toBeInTheDocument(); // validation exit-intent
   });
 
+  it('renders the campaign picker outside any overflow-hidden container', async () => {
+    // Regression: the picker lived inside <Card> (overflow-hidden), which
+    // clipped the absolute checkbox dropdown to the card edge — only the
+    // first options were visible and the list could not scroll.
+    wrap(<DominionFunnel />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /All campaigns/i })).toBeInTheDocument(),
+    );
+    const trigger = screen.getByRole('button', { name: /All campaigns/i });
+    expect(trigger.closest('.overflow-hidden')).toBeNull();
+  });
+
   it('filters by multiple campaigns via the checkbox picker (CSV param)', async () => {
     dominionFunnel.mockResolvedValue({
       ...fixture,

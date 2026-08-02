@@ -217,19 +217,20 @@ export default function DominionFunnel() {
             {downloading ? 'Preparing…' : 'Download enrolled PDF'}
           </button>
         </div>
-        <div className="px-4 pb-3 -mt-1">
-          <CampaignFilter
-            all={campaignOptions}
-            selected={campaigns}
-            onToggle={onToggleCampaign}
-            onClear={onClearCampaigns}
-            hint="Check one or more campaigns to filter the funnel."
-          />
-        </div>
         {downloadError && (
           <p className="px-4 pb-3 -mt-1 text-xs text-red-600">{downloadError}</p>
         )}
       </Card>
+
+      {/* Outside the Card: its overflow-hidden clips the absolute dropdown
+          (same placement as the Analytics page's picker). */}
+      <CampaignFilter
+        all={campaignOptions}
+        selected={campaigns}
+        onToggle={onToggleCampaign}
+        onClear={onClearCampaigns}
+        hint="Check one or more campaigns to filter the funnel."
+      />
 
       {isLoading && <Card className="p-6 text-sm text-slate-500">Loading funnel…</Card>}
       {isError && (
