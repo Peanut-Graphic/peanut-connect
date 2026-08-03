@@ -269,6 +269,11 @@ class Peanut_Connect_Feedback {
                     <button type="submit" name="pcf_action" value="generate" class="button"><?php esc_html_e('Generate a new token', 'peanut-connect'); ?></button>
                 </p>
             </form>
+            <?php
+            if (class_exists('Peanut_Connect_Approvals')) {
+                Peanut_Connect_Approvals::render_admin_section();
+            }
+            ?>
         </div>
         <?php
     }

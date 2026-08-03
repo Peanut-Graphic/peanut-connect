@@ -332,4 +332,137 @@ class Peanut_Connect_Approvals {
         self::save_page_state($path, $state);
         return new \WP_REST_Response(['success' => true, 'votes' => self::public_votes($state['votes'])], 200);
     }
+
+    /**
+     * "Approvers" section on the Mark It Up admin page: manage the
+     * name+initials rows the widget renders as chips, and reset recorded
+     * approvals (per page or site-wide). Admin-only, nonce-gated, own form.
+     */
+    public static function render_admin_section(): void {
+        if (! current_user_can('manage_options')) {
+            return;
+        }
+
+        $notice = self::handle_admin_post();
+
+        $approvers = self::approvers();
+        $pages     = array_keys(self::all_pages_state());
+        sort($pages);
+        ?>
+        <hr />
+        <h2><?php esc_html_e('Approvers', 'peanut-connect'); ?></h2>
+        <?php if ($notice !== '') : ?>
+            <div class="notice notice-success is-dismissible"><p><?php echo esc_html($notice); ?></p></div>
+        <?php endif; ?>
+        <p style="max-width:640px">
+            <?php esc_html_e('Approvers appear as initials chips in the Mark It Up panel ("Click your initials to approve"). Anyone with review access can click a chip — this is a lightweight sign-off, not an authenticated signature.', 'peanut-connect'); ?>
+        </p>
+
+        <form method="post">
+            <?php wp_nonce_field('pca_approvers'); ?>
+            <table class="widefat striped" style="max-width:640px">
+                <thead><tr>
+                    <th><?php esc_html_e('Name', 'peanut-connect'); ?></th>
+                    <th style="width:90px"><?php esc_html_e('Initials', 'peanut-connect'); ?></th>
+                    <th style="width:150px"><?php esc_html_e('Order / remove', 'peanut-connect'); ?></th>
+                </tr></thead>
+                <tbody>
+                <?php if (empty($approvers)) : ?>
+                    <tr><td colspan="3"><?php esc_html_e('No approvers yet — add one below.', 'peanut-connect'); ?></td></tr>
+                <?php endif; ?>
+                <?php foreach ($approvers as $i => $row) : ?>
+                    <tr>
+                        <td>
+                            <input type="hidden" name="pca_id[]" value="<?php echo esc_attr($row['id']); ?>" />
+                            <input type="text" name="pca_name[]" value="<?php echo esc_attr($row['name']); ?>" class="regular-text" />
+                        </td>
+                        <td><input type="text" name="pca_initials[]" value="<?php echo esc_attr($row['initials']); ?>" size="4" maxlength="3" /></td>
+                        <td>
+                            <button type="submit" name="pca_action" value="up-<?php echo esc_attr((string) $i); ?>" class="button" <?php disabled($i === 0); ?> aria-label="<?php esc_attr_e('Move up', 'peanut-connect'); ?>">&uarr;</button>
+                            <button type="submit" name="pca_action" value="down-<?php echo esc_attr((string) $i); ?>" class="button" <?php disabled($i === count($approvers) - 1); ?> aria-label="<?php esc_attr_e('Move down', 'peanut-connect'); ?>">&darr;</button>
+                            <button type="submit" name="pca_action" value="remove-<?php echo esc_attr((string) $i); ?>" class="button"><?php esc_html_e('Remove', 'peanut-connect'); ?></button>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <tr>
+                    <td><input type="text" name="pca_new_name" value="" class="regular-text" placeholder="<?php esc_attr_e('New approver name', 'peanut-connect'); ?>" /></td>
+                    <td><input type="text" name="pca_new_initials" value="" size="4" maxlength="3" placeholder="<?php esc_attr_e('NH', 'peanut-connect'); ?>" /></td>
+                    <td><button type="submit" name="pca_action" value="add" class="button"><?php esc_html_e('Add', 'peanut-connect'); ?></button></td>
+                </tr>
+                </tbody>
+            </table>
+            <p><button type="submit" name="pca_action" value="save" class="button button-primary"><?php esc_html_e('Save approvers', 'peanut-connect'); ?></button></p>
+
+            <h3><?php esc_html_e('Reset approvals', 'peanut-connect'); ?></h3>
+            <p style="max-width:640px" class="description">
+                <?php esc_html_e('Start a fresh review round after making changes. Resets clear the current chips; the full history (including the reset) stays recorded.', 'peanut-connect'); ?>
+            </p>
+            <p>
+                <select name="pca_reset_path">
+                    <option value=""><?php esc_html_e('Whole site (every page)', 'peanut-connect'); ?></option>
+                    <?php foreach ($pages as $page_path) : ?>
+                        <option value="<?php echo esc_attr($page_path); ?>"><?php echo esc_html($page_path); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <label style="margin-left:8px">
+                    <input type="checkbox" name="pca_reset_confirm" value="1" />
+                    <?php esc_html_e('Yes, clear these approvals', 'peanut-connect'); ?>
+                </label>
+                <button type="submit" name="pca_action" value="reset" class="button"><?php esc_html_e('Reset', 'peanut-connect'); ?></button>
+            </p>
+        </form>
+        <?php
+    }
+
+    /**
+     * Handle the Approvers form. Returns a success notice string ('' = no
+     * post handled). Every branch re-sanitizes through sanitize_approvers.
+     */
+    private static function handle_admin_post(): string {
+        if (empty($_POST['pca_action']) || ! check_admin_referer('pca_approvers')) {
+            return '';
+        }
+        $action = sanitize_text_field(wp_unslash($_POST['pca_action']));
+
+        // Rebuild rows from the posted table (keeps in-flight edits on every action).
+        $ids      = array_map('sanitize_text_field', wp_unslash($_POST['pca_id'] ?? []));
+        $names    = array_map('sanitize_text_field', wp_unslash($_POST['pca_name'] ?? []));
+        $initials = array_map('sanitize_text_field', wp_unslash($_POST['pca_initials'] ?? []));
+        $rows     = [];
+        foreach ($names as $i => $name) {
+            $rows[] = ['id' => $ids[$i] ?? '', 'name' => $name, 'initials' => $initials[$i] ?? ''];
+        }
+
+        if ($action === 'add') {
+            $rows[] = [
+                'name'     => sanitize_text_field(wp_unslash($_POST['pca_new_name'] ?? '')),
+                'initials' => sanitize_text_field(wp_unslash($_POST['pca_new_initials'] ?? '')),
+            ];
+        } elseif (preg_match('/^remove-(\d+)$/', $action, $m)) {
+            array_splice($rows, (int) $m[1], 1);
+        } elseif (preg_match('/^(up|down)-(\d+)$/', $action, $m)) {
+            $i = (int) $m[2];
+            $j = $m[1] === 'up' ? $i - 1 : $i + 1;
+            if (isset($rows[$i], $rows[$j])) {
+                [$rows[$i], $rows[$j]] = [$rows[$j], $rows[$i]];
+            }
+        } elseif ($action === 'reset') {
+            if (empty($_POST['pca_reset_confirm'])) {
+                return __('Reset skipped — tick the confirmation box first.', 'peanut-connect');
+            }
+            $path = sanitize_text_field(wp_unslash($_POST['pca_reset_path'] ?? ''));
+            $at   = gmdate('Y-m-d H:i:s');
+            $all  = [];
+            foreach (self::all_pages_state() as $p => $state) {
+                $all[$p] = ($path === '' || $p === $path) ? self::apply_reset($state, null, 'admin', $at) : $state;
+            }
+            update_option(self::APPROVALS_OPTION, $all, false);
+            return $path === ''
+                ? __('All approvals reset.', 'peanut-connect')
+                : sprintf(__('Approvals reset for %s.', 'peanut-connect'), $path);
+        }
+
+        update_option(self::APPROVERS_OPTION, self::sanitize_approvers($rows), false);
+        return __('Approvers saved.', 'peanut-connect');
+    }
 }
