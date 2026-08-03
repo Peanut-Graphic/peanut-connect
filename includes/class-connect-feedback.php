@@ -399,6 +399,7 @@ class Peanut_Connect_Feedback {
             'nonce'       => wp_create_nonce('wp_rest'),
             'isAgency'    => self::is_agency(),
             'reviewToken' => $token,
+            'approvers'   => class_exists('Peanut_Connect_Approvals') ? Peanut_Connect_Approvals::approvers() : [],
         ]);
     }
 
