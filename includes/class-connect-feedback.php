@@ -564,6 +564,24 @@ class Peanut_Connect_Feedback {
         return self::relay('POST', '/feedback', $payload);
     }
 
+    /**
+     * Server-side note create for sibling modules (the approvals "what needs
+     * to change" reason). Best-effort: relay/Hub failures return null and
+     * must not block the caller — the reason also lives on the approval
+     * record itself.
+     */
+    public static function store_note(array $req): ?int {
+        $payload = self::build_store_payload($req, self::is_agency());
+        $res     = self::relay('POST', '/feedback', $payload);
+        if ($res instanceof \WP_REST_Response) {
+            $data = $res->get_data();
+            if (is_array($data) && isset($data['feedback']['id'])) {
+                return (int) $data['feedback']['id'];
+            }
+        }
+        return null;
+    }
+
     public static function update(\WP_REST_Request $request) {
         $id = (int) $request['id'];
         $in = $request->get_json_params() ?: [];

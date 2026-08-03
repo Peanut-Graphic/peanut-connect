@@ -202,4 +202,33 @@ class Test_Connect_Approvals extends Peanut_Connect_TestCase
         $this->assertCount(1, $rows);
         $this->assertSame('NH', $rows[0]['initials']);
     }
+
+    // ---- build_vote_input (REST payload coercion) ----
+
+    public function test_build_vote_input_coerces_and_whitelists(): void
+    {
+        $in = Peanut_Connect_Approvals::build_vote_input([
+            'path'        => '/p?utm_source=x',
+            'page_title'  => 'Pricing',
+            'approver_id' => 'NH',
+            'vote'        => 'maybe',
+            'reason'      => '  needs work  ',
+            'author_key'  => str_repeat('k', 90),
+            'evil'        => 'dropped',
+        ]);
+        $this->assertSame('/p', $in['path']);
+        $this->assertSame('nh', $in['approver_id']);
+        $this->assertSame('yes', $in['vote']); // only literal 'no' is a rejection
+        $this->assertSame('needs work', $in['reason']);
+        $this->assertSame(64, strlen($in['author_key']));
+        $this->assertArrayNotHasKey('evil', $in);
+    }
+
+    public function test_build_vote_input_empty_request(): void
+    {
+        $in = Peanut_Connect_Approvals::build_vote_input([]);
+        $this->assertSame('/', $in['path']);
+        $this->assertSame('yes', $in['vote']);
+        $this->assertSame('', $in['approver_id']);
+    }
 }
