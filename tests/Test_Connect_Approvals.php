@@ -26,6 +26,21 @@ class Test_Connect_Approvals extends Peanut_Connect_TestCase
         parent::tearDown();
     }
 
+    // ---- coerce_string_list (admin form field coercion) ----
+
+    public function test_coerce_string_list_handles_scalar_input(): void
+    {
+        $this->assertSame([], Peanut_Connect_Approvals::coerce_string_list('foo'));
+        $this->assertSame([], Peanut_Connect_Approvals::coerce_string_list(''));
+        $this->assertSame([], Peanut_Connect_Approvals::coerce_string_list(123));
+    }
+
+    public function test_coerce_string_list_sanitizes_array_input(): void
+    {
+        $result = Peanut_Connect_Approvals::coerce_string_list(['a', 'b']);
+        $this->assertSame(['a', 'b'], $result);
+    }
+
     // ---- sanitize_approvers ----
 
     public function test_sanitize_approvers_builds_ids_and_initials(): void

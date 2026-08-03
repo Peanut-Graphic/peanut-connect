@@ -83,6 +83,15 @@ class Peanut_Connect_Approvals {
         return $slug !== '' ? $slug : 'approver';
     }
 
+    /**
+     * Coerce a raw input (scalar or array) to a sanitized string array. Used
+     * for admin form fields that may arrive as scalars if the browser/proxy
+     * garbles the POST data. Returns empty array if input is not array-like.
+     */
+    public static function coerce_string_list($raw): array {
+        return array_map('sanitize_text_field', is_array($raw) ? array_values($raw) : []);
+    }
+
     /** The configured approver list, always sanitized. */
     public static function approvers(): array {
         return self::sanitize_approvers(get_option(self::APPROVERS_OPTION, []));
@@ -425,9 +434,9 @@ class Peanut_Connect_Approvals {
         $action = sanitize_text_field(wp_unslash($_POST['pca_action']));
 
         // Rebuild rows from the posted table (keeps in-flight edits on every action).
-        $ids      = array_map('sanitize_text_field', wp_unslash($_POST['pca_id'] ?? []));
-        $names    = array_map('sanitize_text_field', wp_unslash($_POST['pca_name'] ?? []));
-        $initials = array_map('sanitize_text_field', wp_unslash($_POST['pca_initials'] ?? []));
+        $ids      = self::coerce_string_list(wp_unslash($_POST['pca_id'] ?? []));
+        $names    = self::coerce_string_list(wp_unslash($_POST['pca_name'] ?? []));
+        $initials = self::coerce_string_list(wp_unslash($_POST['pca_initials'] ?? []));
         $rows     = [];
         foreach ($names as $i => $name) {
             $rows[] = ['id' => $ids[$i] ?? '', 'name' => $name, 'initials' => $initials[$i] ?? ''];
