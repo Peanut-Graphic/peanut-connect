@@ -45,3 +45,7 @@ composer-setup.php
 # --- added by gitignore-sync on 2026-04-13 ---
 .claude/worktrees/
 .phpunit.result.cache
+
+# --- added by gitignore-sync on 2026-08-03 ---
+.cursor/*
+!.cursor/rules/
