@@ -184,3 +184,8 @@
 .pp-approve-no { background: #DC2626; }
 .pp-approve-ta { width: 100%; box-sizing: border-box; font: inherit; font-size: 12px; padding: 4px 6px; }
 .pp-approve-err { color: #DC2626; font-size: 11px; margin-top: 4px; }
+
+.pp-panel { resize: both; overflow: auto; min-width: 260px; min-height: 130px; max-width: 92vw; max-height: 85vh; }
+.pp-panel.pp-collapsed { resize: none; height: auto !important; }
+.pp-sw-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px; }
+.pp-chip-sm { min-width: 24px; height: 24px; font-size: 10px; line-height: 22px; text-align: center; cursor: default; }

@@ -447,6 +447,21 @@
     toggle.setAttribute('aria-label', panelState.open ? 'Collapse notes' : 'Expand notes');
   }
   applyCollapsed();
+  // Resizable panel — the approval strip and rollup need room; size persists.
+  const SIZE_KEY = 'ppFeedbackPanelSize';
+  try {
+    const sz = JSON.parse(localStorage.getItem(SIZE_KEY) || 'null');
+    if (sz && sz.w > 200 && sz.h > 100) { panel.style.width = sz.w + 'px'; panel.style.height = sz.h + 'px'; }
+  } catch (e) {}
+  if (window.ResizeObserver) {
+    let sizeTimer = null;
+    new ResizeObserver(() => {
+      if (sizeTimer) clearTimeout(sizeTimer);
+      sizeTimer = setTimeout(() => {
+        localStorage.setItem(SIZE_KEY, JSON.stringify({ w: panel.offsetWidth, h: panel.offsetHeight }));
+      }, 300);
+    }).observe(panel);
+  }
   const INTRO_KEY = 'ppFeedbackSeenIntro';
   if (!localStorage.getItem(INTRO_KEY)) {
     panelState.open = true; applyCollapsed();
@@ -466,18 +481,37 @@
     panel.querySelectorAll('.pp-tabbody').forEach((body) => { body.hidden = body.getAttribute('data-tab') !== b.getAttribute('data-tab'); });
     if (b.getAttribute('data-tab') === 'site' && !summaryCache) loadSummary();
   }));
+  function approvalChipsRow(votes) {
+    const row = document.createElement('div');
+    row.className = 'pp-sw-chips';
+    approvers.forEach((ap) => {
+      const v = votes ? votes[ap.id] : null;
+      const s = document.createElement('span');
+      s.className = 'pp-chip pp-chip-sm' + (v ? (v.vote === 'yes' ? ' pp-chip-yes' : ' pp-chip-no') : '');
+      s.textContent = ap.initials;
+      s.title = ap.name + (v ? (v.vote === 'yes' ? ' — Approved · ' : ' — Needs changes · ') + apprDate(v.at) : ' — no response yet');
+      row.appendChild(s);
+    });
+    return row;
+  }
   function loadSummary() {
     const box = panel.querySelector('.pp-sitewide');
     box.textContent = 'Loading…';
-    api('GET', '/feedback/summary').then((res) => {
-      if (!res || !res.pages) { box.textContent = 'Not available yet.'; return; }
-      summaryCache = res.pages;
+    const notesReq = api('GET', '/feedback/summary').catch(() => null);
+    const apprReq = approvers.length ? api('GET', '/approvals').catch(() => null) : Promise.resolve(null);
+    Promise.all([notesReq, apprReq]).then(([res, appr]) => {
+      const apprPages = (appr && appr.pages) || {};
+      if ((!res || !res.pages) && !Object.keys(apprPages).length) { box.textContent = 'Not available yet.'; return; }
+      summaryCache = (res && res.pages) || [];
       box.innerHTML = '';
-      res.pages.forEach((pg) => {
+      const seen = {};
+      summaryCache.forEach((pg) => {
         if (!pg || typeof pg.page_url !== 'string' || !/^\/(?!\/)/.test(pg.page_url)) return; // defense-in-depth: only same-site paths become hrefs
+        seen[pg.page_url] = true;
         const h = document.createElement('div'); h.className = 'pp-sw-page';
         h.textContent = (pg.page_title || pg.page_url) + ' — ' + pg.open_count + ' open, ' + pg.done_count + ' done';
         box.appendChild(h);
+        if (approvers.length) box.appendChild(approvalChipsRow(apprPages[pg.page_url]));
         (pg.notes || []).forEach((n) => {
           const a = document.createElement('a');
           a.className = 'pp-sw-note' + (n.status === 'done' ? ' pp-strike' : '');
@@ -486,7 +520,15 @@
           box.appendChild(a);
         });
       });
-    }).catch(() => { box.textContent = 'Not available yet.'; });
+      // Pages that have approval activity but no notes still show up.
+      Object.keys(apprPages).forEach((path) => {
+        if (seen[path] || !/^\/(?!\/)/.test(path)) return;
+        const h = document.createElement('div'); h.className = 'pp-sw-page';
+        h.textContent = path;
+        box.appendChild(h);
+        box.appendChild(approvalChipsRow(apprPages[path]));
+      });
+    });
   }
 
   // ---- approval chips ("Click your initials to approve") ----
