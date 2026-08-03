@@ -425,6 +425,8 @@
     '<li>Or click <strong>✎ Draw</strong> and drag to circle or scribble on the page, then add a note. Click <strong>✎ Draw</strong> again to stop.</li>' +
     '<li>Type your note. A marker appears; click it to read the note. Tick a note off in this list once it\'s handled.</li>' +
     '</ol></div>' +
+    '<div class="pp-approve" hidden><div class="pp-approve-label">Click your initials to approve:</div>' +
+    '<div class="pp-approve-chips"></div><div class="pp-approve-flow" hidden></div></div>' +
     '<div class="pp-tabs"><button class="pp-tab pp-tab-on" data-tab="page">This page</button><button class="pp-tab" data-tab="site">All pages</button></div>' +
     '<div class="pp-tabbody" data-tab="page"><div class="pp-filter"><select class="pp-by"><option value="">Everyone</option></select></div>' +
     '<ul class="pp-list"></ul></div>' +
@@ -485,6 +487,88 @@
         });
       });
     }).catch(() => { box.textContent = 'Not available yet.'; });
+  }
+
+  // ---- approval chips ("Click your initials to approve") ----
+  const approvers = Array.isArray(cfg.approvers) ? cfg.approvers : [];
+  let apprVotes = {};
+
+  function apprDate(at) {
+    try { return new Date(at.replace(' ', 'T') + 'Z').toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; }
+  }
+  function hideApproveFlow() {
+    const flow = panel.querySelector('.pp-approve-flow');
+    flow.hidden = true; flow.innerHTML = '';
+  }
+  function renderApprovals() {
+    const box = panel.querySelector('.pp-approve');
+    if (!approvers.length) { box.hidden = true; return; }
+    box.hidden = false;
+    const chips = box.querySelector('.pp-approve-chips');
+    chips.innerHTML = '';
+    approvers.forEach((ap) => {
+      const v = apprVotes[ap.id];
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pp-chip' + (v ? (v.vote === 'yes' ? ' pp-chip-yes' : ' pp-chip-no') : '');
+      b.textContent = ap.initials;
+      b.title = ap.name + (v
+        ? (v.vote === 'yes' ? ' — Approved · ' : ' — Needs changes · ') + apprDate(v.at)
+        : ' — no response yet');
+      b.setAttribute('aria-label', b.title);
+      b.addEventListener('click', () => askApprove(ap));
+      chips.appendChild(b);
+    });
+  }
+  function approveError(flow) {
+    let err = flow.querySelector('.pp-approve-err');
+    if (!err) { err = document.createElement('div'); err.className = 'pp-approve-err'; flow.appendChild(err); }
+    err.textContent = "couldn't save — try again";
+  }
+  function askApprove(ap) {
+    const flow = panel.querySelector('.pp-approve-flow');
+    flow.innerHTML = ''; flow.hidden = false;
+    const q = document.createElement('div'); q.className = 'pp-approve-q';
+    q.textContent = 'Is this approved?  (' + ap.name + ')';
+    const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'pp-approve-btn pp-approve-yes'; yes.textContent = 'YES';
+    const no = document.createElement('button'); no.type = 'button'; no.className = 'pp-approve-btn pp-approve-no'; no.textContent = 'NO';
+    const row = document.createElement('div'); row.className = 'pp-approve-row'; row.append(yes, no);
+    flow.append(q, row);
+    yes.addEventListener('click', () => sendVote(ap, 'yes', '', flow));
+    no.addEventListener('click', () => askReason(ap, flow));
+  }
+  function askReason(ap, flow) {
+    flow.innerHTML = '';
+    const q = document.createElement('div'); q.className = 'pp-approve-q';
+    q.textContent = 'What needs to change for approval?';
+    const ta = document.createElement('textarea'); ta.className = 'pp-approve-ta'; ta.rows = 3;
+    const submit = document.createElement('button'); submit.type = 'button'; submit.className = 'pp-approve-btn pp-approve-yes'; submit.textContent = 'submit';
+    const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'pp-approve-btn pp-approve-no'; edit.textContent = 'edit';
+    edit.title = 'Close and use the mark-it-up tools instead';
+    const row = document.createElement('div'); row.className = 'pp-approve-row'; row.append(submit, edit);
+    flow.append(q, ta, row);
+    ta.focus();
+    submit.addEventListener('click', () => sendVote(ap, 'no', ta.value.trim(), flow));
+    // "edit" = go mark up the page instead; the vote can be cast after.
+    edit.addEventListener('click', () => hideApproveFlow());
+  }
+  function sendVote(ap, vote, reason, flow) {
+    api('POST', '/approvals/vote', {
+      path: pageKey(), page_title: document.title,
+      approver_id: ap.id, vote: vote, reason: reason, author_key: authorKey(),
+    }).then((res) => {
+      if (res && res.success) {
+        apprVotes = res.votes || {};
+        hideApproveFlow(); renderApprovals();
+        if (vote === 'no' && reason && res.note_id) load(); // the reason is now a note — refresh the list
+      } else { approveError(flow); }
+    }).catch(() => approveError(flow));
+  }
+  function loadApprovals() {
+    if (!approvers.length) { renderApprovals(); return; }
+    api('GET', '/approvals?path=' + encodeURIComponent(pageKey()))
+      .then((res) => { apprVotes = (res && res.votes) || {}; renderApprovals(); })
+      .catch(() => { apprVotes = {}; renderApprovals(); });
   }
 
   (function drag() {
@@ -604,4 +688,5 @@
   window.addEventListener('resize', () => { renderMarkers(); hideTip(); });
   window.addEventListener('scroll', () => { renderMarkers(); hideTip(); }, { passive: true });
   load();
+  loadApprovals();
 })();
