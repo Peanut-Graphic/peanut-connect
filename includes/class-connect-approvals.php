@@ -568,6 +568,20 @@ class Peanut_Connect_Approvals {
                 </label>
                 <button type="submit" name="pca_action" value="reset" class="button"><?php esc_html_e('Reset', 'peanut-connect'); ?></button>
             </p>
+
+            <h3><?php esc_html_e('Notifications', 'peanut-connect'); ?></h3>
+            <?php $notify = self::sanitize_notify_settings(get_option(self::NOTIFY_OPTION, [])); ?>
+            <p>
+                <label for="pca_notify_email"><?php esc_html_e('Send approval emails to', 'peanut-connect'); ?></label><br />
+                <input type="email" id="pca_notify_email" name="pca_notify_email" class="regular-text" value="<?php echo esc_attr($notify['email']); ?>" placeholder="<?php echo esc_attr(get_option('admin_email', '')); ?>" />
+            </p>
+            <p class="description" style="max-width:640px"><?php esc_html_e('Immediate email when an approver requests changes, and when a page becomes fully approved. Blank uses the site admin email.', 'peanut-connect'); ?></p>
+            <p>
+                <label>
+                    <input type="checkbox" name="pca_notify_digest" value="1" <?php checked($notify['digest']); ?> />
+                    <?php esc_html_e('Also send a daily digest of pages still awaiting approval', 'peanut-connect'); ?>
+                </label>
+            </p>
         </form>
         <?php
     }
@@ -618,6 +632,15 @@ class Peanut_Connect_Approvals {
             return $path === ''
                 ? __('All approvals reset.', 'peanut-connect')
                 : sprintf(__('Approvals reset for %s.', 'peanut-connect'), $path);
+        }
+
+        $notify = self::sanitize_notify_settings([
+            'email'  => sanitize_text_field(wp_unslash($_POST['pca_notify_email'] ?? '')),
+            'digest' => ! empty($_POST['pca_notify_digest']),
+        ]);
+        update_option(self::NOTIFY_OPTION, $notify, false);
+        if (class_exists('Peanut_Connect_Approvals_Notify')) {
+            Peanut_Connect_Approvals_Notify::schedule($notify['digest']);
         }
 
         update_option(self::APPROVERS_OPTION, self::sanitize_approvers($rows), false);

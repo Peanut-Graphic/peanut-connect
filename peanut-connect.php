@@ -102,6 +102,7 @@ final class Peanut_Connect {
         // Visual feedback widget — review-mode pin/comment overlay (v3.8.0+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-feedback.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-approvals.php';
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-approvals-notify.php';
 
         // Security hardening (v2.5.0+)
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-security.php';
@@ -197,6 +198,7 @@ final class Peanut_Connect {
 
             // Initialize approvals module (Mark It Up)
             Peanut_Connect_Approvals::init();
+            Peanut_Connect_Approvals_Notify::init();
 
             // Schedule sync cron
             add_action('peanut_connect_hub_sync', [Peanut_Connect_Hub_Sync::class, 'run_sync']);
@@ -819,4 +821,9 @@ register_deactivation_hook(__FILE__, function() {
 
     // Clear ML training cron job (v3.7.1+)
     wp_clear_scheduled_hook('peanut_ml_connect_train');
+
+    // Clear approval notifications digest cron (v3.34.0+)
+    if (class_exists('Peanut_Connect_Approvals_Notify')) {
+        Peanut_Connect_Approvals_Notify::unschedule();
+    }
 });
