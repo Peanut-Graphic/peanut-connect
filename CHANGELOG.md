@@ -5,6 +5,14 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.35.0] - 2026-08-03
+
+### Added
+- **Required vs optional approvers.** Each approver row on the Mark It Up admin page gains a "Must approve" checkbox. Required approvers must give a fresh YES before a page counts as fully approved (gating the fully-approved email, the ready-queue auto-drop, and the sign-off record status); optional reviewers can vote and leave notes but never hold a page up. Optional reviewers render as dashed chips ("optional reviewer" on hover) and are marked in the sign-off record. Existing approvers default to required.
+
+### Fixed
+- **Front-page staleness read as fresh in wp-admin.** `url_to_postid()` on the bare home URL is context-dependent (resolved on the front end, returned 0 in wp-admin), so the sign-off record — and the daily digest — treated stale front-page approvals as current. The front page is now resolved explicitly via `page_on_front`. Verified live on staging.
+
 ## [3.34.0] - 2026-08-03
 
 ### Added

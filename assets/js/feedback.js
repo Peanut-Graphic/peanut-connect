@@ -489,9 +489,9 @@
       const v = votes ? votes[ap.id] : null;
       const cls = v ? (v.vote === 'yes' ? (v.stale ? ' pp-chip-stale' : ' pp-chip-yes') : ' pp-chip-no') : '';
       const s = document.createElement('span');
-      s.className = 'pp-chip pp-chip-sm' + cls;
+      s.className = 'pp-chip pp-chip-sm' + cls + (ap.required === false ? ' pp-chip-opt' : '');
       s.textContent = ap.initials;
-      s.title = ap.name + (v ? (v.vote === 'yes' ? (v.stale ? ' — Approved · ' + apprDate(v.at) + ' · page changed ' + apprDate(v.modified_at) : ' — Approved · ' + apprDate(v.at)) : ' — Needs changes · ' + apprDate(v.at)) : ' — no response yet');
+      s.title = ap.name + (v ? (v.vote === 'yes' ? (v.stale ? ' — Approved · ' + apprDate(v.at) + ' · page changed ' + apprDate(v.modified_at) : ' — Approved · ' + apprDate(v.at)) : ' — Needs changes · ' + apprDate(v.at)) : ' — no response yet') + (ap.required === false ? ' · optional reviewer' : '');
       row.appendChild(s);
     });
     return row;
@@ -514,7 +514,9 @@
           const v = votes[youId];
           return !v || v.vote !== 'yes' || v.stale;
         }
-        return !approvers.length || !approvers.every((ap) => { const v = votes[ap.id]; return v && v.vote === 'yes' && !v.stale; });
+        // Only REQUIRED approvers gate a page; optional reviewers never hold it up.
+        const req = approvers.filter((ap) => ap.required !== false);
+        return !req.length || !req.every((ap) => { const v = votes[ap.id]; return v && v.vote === 'yes' && !v.stale; });
       });
       if (needs.length) {
         const head = document.createElement('div'); head.className = 'pp-sw-page pp-needs-head';
@@ -577,12 +579,12 @@
       const cls = v ? (v.vote === 'yes' ? (v.stale ? ' pp-chip-stale' : ' pp-chip-yes') : ' pp-chip-no') : '';
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'pp-chip' + cls;
+      b.className = 'pp-chip' + cls + (ap.required === false ? ' pp-chip-opt' : '');
       if (youId && ap.id === youId) b.classList.add('pp-chip-you');
       b.textContent = ap.initials;
       b.title = ap.name + (v
         ? (v.vote === 'yes' ? (v.stale ? ' — Approved · ' + apprDate(v.at) + ' · page changed ' + apprDate(v.modified_at) : ' — Approved · ' + apprDate(v.at)) : ' — Needs changes · ' + apprDate(v.at))
-        : ' — no response yet');
+        : ' — no response yet') + (ap.required === false ? ' · optional reviewer' : '');
       b.setAttribute('aria-label', b.title);
       b.addEventListener('click', () => askApprove(ap));
       chips.appendChild(b);
