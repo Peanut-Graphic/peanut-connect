@@ -246,4 +246,13 @@ class Test_Connect_Approvals extends Peanut_Connect_TestCase
         $this->assertSame('yes', $in['vote']);
         $this->assertSame('', $in['approver_id']);
     }
+
+    public function test_build_vote_input_caps_reason_length(): void
+    {
+        $in = Peanut_Connect_Approvals::build_vote_input([
+            'reason' => str_repeat('r', 2100),
+        ]);
+        $this->assertSame(2000, strlen($in['reason']));
+        $this->assertSame(str_repeat('r', 2000), $in['reason']);
+    }
 }

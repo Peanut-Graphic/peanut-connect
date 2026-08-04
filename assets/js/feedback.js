@@ -502,10 +502,11 @@
     Promise.all([notesReq, apprReq]).then(([res, appr]) => {
       const apprPages = (appr && appr.pages) || {};
       if ((!res || !res.pages) && !Object.keys(apprPages).length) { box.textContent = 'Not available yet.'; return; }
-      summaryCache = (res && res.pages) || [];
+      if (res && res.pages) summaryCache = res.pages;
       box.innerHTML = '';
       const seen = {};
-      summaryCache.forEach((pg) => {
+      const notePages = (res && res.pages) || [];
+      notePages.forEach((pg) => {
         if (!pg || typeof pg.page_url !== 'string' || !/^\/(?!\/)/.test(pg.page_url)) return; // defense-in-depth: only same-site paths become hrefs
         seen[pg.page_url] = true;
         const h = document.createElement('div'); h.className = 'pp-sw-page';

@@ -268,7 +268,7 @@ class Peanut_Connect_Approvals {
             'page_title'  => isset($req['page_title']) ? (string) $req['page_title'] : '',
             'approver_id' => strtolower((string) ($req['approver_id'] ?? '')),
             'vote'        => (($req['vote'] ?? '') === 'no') ? 'no' : 'yes',
-            'reason'      => trim((string) ($req['reason'] ?? '')),
+            'reason'      => substr(trim((string) ($req['reason'] ?? '')), 0, 2000),
             'author_key'  => substr((string) ($req['author_key'] ?? ''), 0, 64),
         ];
     }
