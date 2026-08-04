@@ -269,6 +269,11 @@ class Peanut_Connect_Feedback {
                     <button type="submit" name="pcf_action" value="generate" class="button"><?php esc_html_e('Generate a new token', 'peanut-connect'); ?></button>
                 </p>
             </form>
+            <?php
+            if (class_exists('Peanut_Connect_Approvals')) {
+                Peanut_Connect_Approvals::render_admin_section();
+            }
+            ?>
         </div>
         <?php
     }
@@ -399,6 +404,7 @@ class Peanut_Connect_Feedback {
             'nonce'       => wp_create_nonce('wp_rest'),
             'isAgency'    => self::is_agency(),
             'reviewToken' => $token,
+            'approvers'   => class_exists('Peanut_Connect_Approvals') ? Peanut_Connect_Approvals::approvers() : [],
         ]);
     }
 
@@ -562,6 +568,24 @@ class Peanut_Connect_Feedback {
     public static function create(\WP_REST_Request $request) {
         $payload = self::build_store_payload($request->get_json_params() ?: [], self::is_agency());
         return self::relay('POST', '/feedback', $payload);
+    }
+
+    /**
+     * Server-side note create for sibling modules (the approvals "what needs
+     * to change" reason). Best-effort: relay/Hub failures return null and
+     * must not block the caller — the reason also lives on the approval
+     * record itself.
+     */
+    public static function store_note(array $req): ?int {
+        $payload = self::build_store_payload($req, self::is_agency());
+        $res     = self::relay('POST', '/feedback', $payload);
+        if ($res instanceof \WP_REST_Response) {
+            $data = $res->get_data();
+            if (is_array($data) && isset($data['feedback']['id'])) {
+                return (int) $data['feedback']['id'];
+            }
+        }
+        return null;
     }
 
     public static function update(\WP_REST_Request $request) {
