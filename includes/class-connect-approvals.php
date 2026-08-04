@@ -554,6 +554,7 @@ class Peanut_Connect_Approvals {
         <?php if ($notice !== '') : ?>
             <div class="notice notice-success is-dismissible"><p><?php echo esc_html($notice); ?></p></div>
         <?php endif; ?>
+        <p><a class="button" href="<?php echo esc_url(add_query_arg('pca_view', 'record')); ?>"><?php esc_html_e('View sign-off record', 'peanut-connect'); ?></a></p>
         <p style="max-width:640px">
             <?php esc_html_e('Approvers appear as initials chips in the Mark It Up panel ("Click your initials to approve"). Anyone with review access can click a chip — this is a lightweight sign-off, not an authenticated signature.', 'peanut-connect'); ?>
         </p>
@@ -714,5 +715,97 @@ class Peanut_Connect_Approvals {
 
         update_option(self::APPROVERS_OPTION, self::sanitize_approvers($rows), false);
         return __('Approvers saved.', 'peanut-connect');
+    }
+
+    /**
+     * Printable sign-off record: per page, the approver grid and full
+     * history. Read-only, manage_options (guarded by the caller too).
+     * Print CSS + window.print() = the PDF export.
+     */
+    public static function render_record_view(): void {
+        if (! current_user_can('manage_options')) {
+            return;
+        }
+        $approvers = self::approvers();
+        $ready     = self::ready_list();
+        $pages     = self::all_pages_state();
+        ksort($pages);
+        ?>
+        <div class="wrap pca-record">
+            <style>
+                .pca-record table { border-collapse: collapse; margin: 8px 0 20px; }
+                .pca-record th, .pca-record td { border: 1px solid #C3C4C7; padding: 4px 10px; text-align: left; font-size: 12px; }
+                .pca-record h2 { margin-top: 28px; }
+                .pca-record .pca-stale { color: #B45309; }
+                @media print {
+                    #adminmenumain, #wpadminbar, #wpfooter, .pca-noprint { display: none !important; }
+                    #wpcontent, #wpbody-content { margin: 0 !important; padding: 0 !important; }
+                }
+            </style>
+            <h1><?php echo esc_html(sprintf(__('%s — Mark It Up sign-off record', 'peanut-connect'), get_bloginfo('name'))); ?></h1>
+            <p><?php echo esc_html(sprintf(__('Generated %s (UTC)', 'peanut-connect'), gmdate('Y-m-d H:i'))); ?></p>
+            <p class="pca-noprint">
+                <button type="button" class="button button-primary" onclick="window.print()"><?php esc_html_e('Print / save as PDF', 'peanut-connect'); ?></button>
+                <a class="button" href="<?php echo esc_url(remove_query_arg('pca_view')); ?>"><?php esc_html_e('Back to Mark It Up', 'peanut-connect'); ?></a>
+            </p>
+            <?php if (empty($pages)) : ?>
+                <p><?php esc_html_e('No approval activity recorded yet.', 'peanut-connect'); ?></p>
+            <?php endif; ?>
+            <?php foreach ($pages as $path => $state) : ?>
+                <?php
+                $votes  = self::apply_stale(self::public_votes($state['votes']), self::current_modified((string) $path));
+                $status = self::compute_all_green($approvers, $votes)
+                    ? __('Fully approved', 'peanut-connect')
+                    : (in_array($path, $ready, true) ? __('Awaiting approval', 'peanut-connect') : __('In review', 'peanut-connect'));
+                ?>
+                <h2><?php echo esc_html((string) $path); ?></h2>
+                <p><strong><?php echo esc_html($status); ?></strong></p>
+                <table>
+                    <thead><tr>
+                        <th><?php esc_html_e('Approver', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Decision', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Date (UTC)', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Notes', 'peanut-connect'); ?></th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($approvers as $row) : ?>
+                        <?php $vote = $votes[$row['id']] ?? null; ?>
+                        <tr>
+                            <td><?php echo esc_html($row['name'] . ' (' . $row['initials'] . ')'); ?></td>
+                            <td><?php echo esc_html($vote ? (($vote['vote'] ?? '') === 'yes' ? __('Approved', 'peanut-connect') : __('Changes requested', 'peanut-connect')) : __('No response', 'peanut-connect')); ?></td>
+                            <td><?php echo esc_html($vote['at'] ?? ''); ?></td>
+                            <td>
+                                <?php if ($vote && ! empty($vote['stale'])) : ?>
+                                    <span class="pca-stale"><?php echo esc_html(sprintf(__('Page changed after this decision (%s)', 'peanut-connect'), (string) ($vote['modified_at'] ?? ''))); ?></span>
+                                <?php endif; ?>
+                                <?php echo esc_html((string) ($vote['reason'] ?? '')); ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php if (! empty($state['history'])) : ?>
+                <table>
+                    <thead><tr>
+                        <th><?php esc_html_e('Time (UTC)', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Approver', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Action', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Reason', 'peanut-connect'); ?></th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($state['history'] as $entry) : ?>
+                        <tr>
+                            <td><?php echo esc_html((string) ($entry['at'] ?? '')); ?></td>
+                            <td><?php echo esc_html((string) ($entry['approver_id'] ?? '')); ?></td>
+                            <td><?php echo esc_html((string) ($entry['action'] ?? '')); ?></td>
+                            <td><?php echo esc_html((string) ($entry['reason'] ?? '')); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+        <?php
     }
 }

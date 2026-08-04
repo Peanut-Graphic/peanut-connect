@@ -424,6 +424,7 @@
     '<li>Or click <strong>+ Mark it up</strong> and click a spot (for an image or button).</li>' +
     '<li>Or click <strong>✎ Draw</strong> and drag to circle or scribble on the page, then add a note. Click <strong>✎ Draw</strong> again to stop.</li>' +
     '<li>Type your note. A marker appears; click it to read the note. Tick a note off in this list once it\'s handled.</li>' +
+    '<li>If you are an <strong>approver</strong>, click your initials at the top to approve the page — or tell us what needs to change.</li>' +
     '</ol></div>' +
     '<div class="pp-approve" hidden><div class="pp-approve-label">Click your initials to approve:</div>' +
     '<div class="pp-approve-chips"></div><div class="pp-approve-flow" hidden></div></div>' +

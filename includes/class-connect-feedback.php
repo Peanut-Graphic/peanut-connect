@@ -135,6 +135,11 @@ class Peanut_Connect_Feedback {
             return;
         }
 
+        if (isset($_GET['pca_view']) && $_GET['pca_view'] === 'record' && class_exists('Peanut_Connect_Approvals')) {
+            Peanut_Connect_Approvals::render_record_view();
+            return;
+        }
+
         $notice = '';
         if (! empty($_POST['pcf_action']) && check_admin_referer('pcf_review_token')) {
             if ($_POST['pcf_action'] === 'generate') {
