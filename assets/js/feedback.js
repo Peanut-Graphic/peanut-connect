@@ -587,6 +587,8 @@
       b.addEventListener('click', () => askApprove(ap));
       chips.appendChild(b);
     });
+    const oldReady = box.querySelector('.pp-ready-btn');
+    if (oldReady) oldReady.remove();
     if (cfg.isAgency) {
       const isReady = readyList.indexOf(pageKey()) !== -1;
       const rb = document.createElement('button');

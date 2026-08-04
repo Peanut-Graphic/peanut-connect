@@ -130,6 +130,11 @@ class Test_Connect_Approvals_Round2 extends Peanut_Connect_TestCase
         ], $lines);
     }
 
+    public function test_digest_lines_empty_when_no_approvers(): void
+    {
+        $this->assertSame([], Peanut_Connect_Approvals::build_digest_lines(['/p'], ['/p' => []], []));
+    }
+
     // ---- record_vote snapshot + ready option round-trip ----
 
     public function test_record_vote_stores_snapshot_fields(): void

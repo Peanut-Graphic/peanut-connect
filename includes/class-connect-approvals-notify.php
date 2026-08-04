@@ -80,6 +80,16 @@ class Peanut_Connect_Approvals_Notify {
 
     // ---- runtime (staging-verified, not unit-tested) ----
 
+    /**
+     * Hook callback for peanut_connect_approvals_vote.
+     *
+     * @param string $path The page path.
+     * @param array $approver The approver data.
+     * @param string $vote The vote ('yes' or 'no').
+     * @param string $reason The rejection reason (empty if approved).
+     * @param array $votes The current votes map.
+     * @param bool $became_all_green True only when this vote completed the set.
+     */
     public static function on_vote($path, $approver, $vote, $reason, $votes, $became_all_green): void {
         $site = (string) get_bloginfo('name');
         $link = home_url((string) $path);

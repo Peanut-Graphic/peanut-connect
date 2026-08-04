@@ -281,6 +281,9 @@ class Peanut_Connect_Approvals {
      * Pages already fully approved produce no line.
      */
     public static function build_digest_lines(array $ready_paths, array $pages_votes, array $approvers): array {
+        if ($approvers === []) {
+            return [];
+        }
         $lines = [];
         foreach ($ready_paths as $path) {
             $votes = $pages_votes[$path] ?? [];
