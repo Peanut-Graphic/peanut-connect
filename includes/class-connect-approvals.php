@@ -141,17 +141,19 @@ class Peanut_Connect_Approvals {
      * appends a timestamped history entry, so re-approval date/time is
      * always logged. History is capped at HISTORY_CAP.
      */
-    public static function record_vote(array $state, string $approver_id, string $vote, string $reason, string $author_key, string $at, ?int $note_id = null): array {
+    public static function record_vote(array $state, string $approver_id, string $vote, string $reason, string $author_key, string $at, ?int $note_id = null, array $snapshot = []): array {
         $state  = self::normalize_page_state($state);
         $vote   = $vote === 'no' ? 'no' : 'yes';
         $reason = $vote === 'no' ? trim($reason) : '';
 
         $state['votes'][$approver_id] = [
-            'vote'       => $vote,
-            'at'         => $at,
-            'author_key' => $author_key,
-            'reason'     => $reason,
-            'note_id'    => $note_id,
+            'vote'          => $vote,
+            'at'            => $at,
+            'author_key'    => $author_key,
+            'reason'        => $reason,
+            'note_id'       => $note_id,
+            'post_id'       => (int) ($snapshot['post_id'] ?? 0),
+            'post_modified' => (string) ($snapshot['post_modified'] ?? ''),
         ];
 
         $entry = ['approver_id' => $approver_id, 'action' => $vote, 'at' => $at, 'author_key' => $author_key];
@@ -302,6 +304,46 @@ class Peanut_Connect_Approvals {
         update_option(self::APPROVALS_OPTION, $all, false);
     }
 
+    /**
+     * Resolve a page path to its post + modified time (GMT). URLs that
+     * don't map to a post return the empty snapshot — such pages simply
+     * never go stale. Query strings never distinguish posts, so they're
+     * dropped before resolving.
+     */
+    public static function page_snapshot(string $path): array {
+        $bare = strtok($path, '?');
+        $post_id = function_exists('url_to_postid') ? (int) url_to_postid(home_url($bare)) : 0;
+        $modified = '';
+        if ($post_id > 0) {
+            $post = get_post($post_id);
+            if ($post && ! empty($post->post_modified_gmt)) {
+                $modified = (string) $post->post_modified_gmt;
+            }
+        }
+        return ['post_id' => $post_id, 'post_modified' => $modified];
+    }
+
+    /** The page's CURRENT modified time, for staleness comparison on reads. */
+    public static function current_modified(string $path): string {
+        return self::page_snapshot($path)['post_modified'];
+    }
+
+    public static function ready_list(): array {
+        return self::sanitize_ready_list(get_option(self::READY_OPTION, []));
+    }
+
+    /** Flag/unflag a page ready-for-review; returns the new list. */
+    public static function set_ready(string $path, bool $ready): array {
+        $path = self::normalize_path($path);
+        $list = self::ready_list();
+        $list = array_values(array_diff($list, [$path]));
+        if ($ready) {
+            $list[] = $path;
+        }
+        update_option(self::READY_OPTION, $list, false);
+        return $list;
+    }
+
     public static function init(): void {
         add_action('rest_api_init', [self::class, 'register_routes']);
     }
@@ -336,20 +378,22 @@ class Peanut_Connect_Approvals {
         $path_raw  = $request->get_param('path');
 
         if (is_string($path_raw) && $path_raw !== '') {
-            $state = self::page_state(self::normalize_path($path_raw));
+            $path  = self::normalize_path($path_raw);
+            $state = self::page_state($path);
             return new \WP_REST_Response([
                 'approvers' => $approvers,
-                'votes'     => self::public_votes($state['votes']),
+                'votes'     => self::apply_stale(self::public_votes($state['votes']), self::current_modified($path)),
+                'ready'     => self::ready_list(),
             ], 200);
         }
 
         $pages = [];
         foreach (self::all_pages_state() as $path => $state) {
             if ($state['votes'] !== []) {
-                $pages[$path] = self::public_votes($state['votes']);
+                $pages[$path] = self::apply_stale(self::public_votes($state['votes']), self::current_modified($path));
             }
         }
-        return new \WP_REST_Response(['approvers' => $approvers, 'pages' => $pages], 200);
+        return new \WP_REST_Response(['approvers' => $approvers, 'pages' => $pages, 'ready' => self::ready_list()], 200);
     }
 
     /** Whitelist + coerce a vote request body. Pure — unit-tested. */
@@ -393,6 +437,10 @@ class Peanut_Connect_Approvals {
             ]);
         }
 
+        $current_modified = self::current_modified($in['path']);
+        $before = self::apply_stale(self::public_votes(self::page_state($in['path'])['votes']), $current_modified);
+        $was_green = self::compute_all_green($approvers, $before);
+
         $state = self::record_vote(
             self::page_state($in['path']),
             $approver['id'],
@@ -400,14 +448,24 @@ class Peanut_Connect_Approvals {
             $in['reason'],
             $in['author_key'],
             gmdate('Y-m-d H:i:s'),
-            $note_id
+            $note_id,
+            self::page_snapshot($in['path'])
         );
         self::save_page_state($in['path'], $state);
 
+        $votes = self::apply_stale(self::public_votes($state['votes']), $current_modified);
+        $is_green = self::compute_all_green($approvers, $votes);
+        $became_green = $is_green && ! $was_green;
+        if ($is_green) {
+            self::set_ready($in['path'], false); // sign-off complete: leave the queue
+        }
+        do_action('peanut_connect_approvals_vote', $in['path'], $approver, $in['vote'], $in['reason'], $votes, $became_green);
+
         return new \WP_REST_Response([
             'success' => true,
-            'votes'   => self::public_votes($state['votes']),
+            'votes'   => $votes,
             'note_id' => $note_id,
+            'ready'   => self::ready_list(),
         ], 200);
     }
 

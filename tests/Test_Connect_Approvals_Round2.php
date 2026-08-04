@@ -129,4 +129,33 @@ class Test_Connect_Approvals_Round2 extends Peanut_Connect_TestCase
             '/nothing — awaiting: NH, BH',
         ], $lines);
     }
+
+    // ---- record_vote snapshot + ready option round-trip ----
+
+    public function test_record_vote_stores_snapshot_fields(): void
+    {
+        $s = Peanut_Connect_Approvals::record_vote(
+            ['votes' => [], 'history' => []],
+            'nh', 'yes', '', 'b1', '2026-08-03 10:00:00', null,
+            ['post_id' => 42, 'post_modified' => '2026-08-01 08:00:00']
+        );
+        $this->assertSame(42, $s['votes']['nh']['post_id']);
+        $this->assertSame('2026-08-01 08:00:00', $s['votes']['nh']['post_modified']);
+    }
+
+    public function test_record_vote_without_snapshot_stores_empty_fields(): void
+    {
+        $s = Peanut_Connect_Approvals::record_vote(['votes' => [], 'history' => []], 'nh', 'yes', '', 'b1', '2026-08-03 10:00:00');
+        $this->assertSame(0, $s['votes']['nh']['post_id']);
+        $this->assertSame('', $s['votes']['nh']['post_modified']);
+    }
+
+    public function test_ready_list_round_trips_through_option(): void
+    {
+        $this->assertSame([], Peanut_Connect_Approvals::ready_list());
+        $list = Peanut_Connect_Approvals::set_ready('/p?utm_source=x', true);
+        $this->assertSame(['/p'], $list);
+        $this->assertSame(['/p'], Peanut_Connect_Approvals::ready_list());
+        $this->assertSame([], Peanut_Connect_Approvals::set_ready('/p', false));
+    }
 }
