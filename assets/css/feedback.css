@@ -189,3 +189,4 @@
 .pp-panel.pp-collapsed { resize: none; height: auto !important; }
 .pp-sw-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px; }
 .pp-chip-sm { min-width: 24px; height: 24px; font-size: 10px; line-height: 22px; text-align: center; cursor: default; }
+.pp-chip-you { outline: 2px solid #1F2937; outline-offset: 2px; }

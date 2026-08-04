@@ -405,6 +405,7 @@ class Peanut_Connect_Feedback {
             'isAgency'    => self::is_agency(),
             'reviewToken' => $token,
             'approvers'   => class_exists('Peanut_Connect_Approvals') ? Peanut_Connect_Approvals::approvers() : [],
+            'youApproverId' => class_exists('Peanut_Connect_Approvals') ? Peanut_Connect_Approvals::you_approver_id() : '',
         ]);
     }
 

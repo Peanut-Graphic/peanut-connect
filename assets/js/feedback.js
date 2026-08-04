@@ -63,7 +63,7 @@
   function pageKey() {
     try {
       const u = new URL(location.href);
-      ['pp_review', 'pp_note', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid']
+      ['pp_review', 'pp_note', 'pp_as', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid']
         .forEach((k) => u.searchParams.delete(k));
       const qs = u.searchParams.toString();
       return u.pathname + (qs ? '?' + qs : '');
@@ -534,6 +534,7 @@
 
   // ---- approval chips ("Click your initials to approve") ----
   const approvers = Array.isArray(cfg.approvers) ? cfg.approvers : [];
+  const youId = typeof cfg.youApproverId === 'string' ? cfg.youApproverId : '';
   let apprVotes = {};
 
   function apprDate(at) {
@@ -554,6 +555,7 @@
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'pp-chip' + (v ? (v.vote === 'yes' ? ' pp-chip-yes' : ' pp-chip-no') : '');
+      if (youId && ap.id === youId) b.classList.add('pp-chip-you');
       b.textContent = ap.initials;
       b.title = ap.name + (v
         ? (v.vote === 'yes' ? ' — Approved · ' : ' — Needs changes · ') + apprDate(v.at)
@@ -569,6 +571,10 @@
     err.textContent = "couldn't save — try again";
   }
   function askApprove(ap) {
+    if (youId && ap.id !== youId) { confirmIdentity(ap); return; }
+    askApproveFlow(ap);
+  }
+  function askApproveFlow(ap) {
     const flow = panel.querySelector('.pp-approve-flow');
     flow.innerHTML = ''; flow.hidden = false;
     const q = document.createElement('div'); q.className = 'pp-approve-q';
@@ -579,6 +585,18 @@
     flow.append(q, row);
     yes.addEventListener('click', () => sendVote(ap, 'yes', '', flow));
     no.addEventListener('click', () => askReason(ap, flow));
+  }
+  function confirmIdentity(ap) {
+    const flow = panel.querySelector('.pp-approve-flow');
+    flow.innerHTML = ''; flow.hidden = false;
+    const q = document.createElement('div'); q.className = 'pp-approve-q';
+    q.textContent = "You're voting as " + ap.name + ' — continue?';
+    const go = document.createElement('button'); go.type = 'button'; go.className = 'pp-approve-btn pp-approve-yes'; go.textContent = 'Continue';
+    const stop = document.createElement('button'); stop.type = 'button'; stop.className = 'pp-approve-btn pp-approve-no'; stop.textContent = 'Cancel';
+    const row = document.createElement('div'); row.className = 'pp-approve-row'; row.append(go, stop);
+    flow.append(q, row);
+    go.addEventListener('click', () => askApproveFlow(ap));
+    stop.addEventListener('click', () => hideApproveFlow());
   }
   function askReason(ap, flow) {
     flow.innerHTML = '';

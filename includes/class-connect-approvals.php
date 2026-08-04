@@ -26,7 +26,7 @@ class Peanut_Connect_Approvals {
     const HISTORY_CAP = 200;
 
     /** Query params that never distinguish a page (mirror pageKey() in feedback.js). */
-    const STRIP_PARAMS = ['pp_review', 'pp_note', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid'];
+    const STRIP_PARAMS = ['pp_review', 'pp_note', 'pp_as', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid'];
 
     /** Option: normalized paths currently flagged ready for review. */
     const READY_OPTION = 'peanut_connect_approvals_ready';
@@ -101,6 +101,26 @@ class Peanut_Connect_Approvals {
     /** The configured approver list, always sanitized. */
     public static function approvers(): array {
         return self::sanitize_approvers(get_option(self::APPROVERS_OPTION, []));
+    }
+
+    /** Pure: an approver id is valid only when configured. Case-insensitive in, lowercase out. */
+    public static function validate_approver_id($raw, array $approvers): string {
+        if (! is_string($raw) || $raw === '') {
+            return '';
+        }
+        $raw = strtolower($raw);
+        foreach ($approvers as $row) {
+            if ($row['id'] === $raw) {
+                return $raw;
+            }
+        }
+        return '';
+    }
+
+    /** The ?pp_as identity on this request, '' when absent or unknown. */
+    public static function you_approver_id(): string {
+        $raw = isset($_GET['pp_as']) ? sanitize_key(wp_unslash($_GET['pp_as'])) : '';
+        return self::validate_approver_id($raw, self::approvers());
     }
 
     /**
@@ -518,6 +538,7 @@ class Peanut_Connect_Approvals {
 
         <form method="post">
             <?php wp_nonce_field('pca_approvers'); ?>
+            <?php $review_token = (string) get_option('peanut_connect_feedback_review_token', ''); ?>
             <table class="widefat striped" style="max-width:640px">
                 <thead><tr>
                     <th><?php esc_html_e('Name', 'peanut-connect'); ?></th>
@@ -533,6 +554,11 @@ class Peanut_Connect_Approvals {
                         <td>
                             <input type="hidden" name="pca_id[]" value="<?php echo esc_attr($row['id']); ?>" />
                             <input type="text" name="pca_name[]" value="<?php echo esc_attr($row['name']); ?>" class="regular-text" />
+                            <?php if ($review_token !== '') : ?>
+                                <br /><input type="text" class="large-text code" readonly onclick="this.select()"
+                                    value="<?php echo esc_attr(add_query_arg(['pp_review' => $review_token, 'pp_as' => $row['id']], home_url('/'))); ?>"
+                                    aria-label="<?php esc_attr_e('Personal review link', 'peanut-connect'); ?>" />
+                            <?php endif; ?>
                         </td>
                         <td><input type="text" name="pca_initials[]" value="<?php echo esc_attr($row['initials']); ?>" size="4" maxlength="3" /></td>
                         <td>

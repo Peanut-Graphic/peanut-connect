@@ -158,4 +158,16 @@ class Test_Connect_Approvals_Round2 extends Peanut_Connect_TestCase
         $this->assertSame(['/p'], Peanut_Connect_Approvals::ready_list());
         $this->assertSame([], Peanut_Connect_Approvals::set_ready('/p', false));
     }
+
+    // ---- validate_approver_id ----
+
+    public function test_validate_approver_id_accepts_only_configured_ids(): void
+    {
+        $approvers = [['id' => 'nh', 'name' => 'N', 'initials' => 'NH']];
+        $this->assertSame('nh', Peanut_Connect_Approvals::validate_approver_id('NH', $approvers));
+        $this->assertSame('nh', Peanut_Connect_Approvals::validate_approver_id('nh', $approvers));
+        $this->assertSame('', Peanut_Connect_Approvals::validate_approver_id('xx', $approvers));
+        $this->assertSame('', Peanut_Connect_Approvals::validate_approver_id('', $approvers));
+        $this->assertSame('', Peanut_Connect_Approvals::validate_approver_id(['nh'], $approvers));
+    }
 }
