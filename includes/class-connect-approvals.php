@@ -353,30 +353,54 @@ class Peanut_Connect_Approvals {
     public static function page_snapshot(string $path): array {
         $bare = strtok($path, '?');
         $post_id = 0;
-        // The front page must be resolved explicitly: url_to_postid() on the
-        // bare home URL is context-dependent (it resolved on the front end
-        // but returned 0 in wp-admin, making the sign-off record and digest
-        // read stale approvals as fresh — verified live on staging 3.34.0).
-        if ($bare === '/' || $bare === '') {
-            if (function_exists('get_option') && get_option('show_on_front') === 'page') {
-                $post_id = (int) get_option('page_on_front');
-            }
-        } elseif (function_exists('url_to_postid')) {
-            $post_id = (int) url_to_postid(home_url($bare));
+        // URL resolution only happens here, at VOTE time — always a
+        // front-end/REST request, where theme front-page filters (e.g.
+        // Enfold's) are active. Reads never re-resolve the URL (see
+        // apply_stale_live); wp-admin and cron resolve URLs differently,
+        // which made the sign-off record read stale approvals as fresh
+        // (verified live on staging 3.34.0).
+        if (function_exists('url_to_postid')) {
+            $post_id = (int) url_to_postid(home_url($bare === '' ? '/' : $bare));
         }
-        $modified = '';
-        if ($post_id > 0 && function_exists('get_post')) {
-            $post = get_post($post_id);
-            if ($post && ! empty($post->post_modified_gmt)) {
-                $modified = (string) $post->post_modified_gmt;
-            }
+        if ($post_id === 0 && ($bare === '/' || $bare === '')
+            && function_exists('get_option') && get_option('show_on_front') === 'page') {
+            $post_id = (int) get_option('page_on_front');
         }
-        return ['post_id' => $post_id, 'post_modified' => $modified];
+        return ['post_id' => $post_id, 'post_modified' => self::modified_for_post($post_id)];
     }
 
-    /** The page's CURRENT modified time, for staleness comparison on reads. */
-    public static function current_modified(string $path): string {
-        return self::page_snapshot($path)['post_modified'];
+    /** Per-request cache: post_id => post_modified_gmt (or ''). */
+    private static $modified_cache = [];
+
+    /** A post's CURRENT modified time (GMT), '' when unresolvable. */
+    public static function modified_for_post(int $post_id): string {
+        if ($post_id <= 0 || ! function_exists('get_post')) {
+            return '';
+        }
+        if (! array_key_exists($post_id, self::$modified_cache)) {
+            $post = get_post($post_id);
+            self::$modified_cache[$post_id] = ($post && ! empty($post->post_modified_gmt)) ? (string) $post->post_modified_gmt : '';
+        }
+        return self::$modified_cache[$post_id];
+    }
+
+    /**
+     * Annotate votes with staleness against the post EACH VOTE snapshotted
+     * (vote.post_id), never by re-resolving the page URL — URL resolution
+     * is context-dependent, comparing against the snapshotted post is not.
+     */
+    public static function apply_stale_live(array $votes): array {
+        foreach ($votes as $id => $vote) {
+            if (! is_array($vote)) {
+                continue;
+            }
+            $current = self::modified_for_post((int) ($vote['post_id'] ?? 0));
+            $votes[$id]['stale'] = self::compute_stale($vote, $current);
+            if ($votes[$id]['stale']) {
+                $votes[$id]['modified_at'] = $current;
+            }
+        }
+        return $votes;
     }
 
     public static function ready_list(): array {
@@ -439,7 +463,7 @@ class Peanut_Connect_Approvals {
             $state = self::page_state($path);
             return new \WP_REST_Response([
                 'approvers' => $approvers,
-                'votes'     => self::apply_stale(self::public_votes($state['votes']), self::current_modified($path)),
+                'votes'     => self::apply_stale_live(self::public_votes($state['votes'])),
                 'ready'     => self::ready_list(),
             ], 200);
         }
@@ -447,7 +471,7 @@ class Peanut_Connect_Approvals {
         $pages = [];
         foreach (self::all_pages_state() as $path => $state) {
             if ($state['votes'] !== []) {
-                $pages[$path] = self::apply_stale(self::public_votes($state['votes']), self::current_modified($path));
+                $pages[$path] = self::apply_stale_live(self::public_votes($state['votes']));
             }
         }
         return new \WP_REST_Response(['approvers' => $approvers, 'pages' => $pages, 'ready' => self::ready_list()], 200);
@@ -494,8 +518,7 @@ class Peanut_Connect_Approvals {
             ]);
         }
 
-        $current_modified = self::current_modified($in['path']);
-        $before = self::apply_stale(self::public_votes(self::page_state($in['path'])['votes']), $current_modified);
+        $before = self::apply_stale_live(self::public_votes(self::page_state($in['path'])['votes']));
         $was_green = self::compute_all_green($approvers, $before);
 
         $state = self::record_vote(
@@ -510,7 +533,7 @@ class Peanut_Connect_Approvals {
         );
         self::save_page_state($in['path'], $state);
 
-        $votes = self::apply_stale(self::public_votes($state['votes']), $current_modified);
+        $votes = self::apply_stale_live(self::public_votes($state['votes']));
         $is_green = self::compute_all_green($approvers, $votes);
         $became_green = $is_green && ! $was_green;
         if ($is_green) {
@@ -809,7 +832,7 @@ class Peanut_Connect_Approvals {
             <?php endif; ?>
             <?php foreach ($pages as $path => $state) : ?>
                 <?php
-                $votes  = self::apply_stale(self::public_votes($state['votes']), self::current_modified((string) $path));
+                $votes  = self::apply_stale_live(self::public_votes($state['votes']));
                 $status = self::compute_all_green($approvers, $votes)
                     ? __('Fully approved', 'peanut-connect')
                     : (in_array($path, $ready, true) ? __('Awaiting approval', 'peanut-connect') : __('In review', 'peanut-connect'));

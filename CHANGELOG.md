@@ -5,6 +5,11 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.35.1] - 2026-08-03
+
+### Fixed
+- **Staleness now compares against the post each vote snapshotted** (`vote.post_id`) instead of re-resolving the page URL at read time. URL resolution is context-dependent — theme front-page filters (e.g. Enfold's) exist on the front end but not in wp-admin or cron — so on sites whose front page is theme-routed (`show_on_front = posts`), the sign-off record and digest still read stale approvals as fresh after 3.35.0. Comparing against the snapshotted post is context-independent by construction. Verified live on staging.
+
 ## [3.35.0] - 2026-08-03
 
 ### Added

@@ -232,6 +232,19 @@ class Test_Connect_Approvals_Round2 extends Peanut_Connect_TestCase
         );
     }
 
+    public function test_apply_stale_live_degrades_when_posts_are_unresolvable(): void
+    {
+        // No get_post in the mock bootstrap: current modified is unresolvable,
+        // so nothing can read as stale — the guard must degrade gracefully
+        // for snapshotted and legacy (no post_id) votes alike.
+        $out = Peanut_Connect_Approvals::apply_stale_live([
+            'nh' => ['vote' => 'yes', 'post_id' => 5, 'post_modified' => '2026-08-01 08:00:00'],
+            'bh' => ['vote' => 'yes'],
+        ]);
+        $this->assertFalse($out['nh']['stale']);
+        $this->assertFalse($out['bh']['stale']);
+    }
+
     // ---- front-page snapshot resolution (3.35.0 staleness fix) ----
 
     public function test_front_page_snapshot_resolves_via_page_on_front(): void

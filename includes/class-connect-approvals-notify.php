@@ -109,9 +109,8 @@ class Peanut_Connect_Approvals_Notify {
         $approvers = Peanut_Connect_Approvals::approvers();
         $pages = [];
         foreach (Peanut_Connect_Approvals::all_pages_state() as $path => $state) {
-            $pages[$path] = Peanut_Connect_Approvals::apply_stale(
-                Peanut_Connect_Approvals::public_votes($state['votes']),
-                Peanut_Connect_Approvals::current_modified((string) $path)
+            $pages[$path] = Peanut_Connect_Approvals::apply_stale_live(
+                Peanut_Connect_Approvals::public_votes($state['votes'])
             );
         }
         $lines = Peanut_Connect_Approvals::build_digest_lines(
