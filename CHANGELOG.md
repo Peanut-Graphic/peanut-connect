@@ -5,6 +5,16 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.34.0] - 2026-08-03
+
+### Added
+- **Approval notifications.** Plain-text email (configurable address, default: site admin) the moment an approver requests changes, and when a page reaches full approval; optional daily digest of pages still awaiting sign-off (`peanut_connect_approvals_notify`, WP-Cron `peanut_connect_approvals_digest`).
+- **Stale-approval detection.** Votes snapshot the page's modified time; editing the page afterwards turns that approval amber ("page changed after this decision") in the widget, the All-pages rollup, and the sign-off record. Fully-approved status requires fresh approvals.
+- **Per-approver links.** Each approver gets a personal review link (`&pp_as=<id>`, shown on the admin page): their chip is highlighted as "you" and voting as someone else asks for confirmation first.
+- **Ready for review.** Agency users flag a page "Request approval" from the widget; approvers see a "Needs your sign-off" queue in All-pages; the flag clears automatically when the page is fully approved (`peanut_connect_approvals_ready`). Admin page lists and unflags.
+- **Printable sign-off record.** "View sign-off record" on the Mark It Up admin page renders every page's approver grid and full history with staleness annotations; print to PDF.
+- The widget walkthrough now explains the approve step.
+
 ## [3.33.0] - 2026-08-03
 
 ### Added

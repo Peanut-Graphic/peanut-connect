@@ -26,7 +26,13 @@ class Peanut_Connect_Approvals {
     const HISTORY_CAP = 200;
 
     /** Query params that never distinguish a page (mirror pageKey() in feedback.js). */
-    const STRIP_PARAMS = ['pp_review', 'pp_note', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid'];
+    const STRIP_PARAMS = ['pp_review', 'pp_note', 'pp_as', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid'];
+
+    /** Option: normalized paths currently flagged ready for review. */
+    const READY_OPTION = 'peanut_connect_approvals_ready';
+
+    /** Option: notification settings ['email' => string, 'digest' => bool]. */
+    const NOTIFY_OPTION = 'peanut_connect_approvals_notify';
 
     /**
      * Coerce an approver list (option value or admin form rows) to clean
@@ -97,6 +103,26 @@ class Peanut_Connect_Approvals {
         return self::sanitize_approvers(get_option(self::APPROVERS_OPTION, []));
     }
 
+    /** Pure: an approver id is valid only when configured. Case-insensitive in, lowercase out. */
+    public static function validate_approver_id($raw, array $approvers): string {
+        if (! is_string($raw) || $raw === '') {
+            return '';
+        }
+        $raw = strtolower($raw);
+        foreach ($approvers as $row) {
+            if ($row['id'] === $raw) {
+                return $raw;
+            }
+        }
+        return '';
+    }
+
+    /** The ?pp_as identity on this request, '' when absent or unknown. */
+    public static function you_approver_id(): string {
+        $raw = isset($_GET['pp_as']) ? sanitize_key(wp_unslash($_GET['pp_as'])) : '';
+        return self::validate_approver_id($raw, self::approvers());
+    }
+
     /**
      * Normalize a client-supplied page path to the same key feedback.js
      * pageKey() produces: same-site path only (no scheme, no '//'), with
@@ -135,17 +161,19 @@ class Peanut_Connect_Approvals {
      * appends a timestamped history entry, so re-approval date/time is
      * always logged. History is capped at HISTORY_CAP.
      */
-    public static function record_vote(array $state, string $approver_id, string $vote, string $reason, string $author_key, string $at, ?int $note_id = null): array {
+    public static function record_vote(array $state, string $approver_id, string $vote, string $reason, string $author_key, string $at, ?int $note_id = null, array $snapshot = []): array {
         $state  = self::normalize_page_state($state);
         $vote   = $vote === 'no' ? 'no' : 'yes';
         $reason = $vote === 'no' ? trim($reason) : '';
 
         $state['votes'][$approver_id] = [
-            'vote'       => $vote,
-            'at'         => $at,
-            'author_key' => $author_key,
-            'reason'     => $reason,
-            'note_id'    => $note_id,
+            'vote'          => $vote,
+            'at'            => $at,
+            'author_key'    => $author_key,
+            'reason'        => $reason,
+            'note_id'       => $note_id,
+            'post_id'       => (int) ($snapshot['post_id'] ?? 0),
+            'post_modified' => (string) ($snapshot['post_modified'] ?? ''),
         ];
 
         $entry = ['approver_id' => $approver_id, 'action' => $vote, 'at' => $at, 'author_key' => $author_key];
@@ -186,6 +214,94 @@ class Peanut_Connect_Approvals {
         return $out;
     }
 
+    /**
+     * A vote is stale when the page's post was edited after the vote. Votes
+     * without a snapshot (3.33.0-era, or URLs that don't resolve to a post)
+     * are never stale, and a page that no longer resolves can't invalidate
+     * old votes.
+     */
+    public static function compute_stale(array $vote, string $current_modified): bool {
+        $snapshot = isset($vote['post_modified']) ? (string) $vote['post_modified'] : '';
+        return $snapshot !== '' && $current_modified !== '' && $snapshot !== $current_modified;
+    }
+
+    /** Annotate a public votes map with stale flags (and the new modified time when stale). */
+    public static function apply_stale(array $votes, string $current_modified): array {
+        foreach ($votes as $id => $vote) {
+            if (! is_array($vote)) {
+                continue;
+            }
+            $votes[$id]['stale'] = self::compute_stale($vote, $current_modified);
+            if ($votes[$id]['stale']) {
+                $votes[$id]['modified_at'] = $current_modified;
+            }
+        }
+        return $votes;
+    }
+
+    /**
+     * Fully approved = every configured approver holds a fresh YES.
+     * $votes is the public projection with 'stale' already applied.
+     * No approvers configured means never all-green.
+     */
+    public static function compute_all_green(array $approvers, array $votes): bool {
+        if ($approvers === []) {
+            return false;
+        }
+        foreach ($approvers as $row) {
+            $vote = $votes[$row['id']] ?? null;
+            if (! is_array($vote) || ($vote['vote'] ?? '') !== 'yes' || ! empty($vote['stale'])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Coerce notification settings to their exact shape. */
+    public static function sanitize_notify_settings($raw): array {
+        $raw = is_array($raw) ? $raw : [];
+        return [
+            'email'  => sanitize_email((string) ($raw['email'] ?? '')),
+            'digest' => ! empty($raw['digest']),
+        ];
+    }
+
+    /** Normalized, deduped ready-for-review path list. */
+    public static function sanitize_ready_list($raw): array {
+        $out = [];
+        foreach ((is_array($raw) ? $raw : []) as $path) {
+            $out[] = self::normalize_path($path);
+        }
+        return array_values(array_unique($out));
+    }
+
+    /**
+     * Digest body lines: one per ready page still awaiting sign-off,
+     * naming the approvers (by initials) whose fresh YES is missing.
+     * Pages already fully approved produce no line.
+     */
+    public static function build_digest_lines(array $ready_paths, array $pages_votes, array $approvers): array {
+        if ($approvers === []) {
+            return [];
+        }
+        $lines = [];
+        foreach ($ready_paths as $path) {
+            $votes = $pages_votes[$path] ?? [];
+            if (self::compute_all_green($approvers, $votes)) {
+                continue;
+            }
+            $awaiting = [];
+            foreach ($approvers as $row) {
+                $vote = $votes[$row['id']] ?? null;
+                if (! is_array($vote) || ($vote['vote'] ?? '') !== 'yes' || ! empty($vote['stale'])) {
+                    $awaiting[] = $row['initials'];
+                }
+            }
+            $lines[] = $path . ' — awaiting: ' . implode(', ', $awaiting);
+        }
+        return $lines;
+    }
+
     private static function all_state(): array {
         $raw = get_option(self::APPROVALS_OPTION, []);
         return is_array($raw) ? $raw : [];
@@ -211,6 +327,46 @@ class Peanut_Connect_Approvals {
         update_option(self::APPROVALS_OPTION, $all, false);
     }
 
+    /**
+     * Resolve a page path to its post + modified time (GMT). URLs that
+     * don't map to a post return the empty snapshot — such pages simply
+     * never go stale. Query strings never distinguish posts, so they're
+     * dropped before resolving.
+     */
+    public static function page_snapshot(string $path): array {
+        $bare = strtok($path, '?');
+        $post_id = function_exists('url_to_postid') ? (int) url_to_postid(home_url($bare)) : 0;
+        $modified = '';
+        if ($post_id > 0) {
+            $post = get_post($post_id);
+            if ($post && ! empty($post->post_modified_gmt)) {
+                $modified = (string) $post->post_modified_gmt;
+            }
+        }
+        return ['post_id' => $post_id, 'post_modified' => $modified];
+    }
+
+    /** The page's CURRENT modified time, for staleness comparison on reads. */
+    public static function current_modified(string $path): string {
+        return self::page_snapshot($path)['post_modified'];
+    }
+
+    public static function ready_list(): array {
+        return self::sanitize_ready_list(get_option(self::READY_OPTION, []));
+    }
+
+    /** Flag/unflag a page ready-for-review; returns the new list. */
+    public static function set_ready(string $path, bool $ready): array {
+        $path = self::normalize_path($path);
+        $list = self::ready_list();
+        $list = array_values(array_diff($list, [$path]));
+        if ($ready) {
+            $list[] = $path;
+        }
+        update_option(self::READY_OPTION, $list, false);
+        return $list;
+    }
+
     public static function init(): void {
         add_action('rest_api_init', [self::class, 'register_routes']);
     }
@@ -234,6 +390,12 @@ class Peanut_Connect_Approvals {
             'callback'            => [self::class, 'reset'],
             'permission_callback' => ['Peanut_Connect_Feedback', 'can_review_agency'],
         ]);
+        // Flagging a page ready-for-review is an agency action.
+        register_rest_route($ns, '/approvals/ready', [
+            'methods'             => 'POST',
+            'callback'            => [self::class, 'ready'],
+            'permission_callback' => ['Peanut_Connect_Feedback', 'can_review_agency'],
+        ]);
     }
 
     /**
@@ -245,20 +407,22 @@ class Peanut_Connect_Approvals {
         $path_raw  = $request->get_param('path');
 
         if (is_string($path_raw) && $path_raw !== '') {
-            $state = self::page_state(self::normalize_path($path_raw));
+            $path  = self::normalize_path($path_raw);
+            $state = self::page_state($path);
             return new \WP_REST_Response([
                 'approvers' => $approvers,
-                'votes'     => self::public_votes($state['votes']),
+                'votes'     => self::apply_stale(self::public_votes($state['votes']), self::current_modified($path)),
+                'ready'     => self::ready_list(),
             ], 200);
         }
 
         $pages = [];
         foreach (self::all_pages_state() as $path => $state) {
             if ($state['votes'] !== []) {
-                $pages[$path] = self::public_votes($state['votes']);
+                $pages[$path] = self::apply_stale(self::public_votes($state['votes']), self::current_modified($path));
             }
         }
-        return new \WP_REST_Response(['approvers' => $approvers, 'pages' => $pages], 200);
+        return new \WP_REST_Response(['approvers' => $approvers, 'pages' => $pages, 'ready' => self::ready_list()], 200);
     }
 
     /** Whitelist + coerce a vote request body. Pure — unit-tested. */
@@ -302,6 +466,10 @@ class Peanut_Connect_Approvals {
             ]);
         }
 
+        $current_modified = self::current_modified($in['path']);
+        $before = self::apply_stale(self::public_votes(self::page_state($in['path'])['votes']), $current_modified);
+        $was_green = self::compute_all_green($approvers, $before);
+
         $state = self::record_vote(
             self::page_state($in['path']),
             $approver['id'],
@@ -309,14 +477,24 @@ class Peanut_Connect_Approvals {
             $in['reason'],
             $in['author_key'],
             gmdate('Y-m-d H:i:s'),
-            $note_id
+            $note_id,
+            self::page_snapshot($in['path'])
         );
         self::save_page_state($in['path'], $state);
 
+        $votes = self::apply_stale(self::public_votes($state['votes']), $current_modified);
+        $is_green = self::compute_all_green($approvers, $votes);
+        $became_green = $is_green && ! $was_green;
+        if ($is_green) {
+            self::set_ready($in['path'], false); // sign-off complete: leave the queue
+        }
+        do_action('peanut_connect_approvals_vote', $in['path'], $approver, $in['vote'], $in['reason'], $votes, $became_green);
+
         return new \WP_REST_Response([
             'success' => true,
-            'votes'   => self::public_votes($state['votes']),
+            'votes'   => $votes,
             'note_id' => $note_id,
+            'ready'   => self::ready_list(),
         ], 200);
     }
 
@@ -342,6 +520,22 @@ class Peanut_Connect_Approvals {
         return new \WP_REST_Response(['success' => true, 'votes' => self::public_votes($state['votes'])], 200);
     }
 
+    /** Whitelist + coerce a ready request body. Pure — unit-tested. */
+    public static function build_ready_input(array $req): array {
+        return [
+            'path'  => self::normalize_path($req['path'] ?? null),
+            'ready' => ! empty($req['ready']),
+        ];
+    }
+
+    public static function ready(\WP_REST_Request $request) {
+        $in = self::build_ready_input($request->get_json_params() ?: []);
+        return new \WP_REST_Response([
+            'success' => true,
+            'ready'   => self::set_ready($in['path'], $in['ready']),
+        ], 200);
+    }
+
     /**
      * "Approvers" section on the Mark It Up admin page: manage the
      * name+initials rows the widget renders as chips, and reset recorded
@@ -363,12 +557,14 @@ class Peanut_Connect_Approvals {
         <?php if ($notice !== '') : ?>
             <div class="notice notice-success is-dismissible"><p><?php echo esc_html($notice); ?></p></div>
         <?php endif; ?>
+        <p><a class="button" href="<?php echo esc_url(add_query_arg('pca_view', 'record')); ?>"><?php esc_html_e('View sign-off record', 'peanut-connect'); ?></a></p>
         <p style="max-width:640px">
             <?php esc_html_e('Approvers appear as initials chips in the Mark It Up panel ("Click your initials to approve"). Anyone with review access can click a chip — this is a lightweight sign-off, not an authenticated signature.', 'peanut-connect'); ?>
         </p>
 
         <form method="post">
             <?php wp_nonce_field('pca_approvers'); ?>
+            <?php $review_token = (string) get_option('peanut_connect_feedback_review_token', ''); ?>
             <table class="widefat striped" style="max-width:640px">
                 <thead><tr>
                     <th><?php esc_html_e('Name', 'peanut-connect'); ?></th>
@@ -384,6 +580,11 @@ class Peanut_Connect_Approvals {
                         <td>
                             <input type="hidden" name="pca_id[]" value="<?php echo esc_attr($row['id']); ?>" />
                             <input type="text" name="pca_name[]" value="<?php echo esc_attr($row['name']); ?>" class="regular-text" />
+                            <?php if ($review_token !== '') : ?>
+                                <br /><input type="text" class="large-text code" readonly onclick="this.select()"
+                                    value="<?php echo esc_attr(add_query_arg(['pp_review' => $review_token, 'pp_as' => $row['id']], home_url('/'))); ?>"
+                                    aria-label="<?php esc_attr_e('Personal review link', 'peanut-connect'); ?>" />
+                            <?php endif; ?>
                         </td>
                         <td><input type="text" name="pca_initials[]" value="<?php echo esc_attr($row['initials']); ?>" size="4" maxlength="3" /></td>
                         <td>
@@ -419,6 +620,35 @@ class Peanut_Connect_Approvals {
                 </label>
                 <button type="submit" name="pca_action" value="reset" class="button"><?php esc_html_e('Reset', 'peanut-connect'); ?></button>
             </p>
+
+            <h3><?php esc_html_e('Notifications', 'peanut-connect'); ?></h3>
+            <?php $notify = self::sanitize_notify_settings(get_option(self::NOTIFY_OPTION, [])); ?>
+            <p>
+                <label for="pca_notify_email"><?php esc_html_e('Send approval emails to', 'peanut-connect'); ?></label><br />
+                <input type="email" id="pca_notify_email" name="pca_notify_email" class="regular-text" value="<?php echo esc_attr($notify['email']); ?>" placeholder="<?php echo esc_attr(get_option('admin_email', '')); ?>" />
+            </p>
+            <p class="description" style="max-width:640px"><?php esc_html_e('Immediate email when an approver requests changes, and when a page becomes fully approved. Blank uses the site admin email.', 'peanut-connect'); ?></p>
+            <p>
+                <label>
+                    <input type="checkbox" name="pca_notify_digest" value="1" <?php checked($notify['digest']); ?> />
+                    <?php esc_html_e('Also send a daily digest of pages still awaiting approval', 'peanut-connect'); ?>
+                </label>
+            </p>
+
+            <h3><?php esc_html_e('Ready for review', 'peanut-connect'); ?></h3>
+            <?php $ready_paths = self::ready_list(); ?>
+            <?php if (empty($ready_paths)) : ?>
+                <p class="description"><?php esc_html_e('No pages are currently flagged. Agency users flag pages from the widget ("Request approval").', 'peanut-connect'); ?></p>
+            <?php else : ?>
+                <ul>
+                    <?php foreach ($ready_paths as $i => $ready_path) : ?>
+                        <li>
+                            <code><?php echo esc_html($ready_path); ?></code>
+                            <button type="submit" name="pca_action" value="unready-<?php echo esc_attr((string) $i); ?>" class="button button-small"><?php esc_html_e('Unflag', 'peanut-connect'); ?></button>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
         </form>
         <?php
     }
@@ -469,9 +699,116 @@ class Peanut_Connect_Approvals {
             return $path === ''
                 ? __('All approvals reset.', 'peanut-connect')
                 : sprintf(__('Approvals reset for %s.', 'peanut-connect'), $path);
+        } elseif (preg_match('/^unready-(\d+)$/', $action, $m)) {
+            $ready_paths = self::ready_list();
+            if (isset($ready_paths[(int) $m[1]])) {
+                self::set_ready($ready_paths[(int) $m[1]], false);
+            }
+            return __('Page unflagged.', 'peanut-connect');
+        }
+
+        $notify = self::sanitize_notify_settings([
+            'email'  => sanitize_text_field(wp_unslash($_POST['pca_notify_email'] ?? '')),
+            'digest' => ! empty($_POST['pca_notify_digest']),
+        ]);
+        update_option(self::NOTIFY_OPTION, $notify, false);
+        if (class_exists('Peanut_Connect_Approvals_Notify')) {
+            Peanut_Connect_Approvals_Notify::schedule($notify['digest']);
         }
 
         update_option(self::APPROVERS_OPTION, self::sanitize_approvers($rows), false);
         return __('Approvers saved.', 'peanut-connect');
+    }
+
+    /**
+     * Printable sign-off record: per page, the approver grid and full
+     * history. Read-only, manage_options (guarded by the caller too).
+     * Print CSS + window.print() = the PDF export.
+     */
+    public static function render_record_view(): void {
+        if (! current_user_can('manage_options')) {
+            return;
+        }
+        $approvers = self::approvers();
+        $ready     = self::ready_list();
+        $pages     = self::all_pages_state();
+        ksort($pages);
+        ?>
+        <div class="wrap pca-record">
+            <style>
+                .pca-record table { border-collapse: collapse; margin: 8px 0 20px; }
+                .pca-record th, .pca-record td { border: 1px solid #C3C4C7; padding: 4px 10px; text-align: left; font-size: 12px; }
+                .pca-record h2 { margin-top: 28px; }
+                .pca-record .pca-stale { color: #B45309; }
+                @media print {
+                    #adminmenumain, #wpadminbar, #wpfooter, .pca-noprint { display: none !important; }
+                    #wpcontent, #wpbody-content { margin: 0 !important; padding: 0 !important; }
+                }
+            </style>
+            <h1><?php echo esc_html(sprintf(__('%s — Mark It Up sign-off record', 'peanut-connect'), get_bloginfo('name'))); ?></h1>
+            <p><?php echo esc_html(sprintf(__('Generated %s (UTC)', 'peanut-connect'), gmdate('Y-m-d H:i'))); ?></p>
+            <p class="pca-noprint">
+                <button type="button" class="button button-primary" onclick="window.print()"><?php esc_html_e('Print / save as PDF', 'peanut-connect'); ?></button>
+                <a class="button" href="<?php echo esc_url(remove_query_arg('pca_view')); ?>"><?php esc_html_e('Back to Mark It Up', 'peanut-connect'); ?></a>
+            </p>
+            <?php if (empty($pages)) : ?>
+                <p><?php esc_html_e('No approval activity recorded yet.', 'peanut-connect'); ?></p>
+            <?php endif; ?>
+            <?php foreach ($pages as $path => $state) : ?>
+                <?php
+                $votes  = self::apply_stale(self::public_votes($state['votes']), self::current_modified((string) $path));
+                $status = self::compute_all_green($approvers, $votes)
+                    ? __('Fully approved', 'peanut-connect')
+                    : (in_array($path, $ready, true) ? __('Awaiting approval', 'peanut-connect') : __('In review', 'peanut-connect'));
+                ?>
+                <h2><?php echo esc_html((string) $path); ?></h2>
+                <p><strong><?php echo esc_html($status); ?></strong></p>
+                <table>
+                    <thead><tr>
+                        <th><?php esc_html_e('Approver', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Decision', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Date (UTC)', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Notes', 'peanut-connect'); ?></th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($approvers as $row) : ?>
+                        <?php $vote = $votes[$row['id']] ?? null; ?>
+                        <tr>
+                            <td><?php echo esc_html($row['name'] . ' (' . $row['initials'] . ')'); ?></td>
+                            <td><?php echo esc_html($vote ? (($vote['vote'] ?? '') === 'yes' ? __('Approved', 'peanut-connect') : __('Changes requested', 'peanut-connect')) : __('No response', 'peanut-connect')); ?></td>
+                            <td><?php echo esc_html($vote['at'] ?? ''); ?></td>
+                            <td>
+                                <?php if ($vote && ! empty($vote['stale'])) : ?>
+                                    <span class="pca-stale"><?php echo esc_html(sprintf(__('Page changed after this decision (%s)', 'peanut-connect'), (string) ($vote['modified_at'] ?? ''))); ?></span>
+                                <?php endif; ?>
+                                <?php echo esc_html((string) ($vote['reason'] ?? '')); ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php if (! empty($state['history'])) : ?>
+                <table>
+                    <thead><tr>
+                        <th><?php esc_html_e('Time (UTC)', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Approver', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Action', 'peanut-connect'); ?></th>
+                        <th><?php esc_html_e('Reason', 'peanut-connect'); ?></th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($state['history'] as $entry) : ?>
+                        <tr>
+                            <td><?php echo esc_html((string) ($entry['at'] ?? '')); ?></td>
+                            <td><?php echo esc_html((string) ($entry['approver_id'] ?? '')); ?></td>
+                            <td><?php echo esc_html((string) ($entry['action'] ?? '')); ?></td>
+                            <td><?php echo esc_html((string) ($entry['reason'] ?? '')); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+        <?php
     }
 }

@@ -63,7 +63,7 @@
   function pageKey() {
     try {
       const u = new URL(location.href);
-      ['pp_review', 'pp_note', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid']
+      ['pp_review', 'pp_note', 'pp_as', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid']
         .forEach((k) => u.searchParams.delete(k));
       const qs = u.searchParams.toString();
       return u.pathname + (qs ? '?' + qs : '');
@@ -424,6 +424,7 @@
     '<li>Or click <strong>+ Mark it up</strong> and click a spot (for an image or button).</li>' +
     '<li>Or click <strong>✎ Draw</strong> and drag to circle or scribble on the page, then add a note. Click <strong>✎ Draw</strong> again to stop.</li>' +
     '<li>Type your note. A marker appears; click it to read the note. Tick a note off in this list once it\'s handled.</li>' +
+    '<li>If you are an <strong>approver</strong>, click your initials at the top to approve the page — or tell us what needs to change.</li>' +
     '</ol></div>' +
     '<div class="pp-approve" hidden><div class="pp-approve-label">Click your initials to approve:</div>' +
     '<div class="pp-approve-chips"></div><div class="pp-approve-flow" hidden></div></div>' +
@@ -486,10 +487,11 @@
     row.className = 'pp-sw-chips';
     approvers.forEach((ap) => {
       const v = votes ? votes[ap.id] : null;
+      const cls = v ? (v.vote === 'yes' ? (v.stale ? ' pp-chip-stale' : ' pp-chip-yes') : ' pp-chip-no') : '';
       const s = document.createElement('span');
-      s.className = 'pp-chip pp-chip-sm' + (v ? (v.vote === 'yes' ? ' pp-chip-yes' : ' pp-chip-no') : '');
+      s.className = 'pp-chip pp-chip-sm' + cls;
       s.textContent = ap.initials;
-      s.title = ap.name + (v ? (v.vote === 'yes' ? ' — Approved · ' : ' — Needs changes · ') + apprDate(v.at) : ' — no response yet');
+      s.title = ap.name + (v ? (v.vote === 'yes' ? (v.stale ? ' — Approved · ' + apprDate(v.at) + ' · page changed ' + apprDate(v.modified_at) : ' — Approved · ' + apprDate(v.at)) : ' — Needs changes · ' + apprDate(v.at)) : ' — no response yet');
       row.appendChild(s);
     });
     return row;
@@ -504,6 +506,25 @@
       if ((!res || !res.pages) && !Object.keys(apprPages).length) { box.textContent = 'Not available yet.'; return; }
       if (res && res.pages) summaryCache = res.pages;
       box.innerHTML = '';
+      const ready = (appr && appr.ready) || [];
+      const needs = ready.filter((p) => {
+        if (!/^\/(?!\/)/.test(p)) return false;
+        const votes = apprPages[p] || {};
+        if (youId) {
+          const v = votes[youId];
+          return !v || v.vote !== 'yes' || v.stale;
+        }
+        return !approvers.length || !approvers.every((ap) => { const v = votes[ap.id]; return v && v.vote === 'yes' && !v.stale; });
+      });
+      if (needs.length) {
+        const head = document.createElement('div'); head.className = 'pp-sw-page pp-needs-head';
+        head.textContent = youId ? 'Needs your sign-off' : 'Awaiting approval';
+        box.appendChild(head);
+        needs.forEach((p) => {
+          const a = document.createElement('a'); a.className = 'pp-sw-note'; a.textContent = p; a.href = p;
+          box.appendChild(a);
+        });
+      }
       const seen = {};
       const notePages = (res && res.pages) || [];
       notePages.forEach((pg) => {
@@ -534,7 +555,9 @@
 
   // ---- approval chips ("Click your initials to approve") ----
   const approvers = Array.isArray(cfg.approvers) ? cfg.approvers : [];
+  const youId = typeof cfg.youApproverId === 'string' ? cfg.youApproverId : '';
   let apprVotes = {};
+  let readyList = [];
 
   function apprDate(at) {
     try { return new Date(at.replace(' ', 'T') + 'Z').toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; }
@@ -551,17 +574,33 @@
     chips.innerHTML = '';
     approvers.forEach((ap) => {
       const v = apprVotes[ap.id];
+      const cls = v ? (v.vote === 'yes' ? (v.stale ? ' pp-chip-stale' : ' pp-chip-yes') : ' pp-chip-no') : '';
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'pp-chip' + (v ? (v.vote === 'yes' ? ' pp-chip-yes' : ' pp-chip-no') : '');
+      b.className = 'pp-chip' + cls;
+      if (youId && ap.id === youId) b.classList.add('pp-chip-you');
       b.textContent = ap.initials;
       b.title = ap.name + (v
-        ? (v.vote === 'yes' ? ' — Approved · ' : ' — Needs changes · ') + apprDate(v.at)
+        ? (v.vote === 'yes' ? (v.stale ? ' — Approved · ' + apprDate(v.at) + ' · page changed ' + apprDate(v.modified_at) : ' — Approved · ' + apprDate(v.at)) : ' — Needs changes · ' + apprDate(v.at))
         : ' — no response yet');
       b.setAttribute('aria-label', b.title);
       b.addEventListener('click', () => askApprove(ap));
       chips.appendChild(b);
     });
+    const oldReady = box.querySelector('.pp-ready-btn');
+    if (oldReady) oldReady.remove();
+    if (cfg.isAgency) {
+      const isReady = readyList.indexOf(pageKey()) !== -1;
+      const rb = document.createElement('button');
+      rb.type = 'button';
+      rb.className = 'pp-ready-btn' + (isReady ? ' pp-on' : '');
+      rb.textContent = isReady ? 'Requested — undo' : 'Request approval';
+      rb.addEventListener('click', () => {
+        api('POST', '/approvals/ready', { path: pageKey(), ready: !isReady })
+          .then((res) => { if (res && res.success) { readyList = res.ready || []; renderApprovals(); } });
+      });
+      box.appendChild(rb);
+    }
   }
   function approveError(flow) {
     let err = flow.querySelector('.pp-approve-err');
@@ -569,6 +608,10 @@
     err.textContent = "couldn't save — try again";
   }
   function askApprove(ap) {
+    if (youId && ap.id !== youId) { confirmIdentity(ap); return; }
+    askApproveFlow(ap);
+  }
+  function askApproveFlow(ap) {
     const flow = panel.querySelector('.pp-approve-flow');
     flow.innerHTML = ''; flow.hidden = false;
     const q = document.createElement('div'); q.className = 'pp-approve-q';
@@ -579,6 +622,18 @@
     flow.append(q, row);
     yes.addEventListener('click', () => sendVote(ap, 'yes', '', flow));
     no.addEventListener('click', () => askReason(ap, flow));
+  }
+  function confirmIdentity(ap) {
+    const flow = panel.querySelector('.pp-approve-flow');
+    flow.innerHTML = ''; flow.hidden = false;
+    const q = document.createElement('div'); q.className = 'pp-approve-q';
+    q.textContent = "You're voting as " + ap.name + ' — continue?';
+    const go = document.createElement('button'); go.type = 'button'; go.className = 'pp-approve-btn pp-approve-yes'; go.textContent = 'Continue';
+    const stop = document.createElement('button'); stop.type = 'button'; stop.className = 'pp-approve-btn pp-approve-no'; stop.textContent = 'Cancel';
+    const row = document.createElement('div'); row.className = 'pp-approve-row'; row.append(go, stop);
+    flow.append(q, row);
+    go.addEventListener('click', () => askApproveFlow(ap));
+    stop.addEventListener('click', () => hideApproveFlow());
   }
   function askReason(ap, flow) {
     flow.innerHTML = '';
@@ -602,6 +657,7 @@
     }).then((res) => {
       if (res && res.success) {
         apprVotes = res.votes || {};
+        readyList = (res && res.ready) || [];
         hideApproveFlow(); renderApprovals();
         if (vote === 'no' && reason && res.note_id) load(); // the reason is now a note — refresh the list
       } else { approveError(flow); }
@@ -610,7 +666,7 @@
   function loadApprovals() {
     if (!approvers.length) { renderApprovals(); return; }
     api('GET', '/approvals?path=' + encodeURIComponent(pageKey()))
-      .then((res) => { apprVotes = (res && res.votes) || {}; renderApprovals(); })
+      .then((res) => { apprVotes = (res && res.votes) || {}; readyList = (res && res.ready) || []; renderApprovals(); })
       .catch(() => { apprVotes = {}; renderApprovals(); });
   }
 
