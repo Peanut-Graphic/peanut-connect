@@ -28,6 +28,12 @@ class Peanut_Connect_Approvals {
     /** Query params that never distinguish a page (mirror pageKey() in feedback.js). */
     const STRIP_PARAMS = ['pp_review', 'pp_note', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid'];
 
+    /** Option: normalized paths currently flagged ready for review. */
+    const READY_OPTION = 'peanut_connect_approvals_ready';
+
+    /** Option: notification settings ['email' => string, 'digest' => bool]. */
+    const NOTIFY_OPTION = 'peanut_connect_approvals_notify';
+
     /**
      * Coerce an approver list (option value or admin form rows) to clean
      * rows. Empty names drop the row; initials are derived from the name
@@ -184,6 +190,91 @@ class Peanut_Connect_Approvals {
             $out[$id] = $vote;
         }
         return $out;
+    }
+
+    /**
+     * A vote is stale when the page's post was edited after the vote. Votes
+     * without a snapshot (3.33.0-era, or URLs that don't resolve to a post)
+     * are never stale, and a page that no longer resolves can't invalidate
+     * old votes.
+     */
+    public static function compute_stale(array $vote, string $current_modified): bool {
+        $snapshot = isset($vote['post_modified']) ? (string) $vote['post_modified'] : '';
+        return $snapshot !== '' && $current_modified !== '' && $snapshot !== $current_modified;
+    }
+
+    /** Annotate a public votes map with stale flags (and the new modified time when stale). */
+    public static function apply_stale(array $votes, string $current_modified): array {
+        foreach ($votes as $id => $vote) {
+            if (! is_array($vote)) {
+                continue;
+            }
+            $votes[$id]['stale'] = self::compute_stale($vote, $current_modified);
+            if ($votes[$id]['stale']) {
+                $votes[$id]['modified_at'] = $current_modified;
+            }
+        }
+        return $votes;
+    }
+
+    /**
+     * Fully approved = every configured approver holds a fresh YES.
+     * $votes is the public projection with 'stale' already applied.
+     * No approvers configured means never all-green.
+     */
+    public static function compute_all_green(array $approvers, array $votes): bool {
+        if ($approvers === []) {
+            return false;
+        }
+        foreach ($approvers as $row) {
+            $vote = $votes[$row['id']] ?? null;
+            if (! is_array($vote) || ($vote['vote'] ?? '') !== 'yes' || ! empty($vote['stale'])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Coerce notification settings to their exact shape. */
+    public static function sanitize_notify_settings($raw): array {
+        $raw = is_array($raw) ? $raw : [];
+        return [
+            'email'  => sanitize_email((string) ($raw['email'] ?? '')),
+            'digest' => ! empty($raw['digest']),
+        ];
+    }
+
+    /** Normalized, deduped ready-for-review path list. */
+    public static function sanitize_ready_list($raw): array {
+        $out = [];
+        foreach ((is_array($raw) ? $raw : []) as $path) {
+            $out[] = self::normalize_path($path);
+        }
+        return array_values(array_unique($out));
+    }
+
+    /**
+     * Digest body lines: one per ready page still awaiting sign-off,
+     * naming the approvers (by initials) whose fresh YES is missing.
+     * Pages already fully approved produce no line.
+     */
+    public static function build_digest_lines(array $ready_paths, array $pages_votes, array $approvers): array {
+        $lines = [];
+        foreach ($ready_paths as $path) {
+            $votes = $pages_votes[$path] ?? [];
+            if (self::compute_all_green($approvers, $votes)) {
+                continue;
+            }
+            $awaiting = [];
+            foreach ($approvers as $row) {
+                $vote = $votes[$row['id']] ?? null;
+                if (! is_array($vote) || ($vote['vote'] ?? '') !== 'yes' || ! empty($vote['stale'])) {
+                    $awaiting[] = $row['initials'];
+                }
+            }
+            $lines[] = $path . ' — awaiting: ' . implode(', ', $awaiting);
+        }
+        return $lines;
     }
 
     private static function all_state(): array {
