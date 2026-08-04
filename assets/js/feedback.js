@@ -486,10 +486,11 @@
     row.className = 'pp-sw-chips';
     approvers.forEach((ap) => {
       const v = votes ? votes[ap.id] : null;
+      const cls = v ? (v.vote === 'yes' ? (v.stale ? ' pp-chip-stale' : ' pp-chip-yes') : ' pp-chip-no') : '';
       const s = document.createElement('span');
-      s.className = 'pp-chip pp-chip-sm' + (v ? (v.vote === 'yes' ? ' pp-chip-yes' : ' pp-chip-no') : '');
+      s.className = 'pp-chip pp-chip-sm' + cls;
       s.textContent = ap.initials;
-      s.title = ap.name + (v ? (v.vote === 'yes' ? ' — Approved · ' : ' — Needs changes · ') + apprDate(v.at) : ' — no response yet');
+      s.title = ap.name + (v ? (v.vote === 'yes' ? (v.stale ? ' — Approved · ' + apprDate(v.at) + ' · page changed ' + apprDate(v.modified_at) : ' — Approved · ' + apprDate(v.at)) : ' — Needs changes · ' + apprDate(v.at)) : ' — no response yet');
       row.appendChild(s);
     });
     return row;
@@ -504,6 +505,25 @@
       if ((!res || !res.pages) && !Object.keys(apprPages).length) { box.textContent = 'Not available yet.'; return; }
       if (res && res.pages) summaryCache = res.pages;
       box.innerHTML = '';
+      const ready = (appr && appr.ready) || [];
+      const needs = ready.filter((p) => {
+        if (!/^\/(?!\/)/.test(p)) return false;
+        const votes = apprPages[p] || {};
+        if (youId) {
+          const v = votes[youId];
+          return !v || v.vote !== 'yes' || v.stale;
+        }
+        return !approvers.length || !approvers.every((ap) => { const v = votes[ap.id]; return v && v.vote === 'yes' && !v.stale; });
+      });
+      if (needs.length) {
+        const head = document.createElement('div'); head.className = 'pp-sw-page pp-needs-head';
+        head.textContent = youId ? 'Needs your sign-off' : 'Awaiting approval';
+        box.appendChild(head);
+        needs.forEach((p) => {
+          const a = document.createElement('a'); a.className = 'pp-sw-note'; a.textContent = p; a.href = p;
+          box.appendChild(a);
+        });
+      }
       const seen = {};
       const notePages = (res && res.pages) || [];
       notePages.forEach((pg) => {
@@ -536,6 +556,7 @@
   const approvers = Array.isArray(cfg.approvers) ? cfg.approvers : [];
   const youId = typeof cfg.youApproverId === 'string' ? cfg.youApproverId : '';
   let apprVotes = {};
+  let readyList = [];
 
   function apprDate(at) {
     try { return new Date(at.replace(' ', 'T') + 'Z').toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; }
@@ -552,18 +573,31 @@
     chips.innerHTML = '';
     approvers.forEach((ap) => {
       const v = apprVotes[ap.id];
+      const cls = v ? (v.vote === 'yes' ? (v.stale ? ' pp-chip-stale' : ' pp-chip-yes') : ' pp-chip-no') : '';
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'pp-chip' + (v ? (v.vote === 'yes' ? ' pp-chip-yes' : ' pp-chip-no') : '');
+      b.className = 'pp-chip' + cls;
       if (youId && ap.id === youId) b.classList.add('pp-chip-you');
       b.textContent = ap.initials;
       b.title = ap.name + (v
-        ? (v.vote === 'yes' ? ' — Approved · ' : ' — Needs changes · ') + apprDate(v.at)
+        ? (v.vote === 'yes' ? (v.stale ? ' — Approved · ' + apprDate(v.at) + ' · page changed ' + apprDate(v.modified_at) : ' — Approved · ' + apprDate(v.at)) : ' — Needs changes · ' + apprDate(v.at))
         : ' — no response yet');
       b.setAttribute('aria-label', b.title);
       b.addEventListener('click', () => askApprove(ap));
       chips.appendChild(b);
     });
+    if (cfg.isAgency) {
+      const isReady = readyList.indexOf(pageKey()) !== -1;
+      const rb = document.createElement('button');
+      rb.type = 'button';
+      rb.className = 'pp-ready-btn' + (isReady ? ' pp-on' : '');
+      rb.textContent = isReady ? 'Requested — undo' : 'Request approval';
+      rb.addEventListener('click', () => {
+        api('POST', '/approvals/ready', { path: pageKey(), ready: !isReady })
+          .then((res) => { if (res && res.success) { readyList = res.ready || []; renderApprovals(); } });
+      });
+      box.appendChild(rb);
+    }
   }
   function approveError(flow) {
     let err = flow.querySelector('.pp-approve-err');
@@ -620,6 +654,7 @@
     }).then((res) => {
       if (res && res.success) {
         apprVotes = res.votes || {};
+        readyList = (res && res.ready) || [];
         hideApproveFlow(); renderApprovals();
         if (vote === 'no' && reason && res.note_id) load(); // the reason is now a note — refresh the list
       } else { approveError(flow); }
@@ -628,7 +663,7 @@
   function loadApprovals() {
     if (!approvers.length) { renderApprovals(); return; }
     api('GET', '/approvals?path=' + encodeURIComponent(pageKey()))
-      .then((res) => { apprVotes = (res && res.votes) || {}; renderApprovals(); })
+      .then((res) => { apprVotes = (res && res.votes) || {}; readyList = (res && res.ready) || []; renderApprovals(); })
       .catch(() => { apprVotes = {}; renderApprovals(); });
   }
 

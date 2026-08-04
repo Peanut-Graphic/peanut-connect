@@ -170,4 +170,13 @@ class Test_Connect_Approvals_Round2 extends Peanut_Connect_TestCase
         $this->assertSame('', Peanut_Connect_Approvals::validate_approver_id('', $approvers));
         $this->assertSame('', Peanut_Connect_Approvals::validate_approver_id(['nh'], $approvers));
     }
+
+    // ---- build_ready_input ----
+
+    public function test_build_ready_input_coerces(): void
+    {
+        $in = Peanut_Connect_Approvals::build_ready_input(['path' => '/p?utm_source=x', 'ready' => '1', 'evil' => 'x']);
+        $this->assertSame(['path' => '/p', 'ready' => true], $in);
+        $this->assertSame(['path' => '/', 'ready' => false], Peanut_Connect_Approvals::build_ready_input([]));
+    }
 }

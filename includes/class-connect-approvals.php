@@ -387,6 +387,12 @@ class Peanut_Connect_Approvals {
             'callback'            => [self::class, 'reset'],
             'permission_callback' => ['Peanut_Connect_Feedback', 'can_review_agency'],
         ]);
+        // Flagging a page ready-for-review is an agency action.
+        register_rest_route($ns, '/approvals/ready', [
+            'methods'             => 'POST',
+            'callback'            => [self::class, 'ready'],
+            'permission_callback' => ['Peanut_Connect_Feedback', 'can_review_agency'],
+        ]);
     }
 
     /**
@@ -511,6 +517,22 @@ class Peanut_Connect_Approvals {
         return new \WP_REST_Response(['success' => true, 'votes' => self::public_votes($state['votes'])], 200);
     }
 
+    /** Whitelist + coerce a ready request body. Pure — unit-tested. */
+    public static function build_ready_input(array $req): array {
+        return [
+            'path'  => self::normalize_path($req['path'] ?? null),
+            'ready' => ! empty($req['ready']),
+        ];
+    }
+
+    public static function ready(\WP_REST_Request $request) {
+        $in = self::build_ready_input($request->get_json_params() ?: []);
+        return new \WP_REST_Response([
+            'success' => true,
+            'ready'   => self::set_ready($in['path'], $in['ready']),
+        ], 200);
+    }
+
     /**
      * "Approvers" section on the Mark It Up admin page: manage the
      * name+initials rows the widget renders as chips, and reset recorded
@@ -608,6 +630,21 @@ class Peanut_Connect_Approvals {
                     <?php esc_html_e('Also send a daily digest of pages still awaiting approval', 'peanut-connect'); ?>
                 </label>
             </p>
+
+            <h3><?php esc_html_e('Ready for review', 'peanut-connect'); ?></h3>
+            <?php $ready_paths = self::ready_list(); ?>
+            <?php if (empty($ready_paths)) : ?>
+                <p class="description"><?php esc_html_e('No pages are currently flagged. Agency users flag pages from the widget ("Request approval").', 'peanut-connect'); ?></p>
+            <?php else : ?>
+                <ul>
+                    <?php foreach ($ready_paths as $i => $ready_path) : ?>
+                        <li>
+                            <code><?php echo esc_html($ready_path); ?></code>
+                            <button type="submit" name="pca_action" value="unready-<?php echo esc_attr((string) $i); ?>" class="button button-small"><?php esc_html_e('Unflag', 'peanut-connect'); ?></button>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
         </form>
         <?php
     }
@@ -658,6 +695,12 @@ class Peanut_Connect_Approvals {
             return $path === ''
                 ? __('All approvals reset.', 'peanut-connect')
                 : sprintf(__('Approvals reset for %s.', 'peanut-connect'), $path);
+        } elseif (preg_match('/^unready-(\d+)$/', $action, $m)) {
+            $ready_paths = self::ready_list();
+            if (isset($ready_paths[(int) $m[1]])) {
+                self::set_ready($ready_paths[(int) $m[1]], false);
+            }
+            return __('Page unflagged.', 'peanut-connect');
         }
 
         $notify = self::sanitize_notify_settings([
