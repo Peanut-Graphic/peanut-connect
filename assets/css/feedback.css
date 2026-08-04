@@ -194,3 +194,4 @@
 .pp-ready-btn { margin-top: 6px; border: 1px solid #1F2937; border-radius: 4px; background: #fff; color: #1F2937; font-weight: 600; font-size: 11px; padding: 3px 10px; cursor: pointer; }
 .pp-ready-btn.pp-on { background: #1F2937; color: #fff; }
 .pp-needs-head { font-weight: 700; }
+.pp-chip-opt { border-style: dashed; opacity: 0.85; }

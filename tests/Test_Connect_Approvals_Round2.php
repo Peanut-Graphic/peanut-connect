@@ -184,4 +184,64 @@ class Test_Connect_Approvals_Round2 extends Peanut_Connect_TestCase
         $this->assertSame(['path' => '/p', 'ready' => true], $in);
         $this->assertSame(['path' => '/', 'ready' => false], Peanut_Connect_Approvals::build_ready_input([]));
     }
+
+    // ---- required vs optional approvers (3.35.0) ----
+
+    public function test_sanitize_approvers_defaults_required_true_and_keeps_flag(): void
+    {
+        $rows = Peanut_Connect_Approvals::sanitize_approvers([
+            ['name' => 'Natty Hooper'],                        // legacy row, no key -> required
+            ['name' => 'Views Only', 'required' => false],
+            ['name' => 'Gate Keeper', 'required' => '1'],
+        ]);
+        $this->assertTrue($rows[0]['required']);
+        $this->assertFalse($rows[1]['required']);
+        $this->assertTrue($rows[2]['required']);
+    }
+
+    public function test_all_green_ignores_optional_reviewers(): void
+    {
+        $approvers = [
+            ['id' => 'nh', 'name' => 'N', 'initials' => 'NH', 'required' => true],
+            ['id' => 'vo', 'name' => 'V', 'initials' => 'VO', 'required' => false],
+        ];
+        $green = ['vote' => 'yes', 'stale' => false];
+        // Optional reviewer silent -> still fully approved.
+        $this->assertTrue(Peanut_Connect_Approvals::compute_all_green($approvers, ['nh' => $green]));
+        // Optional reviewer says NO -> never blocks.
+        $this->assertTrue(Peanut_Connect_Approvals::compute_all_green($approvers, ['nh' => $green, 'vo' => ['vote' => 'no', 'stale' => false]]));
+        // Required approver missing -> not approved even with an optional yes.
+        $this->assertFalse(Peanut_Connect_Approvals::compute_all_green($approvers, ['vo' => $green]));
+    }
+
+    public function test_all_optional_is_never_all_green(): void
+    {
+        $approvers = [['id' => 'vo', 'name' => 'V', 'initials' => 'VO', 'required' => false]];
+        $this->assertFalse(Peanut_Connect_Approvals::compute_all_green($approvers, ['vo' => ['vote' => 'yes', 'stale' => false]]));
+    }
+
+    public function test_digest_awaits_only_required_approvers(): void
+    {
+        $approvers = [
+            ['id' => 'nh', 'name' => 'N', 'initials' => 'NH', 'required' => true],
+            ['id' => 'vo', 'name' => 'V', 'initials' => 'VO', 'required' => false],
+        ];
+        $this->assertSame(
+            ['/p — awaiting: NH'],
+            Peanut_Connect_Approvals::build_digest_lines(['/p'], ['/p' => []], $approvers)
+        );
+    }
+
+    // ---- front-page snapshot resolution (3.35.0 staleness fix) ----
+
+    public function test_front_page_snapshot_resolves_via_page_on_front(): void
+    {
+        global $mock_options;
+        $mock_options['show_on_front'] = 'page';
+        $mock_options['page_on_front'] = 5;
+        $this->assertSame(5, Peanut_Connect_Approvals::page_snapshot('/')['post_id']);
+        $this->assertSame(5, Peanut_Connect_Approvals::page_snapshot('/?tab=2')['post_id']);
+        $mock_options['show_on_front'] = 'posts';
+        $this->assertSame(0, Peanut_Connect_Approvals::page_snapshot('/')['post_id']);
+    }
 }

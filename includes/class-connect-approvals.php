@@ -67,7 +67,13 @@ class Peanut_Connect_Approvals {
             }
             $seen[$id] = true;
 
-            $out[] = ['id' => $id, 'name' => $name, 'initials' => $initials];
+            // 'required' gates "fully approved": required approvers must give a
+            // fresh YES; optional reviewers can vote/note but never block.
+            // Rows stored before the flag existed (no key) default to required
+            // — a fleet update must not silently un-gate anybody.
+            $required = array_key_exists('required', $row) ? ! empty($row['required']) : true;
+
+            $out[] = ['id' => $id, 'name' => $name, 'initials' => $initials, 'required' => $required];
         }
         return $out;
     }
@@ -239,16 +245,25 @@ class Peanut_Connect_Approvals {
         return $votes;
     }
 
+    /** The approvers whose fresh YES gates "fully approved". */
+    public static function required_approvers(array $approvers): array {
+        return array_values(array_filter($approvers, static function ($row) {
+            return ! isset($row['required']) || ! empty($row['required']);
+        }));
+    }
+
     /**
-     * Fully approved = every configured approver holds a fresh YES.
-     * $votes is the public projection with 'stale' already applied.
-     * No approvers configured means never all-green.
+     * Fully approved = every REQUIRED approver holds a fresh YES. Optional
+     * reviewers can vote and leave notes but never block (or grant) full
+     * approval. $votes is the public projection with 'stale' already
+     * applied. No required approvers configured means never all-green.
      */
     public static function compute_all_green(array $approvers, array $votes): bool {
-        if ($approvers === []) {
+        $required = self::required_approvers($approvers);
+        if ($required === []) {
             return false;
         }
-        foreach ($approvers as $row) {
+        foreach ($required as $row) {
             $vote = $votes[$row['id']] ?? null;
             if (! is_array($vote) || ($vote['vote'] ?? '') !== 'yes' || ! empty($vote['stale'])) {
                 return false;
@@ -277,11 +292,13 @@ class Peanut_Connect_Approvals {
 
     /**
      * Digest body lines: one per ready page still awaiting sign-off,
-     * naming the approvers (by initials) whose fresh YES is missing.
-     * Pages already fully approved produce no line.
+     * naming the REQUIRED approvers (by initials) whose fresh YES is
+     * missing — optional reviewers never hold a page up, so they are
+     * never "awaited". Pages already fully approved produce no line.
      */
     public static function build_digest_lines(array $ready_paths, array $pages_votes, array $approvers): array {
-        if ($approvers === []) {
+        $required = self::required_approvers($approvers);
+        if ($required === []) {
             return [];
         }
         $lines = [];
@@ -291,7 +308,7 @@ class Peanut_Connect_Approvals {
                 continue;
             }
             $awaiting = [];
-            foreach ($approvers as $row) {
+            foreach ($required as $row) {
                 $vote = $votes[$row['id']] ?? null;
                 if (! is_array($vote) || ($vote['vote'] ?? '') !== 'yes' || ! empty($vote['stale'])) {
                     $awaiting[] = $row['initials'];
@@ -335,9 +352,20 @@ class Peanut_Connect_Approvals {
      */
     public static function page_snapshot(string $path): array {
         $bare = strtok($path, '?');
-        $post_id = function_exists('url_to_postid') ? (int) url_to_postid(home_url($bare)) : 0;
+        $post_id = 0;
+        // The front page must be resolved explicitly: url_to_postid() on the
+        // bare home URL is context-dependent (it resolved on the front end
+        // but returned 0 in wp-admin, making the sign-off record and digest
+        // read stale approvals as fresh — verified live on staging 3.34.0).
+        if ($bare === '/' || $bare === '') {
+            if (function_exists('get_option') && get_option('show_on_front') === 'page') {
+                $post_id = (int) get_option('page_on_front');
+            }
+        } elseif (function_exists('url_to_postid')) {
+            $post_id = (int) url_to_postid(home_url($bare));
+        }
         $modified = '';
-        if ($post_id > 0) {
+        if ($post_id > 0 && function_exists('get_post')) {
             $post = get_post($post_id);
             if ($post && ! empty($post->post_modified_gmt)) {
                 $modified = (string) $post->post_modified_gmt;
@@ -569,11 +597,12 @@ class Peanut_Connect_Approvals {
                 <thead><tr>
                     <th><?php esc_html_e('Name', 'peanut-connect'); ?></th>
                     <th style="width:90px"><?php esc_html_e('Initials', 'peanut-connect'); ?></th>
+                    <th style="width:110px"><?php esc_html_e('Must approve', 'peanut-connect'); ?></th>
                     <th style="width:150px"><?php esc_html_e('Order / remove', 'peanut-connect'); ?></th>
                 </tr></thead>
                 <tbody>
                 <?php if (empty($approvers)) : ?>
-                    <tr><td colspan="3"><?php esc_html_e('No approvers yet — add one below.', 'peanut-connect'); ?></td></tr>
+                    <tr><td colspan="4"><?php esc_html_e('No approvers yet — add one below.', 'peanut-connect'); ?></td></tr>
                 <?php endif; ?>
                 <?php foreach ($approvers as $i => $row) : ?>
                     <tr>
@@ -588,6 +617,13 @@ class Peanut_Connect_Approvals {
                         </td>
                         <td><input type="text" name="pca_initials[]" value="<?php echo esc_attr($row['initials']); ?>" size="4" maxlength="3" /></td>
                         <td>
+                            <label>
+                                <input type="hidden" name="pca_required[<?php echo esc_attr((string) $i); ?>]" value="0" />
+                                <input type="checkbox" name="pca_required[<?php echo esc_attr((string) $i); ?>]" value="1" <?php checked(! empty($row['required'])); ?> />
+                                <?php esc_html_e('Required', 'peanut-connect'); ?>
+                            </label>
+                        </td>
+                        <td>
                             <button type="submit" name="pca_action" value="up-<?php echo esc_attr((string) $i); ?>" class="button" <?php disabled($i === 0); ?> aria-label="<?php esc_attr_e('Move up', 'peanut-connect'); ?>">&uarr;</button>
                             <button type="submit" name="pca_action" value="down-<?php echo esc_attr((string) $i); ?>" class="button" <?php disabled($i === count($approvers) - 1); ?> aria-label="<?php esc_attr_e('Move down', 'peanut-connect'); ?>">&darr;</button>
                             <button type="submit" name="pca_action" value="remove-<?php echo esc_attr((string) $i); ?>" class="button"><?php esc_html_e('Remove', 'peanut-connect'); ?></button>
@@ -597,10 +633,17 @@ class Peanut_Connect_Approvals {
                 <tr>
                     <td><input type="text" name="pca_new_name" value="" class="regular-text" placeholder="<?php esc_attr_e('New approver name', 'peanut-connect'); ?>" /></td>
                     <td><input type="text" name="pca_new_initials" value="" size="4" maxlength="3" placeholder="<?php esc_attr_e('NH', 'peanut-connect'); ?>" /></td>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="pca_new_required" value="1" checked="checked" />
+                            <?php esc_html_e('Required', 'peanut-connect'); ?>
+                        </label>
+                    </td>
                     <td><button type="submit" name="pca_action" value="add" class="button"><?php esc_html_e('Add', 'peanut-connect'); ?></button></td>
                 </tr>
                 </tbody>
             </table>
+            <p class="description" style="max-width:640px"><?php esc_html_e('"Required" approvers must give a fresh YES before a page counts as fully approved. Unchecked approvers can review and leave notes, but their response never holds a page up.', 'peanut-connect'); ?></p>
             <p><button type="submit" name="pca_action" value="save" class="button button-primary"><?php esc_html_e('Save approvers', 'peanut-connect'); ?></button></p>
 
             <h3><?php esc_html_e('Reset approvals', 'peanut-connect'); ?></h3>
@@ -667,15 +710,25 @@ class Peanut_Connect_Approvals {
         $ids      = self::coerce_string_list(wp_unslash($_POST['pca_id'] ?? []));
         $names    = self::coerce_string_list(wp_unslash($_POST['pca_name'] ?? []));
         $initials = self::coerce_string_list(wp_unslash($_POST['pca_initials'] ?? []));
+        // Checkbox map keyed by row index; the paired hidden input posts "0"
+        // for unchecked rows so every row is present.
+        $required_raw = wp_unslash($_POST['pca_required'] ?? []);
+        $required_map = is_array($required_raw) ? $required_raw : [];
         $rows     = [];
         foreach ($names as $i => $name) {
-            $rows[] = ['id' => $ids[$i] ?? '', 'name' => $name, 'initials' => $initials[$i] ?? ''];
+            $rows[] = [
+                'id'       => $ids[$i] ?? '',
+                'name'     => $name,
+                'initials' => $initials[$i] ?? '',
+                'required' => ! empty($required_map[$i]),
+            ];
         }
 
         if ($action === 'add') {
             $rows[] = [
                 'name'     => sanitize_text_field(wp_unslash($_POST['pca_new_name'] ?? '')),
                 'initials' => sanitize_text_field(wp_unslash($_POST['pca_new_initials'] ?? '')),
+                'required' => ! empty($_POST['pca_new_required']),
             ];
         } elseif (preg_match('/^remove-(\d+)$/', $action, $m)) {
             array_splice($rows, (int) $m[1], 1);
@@ -774,7 +827,7 @@ class Peanut_Connect_Approvals {
                     <?php foreach ($approvers as $row) : ?>
                         <?php $vote = $votes[$row['id']] ?? null; ?>
                         <tr>
-                            <td><?php echo esc_html($row['name'] . ' (' . $row['initials'] . ')'); ?></td>
+                            <td><?php echo esc_html($row['name'] . ' (' . $row['initials'] . ')' . (empty($row['required']) ? ' — ' . __('optional reviewer', 'peanut-connect') : '')); ?></td>
                             <td><?php echo esc_html($vote ? (($vote['vote'] ?? '') === 'yes' ? __('Approved', 'peanut-connect') : __('Changes requested', 'peanut-connect')) : __('No response', 'peanut-connect')); ?></td>
                             <td><?php echo esc_html($vote['at'] ?? ''); ?></td>
                             <td>
