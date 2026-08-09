@@ -858,6 +858,35 @@ class Peanut_Connect_API {
             ],
         ]);
 
+        // Serve / remove an archive Hub is copying offsite. Both validate the
+        // name against the known-backups registry, so only an archive this
+        // site produced is reachable. GET streams the site's entire database
+        // and wp-content — the most sensitive route here.
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/backup/archive', [
+            [
+                'methods' => WP_REST_Server::READABLE,
+                'callback' => [$this, 'download_backup'],
+                'permission_callback' => [Peanut_Connect_Auth::class, 'hub_permission_callback'],
+                'args' => [
+                    'name' => [
+                        'required' => true,
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                ],
+            ],
+            [
+                'methods' => WP_REST_Server::DELETABLE,
+                'callback' => [$this, 'delete_backup'],
+                'permission_callback' => [Peanut_Connect_Auth::class, 'hub_permission_callback'],
+                'args' => [
+                    'name' => [
+                        'required' => true,
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                ],
+            ],
+        ]);
+
         // Restore from a backup archive. Restore overwrites the database and
         // replaces files (RCE-equivalent), so unlike /backup it sits behind its
         // own opt-in 'backup_restore' permission that the site owner controls —
@@ -3413,6 +3442,98 @@ class Peanut_Connect_API {
         Peanut_Connect_Activity_Log::log('backup_created', 'success', __('Backup created', 'peanut-connect'), is_array($result) ? $result : []);
 
         return new WP_REST_Response($result, 200);
+    }
+
+    /**
+     * Stream a backup archive to Hub.
+     *
+     * Hub copies the archive off this server, encrypts it, and stores it
+     * offsite. Until it does, a "backup" is a zip on the same disk as the site
+     * it backs up — which survives no disk failure, host compromise,
+     * ransomware or account deletion.
+     *
+     * This route serves the site's entire database and wp-content. It is the
+     * most sensitive endpoint in the plugin:
+     *  - Hub bearer + HMAC signature required (hub_permission_callback).
+     *  - The name is validated against the known-backups registry, so only an
+     *    archive this site produced can be served.
+     *  - The caller never supplies a path; it is rebuilt server-side and
+     *    realpath-confined to the backup directory.
+     *  - Streamed in chunks. A 500 MB archive read into memory would kill a
+     *    shared-host PHP worker.
+     *
+     * @param WP_REST_Request $request REST request with a `name` parameter.
+     * @return WP_REST_Response|WP_Error Streams on success; never returns on success.
+     * @since 3.36.0
+     */
+    public function download_backup(WP_REST_Request $request): WP_REST_Response|WP_Error {
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup.php';
+
+        $path = Peanut_Connect_Backup::resolve_known_archive((string) $request->get_param('name'));
+
+        if (is_wp_error($path)) {
+            return $path;
+        }
+
+        $size = filesize($path);
+
+        // Clear any buffering WordPress or a plugin has started, or the whole
+        // archive is accumulated in memory before a single byte is sent —
+        // which is the failure this streaming exists to avoid.
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        nocache_headers();
+        header('Content-Type: application/zip');
+        header('Content-Length: ' . ($size !== false ? $size : 0));
+        header('Content-Disposition: attachment; filename="' . basename($path) . '"');
+        header('X-Content-Type-Options: nosniff');
+
+        $handle = fopen($path, 'rb');
+        if ($handle === false) {
+            return new WP_Error('backup_unreadable', __('Backup could not be read.', 'peanut-connect'), ['status' => 500]);
+        }
+
+        while (!feof($handle)) {
+            $chunk = fread($handle, 1024 * 1024);
+            if ($chunk === false) {
+                break;
+            }
+            echo $chunk; // phpcs:ignore WordPress.Security.EscapeOutput -- binary archive stream
+            flush();
+        }
+
+        fclose($handle);
+
+        Peanut_Connect_Activity_Log::log('backup_downloaded', 'success', __('Backup archive downloaded by Hub', 'peanut-connect'), ['name' => basename($path)]);
+
+        exit;
+    }
+
+    /**
+     * Delete a backup archive this site produced.
+     *
+     * Called by Hub once an encrypted offsite copy has been verified, so
+     * archives holding a full database do not pile up on a client's disk.
+     * Same registry validation as the download route.
+     *
+     * @param WP_REST_Request $request REST request with a `name` parameter.
+     * @return WP_REST_Response|WP_Error
+     * @since 3.36.0
+     */
+    public function delete_backup(WP_REST_Request $request): WP_REST_Response|WP_Error {
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup.php';
+
+        $result = Peanut_Connect_Backup::delete_known_archive((string) $request->get_param('name'));
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        Peanut_Connect_Activity_Log::log('backup_deleted', 'success', __('Backup archive deleted after offsite copy', 'peanut-connect'), []);
+
+        return new WP_REST_Response(['success' => true], 200);
     }
 
     /**
