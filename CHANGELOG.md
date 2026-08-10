@@ -5,6 +5,14 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.36.0] - 2026-08-10
+
+### Added
+- **Hub can fetch and remove a built backup archive** (`GET /backup/archive`, `DELETE /backup/archive`), so a client site's backup can be copied off the site and stored encrypted rather than left on the same disk as the thing it protects. Merged in #103.
+
+### Why this is a version bump and not a patch
+- The endpoints landed in `main` **without** a version change, so `main` and the published v3.35.1 release both reported `3.35.1` while only one of them could serve an archive. Every site in the field installed the release, so Hub had no way to tell a capable site from an incapable one — and any capability gate set at 3.35.1 would have enabled every site and 404'd on every backup. This release makes the capability detectable by version, which is what Hub's gate keys on.
+
 ## [3.35.1] - 2026-08-03
 
 ### Fixed
