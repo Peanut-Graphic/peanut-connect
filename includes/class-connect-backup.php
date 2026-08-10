@@ -450,6 +450,91 @@ class Peanut_Connect_Backup {
     }
 
     /**
+     * Resolve an archive NAME to its path, or an error.
+     *
+     * Validation is against the known-backups registry rather than a filename
+     * pattern. The registry is written only by create_backup() from this
+     * site's own runs, so a name absent from it is not an archive we produced
+     * and is refused — which is a stronger guarantee than any amount of string
+     * sanitising, because it does not depend on predicting what a hostile name
+     * could look like.
+     *
+     * The caller never supplies a path. The path is rebuilt here from the
+     * backup directory plus the registered name, and then confirmed with
+     * realpath() to sit inside that directory — belt and braces, so a registry
+     * poisoned by some future bug still cannot walk out of the folder.
+     *
+     * @param string $name Archive name as returned by create_backup().
+     * @return string|WP_Error Absolute path to the archive.
+     */
+    public static function resolve_known_archive(string $name): string|WP_Error {
+        if ($name === '') {
+            return new WP_Error('backup_not_found', __('No backup name supplied.', 'peanut-connect'), ['status' => 404]);
+        }
+
+        $known = get_option('peanut_connect_known_backups', []);
+        if (!is_array($known)) {
+            $known = [];
+        }
+
+        $registered = false;
+        foreach ($known as $entry) {
+            if (is_array($entry) && isset($entry['name']) && hash_equals((string) $entry['name'], $name)) {
+                $registered = true;
+                break;
+            }
+        }
+
+        if (!$registered) {
+            // Deliberately the same response as a missing file: an unknown
+            // name must not be distinguishable from an absent one, or the
+            // endpoint becomes an oracle for which archives exist.
+            return new WP_Error('backup_not_found', __('Backup not found.', 'peanut-connect'), ['status' => 404]);
+        }
+
+        $backup_dir = WP_CONTENT_DIR . '/peanut-backups';
+        $candidate  = $backup_dir . '/' . $name . '.zip';
+
+        $real_dir  = realpath($backup_dir);
+        $real_file = realpath($candidate);
+
+        if ($real_dir === false || $real_file === false || !is_readable($real_file)) {
+            return new WP_Error('backup_not_found', __('Backup not found.', 'peanut-connect'), ['status' => 404]);
+        }
+
+        if (strpos($real_file, $real_dir . DIRECTORY_SEPARATOR) !== 0) {
+            return new WP_Error('backup_not_found', __('Backup not found.', 'peanut-connect'), ['status' => 404]);
+        }
+
+        return $real_file;
+    }
+
+    /**
+     * Delete an archive this site produced.
+     *
+     * Same registry validation as resolve_known_archive(), so this can only
+     * ever remove something create_backup() made. Used by Hub once an
+     * encrypted offsite copy has been verified, so archives holding a full
+     * database do not accumulate on a client's own disk.
+     *
+     * @param string $name Archive name as returned by create_backup().
+     * @return true|WP_Error
+     */
+    public static function delete_known_archive(string $name): bool|WP_Error {
+        $path = self::resolve_known_archive($name);
+
+        if (is_wp_error($path)) {
+            return $path;
+        }
+
+        if (!@unlink($path)) {
+            return new WP_Error('backup_delete_failed', __('Could not delete the backup archive.', 'peanut-connect'), ['status' => 500]);
+        }
+
+        return true;
+    }
+
+    /**
      * One-time seeding: register hashes of any backups already sitting in the
      * local backup directory when integrity tracking was introduced, so
      * legitimately-created archives stay restorable after upgrade. Backups
