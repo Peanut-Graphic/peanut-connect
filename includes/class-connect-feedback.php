@@ -141,8 +141,11 @@ class Peanut_Connect_Feedback {
         }
 
         $notice = '';
-        if (! empty($_POST['pcf_action']) && check_admin_referer('pcf_review_token')) {
-            if ($_POST['pcf_action'] === 'generate') {
+        $action = isset($_POST['pcf_action'])
+            ? sanitize_key(wp_unslash($_POST['pcf_action']))
+            : '';
+        if ($action !== '' && check_admin_referer('pcf_review_token')) {
+            if ($action === 'generate') {
                 $token = bin2hex(random_bytes(20)); // 40-char hex secret
             } else {
                 $token = sanitize_text_field(wp_unslash($_POST['pcf_review_token'] ?? ''));
@@ -322,8 +325,16 @@ class Peanut_Connect_Feedback {
         $url_token    = isset($_GET['pp_review']) ? sanitize_text_field(wp_unslash($_GET['pp_review'])) : '';
         $cookie_token = isset($_COOKIE[self::REVIEW_COOKIE]) ? sanitize_text_field(wp_unslash($_COOKIE[self::REVIEW_COOKIE])) : '';
 
-        return ($url_token !== '' && hash_equals($expected, $url_token))
-            || ($cookie_token !== '' && hash_equals($expected, $cookie_token));
+        return self::token_matches($expected, $url_token)
+            || self::token_matches($expected, $cookie_token);
+    }
+
+    /**
+     * Strict token comparison seam. The string "0" is a valid configured
+     * value and must not be discarded by PHP's empty-value coercion.
+     */
+    public static function token_matches(string $expected, string $candidate): bool {
+        return $expected !== '' && $candidate !== '' && hash_equals($expected, $candidate);
     }
 
     /**
@@ -338,12 +349,12 @@ class Peanut_Connect_Feedback {
         if (self::access_mode() === 'off') {
             return;
         }
-        if (empty($_GET['pp_review'])) {
+        if (! isset($_GET['pp_review']) || $_GET['pp_review'] === '') {
             return;
         }
         $expected = (string) get_option('peanut_connect_feedback_review_token', '');
         $token    = sanitize_text_field(wp_unslash($_GET['pp_review']));
-        if ($expected === '' || $token === '' || ! hash_equals($expected, $token)) {
+        if (! self::token_matches($expected, $token)) {
             return;
         }
         if (isset($_COOKIE[self::REVIEW_COOKIE]) && hash_equals($token, (string) $_COOKIE[self::REVIEW_COOKIE])) {

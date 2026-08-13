@@ -52,7 +52,6 @@ class Test_Update_Resolution_ExactMatch extends TestCase {
 
     private function resolve(string $slug): ?string {
         $m = new ReflectionMethod(Peanut_Connect_Updates::class, 'find_plugin_file');
-        $m->setAccessible(true);
         return $m->invoke(null, $slug);
     }
 

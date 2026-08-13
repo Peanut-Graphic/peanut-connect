@@ -724,7 +724,7 @@ class Peanut_Connect_Approvals {
      * post handled). Every branch re-sanitizes through sanitize_approvers.
      */
     private static function handle_admin_post(): string {
-        if (empty($_POST['pca_action']) || ! check_admin_referer('pca_approvers')) {
+        if (! isset($_POST['pca_action']) || $_POST['pca_action'] === '' || ! check_admin_referer('pca_approvers')) {
             return '';
         }
         $action = sanitize_text_field(wp_unslash($_POST['pca_action']));
@@ -743,7 +743,7 @@ class Peanut_Connect_Approvals {
                 'id'       => $ids[$i] ?? '',
                 'name'     => $name,
                 'initials' => $initials[$i] ?? '',
-                'required' => ! empty($required_map[$i]),
+                'required' => self::checkbox_checked($required_map[$i] ?? null),
             ];
         }
 
@@ -751,7 +751,7 @@ class Peanut_Connect_Approvals {
             $rows[] = [
                 'name'     => sanitize_text_field(wp_unslash($_POST['pca_new_name'] ?? '')),
                 'initials' => sanitize_text_field(wp_unslash($_POST['pca_new_initials'] ?? '')),
-                'required' => ! empty($_POST['pca_new_required']),
+                'required' => self::checkbox_checked($_POST['pca_new_required'] ?? null),
             ];
         } elseif (preg_match('/^remove-(\d+)$/', $action, $m)) {
             array_splice($rows, (int) $m[1], 1);
@@ -762,7 +762,7 @@ class Peanut_Connect_Approvals {
                 [$rows[$i], $rows[$j]] = [$rows[$j], $rows[$i]];
             }
         } elseif ($action === 'reset') {
-            if (empty($_POST['pca_reset_confirm'])) {
+            if (! self::checkbox_checked($_POST['pca_reset_confirm'] ?? null)) {
                 return __('Reset skipped — tick the confirmation box first.', 'peanut-connect');
             }
             $path = sanitize_text_field(wp_unslash($_POST['pca_reset_path'] ?? ''));
@@ -785,7 +785,7 @@ class Peanut_Connect_Approvals {
 
         $notify = self::sanitize_notify_settings([
             'email'  => sanitize_text_field(wp_unslash($_POST['pca_notify_email'] ?? '')),
-            'digest' => ! empty($_POST['pca_notify_digest']),
+            'digest' => self::checkbox_checked($_POST['pca_notify_digest'] ?? null),
         ]);
         update_option(self::NOTIFY_OPTION, $notify, false);
         if (class_exists('Peanut_Connect_Approvals_Notify')) {
@@ -794,6 +794,14 @@ class Peanut_Connect_Approvals {
 
         update_option(self::APPROVERS_OPTION, self::sanitize_approvers($rows), false);
         return __('Approvers saved.', 'peanut-connect');
+    }
+
+    /**
+     * Interpret an HTML checkbox without PHP's zero-value coercion. Reject
+     * arrays/objects from malformed requests instead of treating them as on.
+     */
+    public static function checkbox_checked($value): bool {
+        return is_scalar($value) && (string) $value !== '' && (string) $value !== '0';
     }
 
     /**

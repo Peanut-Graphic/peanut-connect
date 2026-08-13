@@ -173,7 +173,6 @@ class ApiTest extends TestCase {
         // Mock get_json_params
         $reflection = new \ReflectionClass($request);
         $property = $reflection->getProperty('params');
-        $property->setAccessible(true);
         $property->setValue($request, [
             'perform_updates' => false,
             'access_analytics' => false,

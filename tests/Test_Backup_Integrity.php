@@ -30,7 +30,6 @@ class Test_Backup_Integrity extends TestCase {
     /** Record a backup's hash the way create_backup() does. */
     private function record(string $file): void {
         $m = new ReflectionMethod(Peanut_Connect_Backup::class, 'register_known_backup');
-        $m->setAccessible(true);
         $m->invoke(null, hash_file('sha256', $file), basename($file));
     }
 
