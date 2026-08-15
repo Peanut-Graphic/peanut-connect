@@ -3,10 +3,16 @@
   "version": "2.1.2",
   "description": "Peanut Connect - WordPress connector plugin for Peanut Suite",
   "private": true,
+  "engines": {
+    "node": "22.22.2",
+    "npm": "10.9.7"
+  },
+  "packageManager": "npm@10.9.7",
   "scripts": {
     "dev": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build",
-    "install:frontend": "cd frontend && npm install",
+    "install:frontend": "npm ci --prefix frontend --legacy-peer-deps",
+    "runtime:verify": "node scripts/verify-runtime-contract.cjs",
     "clean": "rm -rf dist",
     "package": "bash scripts/package.sh",
     "bump": "bash scripts/bump-version.sh",

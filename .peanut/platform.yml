@@ -28,12 +28,13 @@ runtimes:
       - { scope: ci, source: .github/workflows/wp-contract.yml, value: "PHP 8.3" }
     production_observation: { status: verified, value: "PHP 8.5.9 on the central first-party installation; distributed client hosts unverified", observed_at: "2026-08-15T01:09:00-04:00", evidence: "read-only host interpreter and active-plugin inventory" }
   - name: node
-    baseline: "22"
+    baseline: "22.22.2 with npm 10.9.7"
     declarations:
-      - { scope: dependency, source: package.json, value: "engines and packageManager missing; stale package version 2.1.2" }
-      - { scope: dependency, source: frontend/package.json, value: "engines and packageManager missing; stale package version 3.9.3" }
-      - { scope: ci, source: .github/workflows/tests.yml, value: "Node 20" }
-      - { scope: ci, source: .github/workflows/accessibility.yml, value: "Node 20" }
+      - { scope: dependency, source: package.json and package-lock.json, value: "Node 22.22.2; npm 10.9.7; stale package version 2.1.2 remains a release-identity exception" }
+      - { scope: dependency, source: frontend/package.json and frontend/package-lock.json, value: "Node 22.22.2; npm 10.9.7; stale frontend version 3.9.3 remains a release-identity exception" }
+      - { scope: development, source: .nvmrc, value: "22.22.2" }
+      - { scope: ci, source: .github/workflows/tests.yml and .github/workflows/accessibility.yml, value: "two Node 22.22.2 lanes with npm 10.9.7 assertions and fail-closed locked installs" }
+      - { scope: test, source: scripts/verify-runtime-contract.cjs, value: "Node, npm, version file, both package manifests, both lockfiles, and both CI declarations must remain internally consistent" }
     production_observation: { status: not-applicable }
   - name: wordpress
     baseline: WordPress 6.0+
@@ -60,13 +61,13 @@ distribution:
   canary: "yes"
   rollback: unknown
 exceptions:
-  - id: PAR-207
-    concern: The distributed PHP minimum is enforced, but Node declarations remain below the fleet baseline and JavaScript tools are not pinned
-    reason: The plugin and Composer deliberately permit PHP 8.0 and required CI now installs the lockfile and runs the unit/property suite on PHP 8.0, alongside PHP 8.2 coverage and PHP 8.3 dependency/security lanes. The central first-party installation runs PHP 8.5.9, JavaScript CI uses Node 20, and neither package.json declares engines.node or packageManager.
-    risk: The declared PHP minimum is protected from regression, but JavaScript local builds, CI, and release assets can still exercise materially different runtimes and package-manager behavior.
+  - id: PAR-503
+    concern: Frontend dependency and accessibility gates remain advisory
+    reason: Exact Node 22.22.2/npm 10.9.7 passes typecheck, 47 Vitest files with 454 tests, and the 2,104-module production build, but accessibility lint reports one existing label-without-accessible-text error in Campaigns.tsx and remains continue-on-error. npm audit reports the existing 1 high and 3 moderate advisory baseline and tests.yml deliberately suppresses its exit status.
+    risk: Runtime parity is enforced, but accessibility and dependency regressions can remain mergeable and enter a packaged plugin asset.
     owner: Peanut Graphic
-    verification: Keep the PHP 8.0 declaration contract and required minimum lane green, then pin the fleet Node and npm versions for every JavaScript build.
-    review_date: "2026-11-14"
+    verification: Repair the known accessibility finding and dependency advisory baseline in a separate regression-tested unit, then make both gates blocking.
+    review_date: "2026-08-22"
     status: proposed
   - id: PAR-306
     concern: Distributed host databases include MariaDB but CI exercises only MySQL 8
@@ -94,7 +95,7 @@ exceptions:
     status: proposed
 verification:
   status: live-verified
-  audited_commit: 50054a02e4174da111c638793c390c6415d21b18
+  audited_commit: 2f53a208d08f8bf2e16780d6b1fa883c9538e88d
   last_reviewed: "2026-08-15"
   sources:
     - peanut-connect.php
@@ -102,12 +103,16 @@ verification:
     - README.md
     - composer.json
     - package.json
+    - package-lock.json
     - frontend/package.json
+    - frontend/package-lock.json
+    - .nvmrc
     - includes/class-connect-database.php
     - includes/class-connect-self-updater.php
     - scripts/release.sh
     - scripts/package.sh
     - scripts/bump-version.sh
+    - scripts/verify-runtime-contract.cjs
     - .github/workflows/tests.yml
     - .github/workflows/accessibility.yml
     - .github/workflows/wp-contract.yml
@@ -118,7 +123,7 @@ verification:
     - Read-only central first-party PHP, WordPress, active-plugin, MariaDB version, collation, and SQL-mode metadata on 2026-08-15
   outstanding:
     - Inventory supported distributed client-host PHP, WordPress, database version, collation, and SQL-mode compatibility without collecting customer data.
-    - Align and pin PHP, Node, and npm declarations under PAR-207 and PAR-205.
+    - Repair and promote frontend dependency and accessibility gates under PAR-503.
     - Add supported MariaDB real-WordPress contract lanes under PAR-306.
     - Retire or wrap the unsigned local release path under PAR-404.
     - Reconcile versions, package completeness, product metadata, and rollback under PAR-405.
