@@ -14,6 +14,10 @@ environments:
     kind: production
     provider: GitHub Releases and Peanut License Server
     url: "https://github.com/Peanut-Graphic/peanut-connect/releases"
+  - name: central-first-party-install
+    kind: production
+    provider: peanutgraphic.com shared WordPress hosting
+    url: "https://peanutgraphic.com"
 runtimes:
   - name: php
     baseline: WordPress compatibility matrix
@@ -22,7 +26,7 @@ runtimes:
       - { scope: dependency, source: composer.json, value: "require >=8.0; platform 8.0.0" }
       - { scope: ci, source: .github/workflows/tests.yml, value: "PHP 8.3 dependency/security lane and PHP 8.2 unit/property lane" }
       - { scope: ci, source: .github/workflows/wp-contract.yml, value: "PHP 8.3" }
-    production_observation: { status: not-applicable }
+    production_observation: { status: verified, value: "PHP 8.5.9 on the central first-party installation; distributed client hosts unverified", observed_at: "2026-08-15T01:09:00-04:00", evidence: "read-only host interpreter and active-plugin inventory" }
   - name: node
     baseline: "22"
     declarations:
@@ -37,7 +41,7 @@ runtimes:
       - { scope: dependency, source: peanut-connect.php, value: "Requires at least 6.0" }
       - { scope: dependency, source: readme.txt, value: "Requires 6.0; tested up to 6.4" }
       - { scope: test, source: .github/workflows/wp-contract.yml, value: "WordPress latest" }
-    production_observation: { status: not-applicable }
+    production_observation: { status: verified, value: "WordPress 6.9.7 on the central first-party installation; distributed client hosts unverified", observed_at: "2026-08-15T01:09:00-04:00", evidence: "read-only WP-CLI core-version and active-plugin inventory" }
 databases:
   - name: host-database
     role: transactional
@@ -46,7 +50,7 @@ databases:
       - { scope: dependency, source: includes/class-connect-database.php, value: "WordPress dbDelta tables and DB version migrations on plugins_loaded" }
       - { scope: ci, source: .github/workflows/wp-contract.yml, value: "mysql:8 real WordPress REST contract lane" }
     production_equivalent_test: "yes"
-    production_observation: { status: not-applicable }
+    production_observation: { status: verified, value: "MariaDB 10.6.27, latin1_swedish_ci server collation, SQL mode ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION on the central first-party installation; distributed client hosts unverified", observed_at: "2026-08-15T01:09:00-04:00", evidence: "read-only database metadata query; no application rows read" }
 services: []
 distribution:
   mode: signed-github-release
@@ -58,7 +62,7 @@ distribution:
 exceptions:
   - id: PAR-207
     concern: PHP and Node declarations remain below the fleet baselines and JavaScript tools are not pinned
-    reason: The plugin and Composer permit PHP 8.0, PHP CI is split across 8.2 and 8.3, JavaScript CI uses Node 20, and neither package.json declares engines.node or packageManager.
+    reason: The plugin and Composer permit PHP 8.0, PHP CI is split across 8.2 and 8.3, the central first-party installation runs PHP 8.5.9, JavaScript CI uses Node 20, and neither package.json declares engines.node or packageManager.
     risk: Customer hosts, dependency resolution, local builds, CI, and release assets can exercise materially different runtimes and package-manager behavior.
     owner: Peanut Graphic
     verification: Approve the supported WordPress PHP matrix, add its CI lanes, align Composer's platform declaration, and pin the fleet Node and npm versions for every JavaScript build.
@@ -66,7 +70,7 @@ exceptions:
     status: proposed
   - id: PAR-306
     concern: Distributed host databases include MariaDB but CI exercises only MySQL 8
-    reason: WordPress hosts control the database engine, while the only real WordPress contract lane uses mysql:8 and the plugin runs dbDelta-backed schema changes during normal plugin loading.
+    reason: WordPress hosts control the database engine. The central first-party installation runs MariaDB 10.6.27 with latin1_swedish_ci and a non-strict SQL mode, while the only real WordPress contract lane uses mysql:8, the plugin runs dbDelta-backed schema changes during normal plugin loading, and distributed client hosts remain unverified.
     risk: MariaDB-specific DDL, index, collation, or migration behavior can fail on client sites without appearing in the required gate.
     owner: Peanut Graphic
     verification: Run the reusable real-WordPress contract and migration tests against every supported MySQL and MariaDB lane.
@@ -89,9 +93,9 @@ exceptions:
     review_date: "2026-11-14"
     status: proposed
 verification:
-  status: source-audited
-  audited_commit: a1c511846e77ddeef7c537070fb55993aa5ae6e7
-  last_reviewed: "2026-08-14"
+  status: live-verified
+  audited_commit: 50054a02e4174da111c638793c390c6415d21b18
+  last_reviewed: "2026-08-15"
   sources:
     - peanut-connect.php
     - readme.txt
@@ -111,7 +115,9 @@ verification:
     - Peanut-Graphic/peanut-meta:scripts/verify-plugin-release.sh
     - GitHub Release v3.36.0 assets and signed manifest
     - Peanut License Server /updates/check response for peanut-connect
+    - Read-only central first-party PHP, WordPress, active-plugin, MariaDB version, collation, and SQL-mode metadata on 2026-08-15
   outstanding:
+    - Inventory supported distributed client-host PHP, WordPress, database version, collation, and SQL-mode compatibility without collecting customer data.
     - Align and pin PHP, Node, and npm declarations under PAR-207 and PAR-205.
     - Add supported MariaDB real-WordPress contract lanes under PAR-306.
     - Retire or wrap the unsigned local release path under PAR-404.
