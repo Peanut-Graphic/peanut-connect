@@ -45,9 +45,10 @@ class Test_Backup_Archive extends TestCase {
         $path = $this->dir . '/' . $name . '.zip';
         file_put_contents($path, $body);
 
-        // setAccessible() is a no-op since PHP 8.1 and deprecated in 8.5.
-        (new ReflectionMethod(Peanut_Connect_Backup::class, 'register_known_backup'))
-            ->invoke(null, hash_file('sha256', $path), $name);
+        // PHP 8.0 requires setAccessible(); it is a no-op on newer runtimes.
+        $method = new ReflectionMethod(Peanut_Connect_Backup::class, 'register_known_backup');
+        $method->setAccessible(true);
+        $method->invoke(null, hash_file('sha256', $path), $name);
 
         return $path;
     }
