@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,14 +31,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.22.2'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify Node/npm contract
+        run: test "$(npm --version)" = "10.9.7" && npm run runtime:verify
 
       - name: Install dependencies
         # legacy-peer-deps: eslint 10 vs eslint-plugin-jsx-a11y peer range
         # (pre-existing; same handling as tests.yml frontend-tests).
-        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
       - name: ESLint with jsx-a11y
         continue-on-error: true

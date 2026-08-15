@@ -3,6 +3,11 @@
     "version": "3.9.3",
     "private": true,
     "type": "module",
+    "engines": {
+        "node": "22.22.2",
+        "npm": "10.9.7"
+    },
+    "packageManager": "npm@10.9.7",
     "scripts": {
         "dev": "vite",
         "build": "tsc --noEmit && vite build",
@@ -14,7 +19,8 @@
         "test:a11y": "vitest run -- a11y",
         "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,css}\"",
         "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,css}\"",
-        "lint:a11y": "eslint src"
+        "lint:a11y": "eslint src",
+        "runtime:verify": "node ../scripts/verify-runtime-contract.cjs"
     },
     "dependencies": {
         "@tanstack/react-query": "^5.62.0",
