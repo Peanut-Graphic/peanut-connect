@@ -58,6 +58,7 @@ class Test_Banner_Sanitization extends TestCase {
 
     public function test_position_is_constrained_to_known_set(): void {
         $m = new ReflectionMethod(Peanut_Connect_Event_Banner::class, 'sanitize_position');
+        $m->setAccessible(true);
         $this->assertSame('top', $m->invoke(null, 'top'));
         $this->assertSame('bottom', $m->invoke(null, 'BOTTOM'));
         // Injection attempts collapse to the safe default.

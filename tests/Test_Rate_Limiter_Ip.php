@@ -17,11 +17,13 @@ class Test_Rate_Limiter_Ip extends TestCase {
 
     private function cidr(string $ip, string $cidr): bool {
         $m = new ReflectionMethod(Peanut_Connect_Rate_Limiter::class, 'ip_in_cidr');
+        $m->setAccessible(true);
         return $m->invoke(null, $ip, $cidr);
     }
 
     private function inList(string $ip, array $list): bool {
         $m = new ReflectionMethod(Peanut_Connect_Rate_Limiter::class, 'ip_matches_any');
+        $m->setAccessible(true);
         return $m->invoke(null, $ip, $list);
     }
 

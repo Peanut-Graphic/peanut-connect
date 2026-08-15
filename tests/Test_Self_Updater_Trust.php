@@ -16,6 +16,7 @@ class Test_Self_Updater_Trust extends TestCase {
 
     private function call_private_static(string $method, ...$args) {
         $ref = new ReflectionMethod(Peanut_Connect_Self_Updater::class, $method);
+        $ref->setAccessible(true);
         return $ref->invoke(null, ...$args);
     }
 

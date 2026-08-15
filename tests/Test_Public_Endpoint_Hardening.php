@@ -167,6 +167,7 @@ class Test_Public_Endpoint_Hardening extends Peanut_Connect_TestCase {
 
     private function addresses_all_public(array $ips): bool {
         $m = new ReflectionMethod(Peanut_Connect_API::class, 'addresses_all_public');
+        $m->setAccessible(true);
         return $m->invoke(null, $ips);
     }
 
@@ -186,6 +187,7 @@ class Test_Public_Endpoint_Hardening extends Peanut_Connect_TestCase {
 
     public function test_is_safe_hub_host_still_blocks_local_names(): void {
         $m = new ReflectionMethod(Peanut_Connect_API::class, 'is_safe_hub_host');
+        $m->setAccessible(true);
         $this->assertFalse($m->invoke(null, 'localhost', 'https'));
         $this->assertFalse($m->invoke(null, 'metadata.google.internal', 'https'));
         $this->assertFalse($m->invoke(null, 'foo.internal', 'https'));
