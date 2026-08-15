@@ -12,6 +12,16 @@ require_once dirname(__DIR__) . '/includes/class-connect-approvals.php';
 
 class Test_Connect_Approvals extends Peanut_Connect_TestCase
 {
+    public function test_checkbox_checked_is_strict_and_rejects_malformed_values(): void
+    {
+        foreach ([null, '', '0', 0, 0.0, false, [], ['1']] as $off) {
+            $this->assertFalse(Peanut_Connect_Approvals::checkbox_checked($off));
+        }
+        foreach (['1', 1, true, 'on', 'false'] as $on) {
+            $this->assertTrue(Peanut_Connect_Approvals::checkbox_checked($on));
+        }
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

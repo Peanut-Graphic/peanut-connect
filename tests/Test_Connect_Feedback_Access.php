@@ -96,6 +96,14 @@ class Test_Connect_Feedback_Access extends Peanut_Connect_TestCase
         $this->assertTrue(Peanut_Connect_Feedback::can_review($request));
     }
 
+    public function test_token_comparison_preserves_zero_without_opening_empty_tokens(): void
+    {
+        $this->assertTrue(Peanut_Connect_Feedback::token_matches('0', '0'));
+        $this->assertFalse(Peanut_Connect_Feedback::token_matches('0', ''));
+        $this->assertFalse(Peanut_Connect_Feedback::token_matches('', ''));
+        $this->assertFalse(Peanut_Connect_Feedback::token_matches('0', '00'));
+    }
+
     public function test_can_review_rejects_editor_login_in_token_mode_without_token(): void
     {
         update_option('peanut_connect_feedback_review_token', 'secret-token-40chars');
