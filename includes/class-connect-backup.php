@@ -312,9 +312,9 @@ class Peanut_Connect_Backup {
      * Import a SQL dump into the database
      *
      * @param string $sql_file Path to the SQL file.
-     * @return true|WP_Error True on success or error.
+     * @return bool|WP_Error True on success or error.
      */
-    private static function import_database(string $sql_file): true|WP_Error {
+    private static function import_database(string $sql_file): bool|WP_Error {
         global $wpdb;
         $sql = file_get_contents($sql_file);
         if (!$sql) {
