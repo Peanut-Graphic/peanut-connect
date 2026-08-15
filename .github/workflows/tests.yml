@@ -20,6 +20,8 @@ jobs:
           tools: composer
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
+      - name: Verify declared PHP support
+        run: php scripts/verify-php-runtime.php
       - name: Dependency audit (PHP)
         run: composer audit --locked || true   # Net 2: start non-blocking; ratchet to blocking
       - name: Secret scan (gitleaks)
@@ -68,6 +70,28 @@ jobs:
         with:
           name: php-coverage
           path: coverage/
+
+  php-minimum-tests:
+    runs-on: ubuntu-latest
+    needs: static-and-security
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup declared minimum PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.0"
+          coverage: none
+          tools: composer
+
+      - name: Install dependencies from the lockfile
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Verify declared PHP support
+        run: php scripts/verify-php-runtime.php --expect-runtime=8.0
+
+      - name: Unit + Property tests at the declared minimum
+        run: vendor/bin/phpunit --testsuite=Unit,Property
 
   frontend-tests:
     runs-on: ubuntu-latest

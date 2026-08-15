@@ -24,7 +24,7 @@ runtimes:
     declarations:
       - { scope: dependency, source: peanut-connect.php, value: "Requires PHP 8.0" }
       - { scope: dependency, source: composer.json, value: "require >=8.0; platform 8.0.0" }
-      - { scope: ci, source: .github/workflows/tests.yml, value: "PHP 8.3 dependency/security lane and PHP 8.2 unit/property lane" }
+      - { scope: ci, source: .github/workflows/tests.yml, value: "required PHP 8.0 minimum unit/property lane, PHP 8.2 coverage lane, and PHP 8.3 dependency/security lane" }
       - { scope: ci, source: .github/workflows/wp-contract.yml, value: "PHP 8.3" }
     production_observation: { status: verified, value: "PHP 8.5.9 on the central first-party installation; distributed client hosts unverified", observed_at: "2026-08-15T01:09:00-04:00", evidence: "read-only host interpreter and active-plugin inventory" }
   - name: node
@@ -61,11 +61,11 @@ distribution:
   rollback: unknown
 exceptions:
   - id: PAR-207
-    concern: PHP and Node declarations remain below the fleet baselines and JavaScript tools are not pinned
-    reason: The plugin and Composer permit PHP 8.0, PHP CI is split across 8.2 and 8.3, the central first-party installation runs PHP 8.5.9, JavaScript CI uses Node 20, and neither package.json declares engines.node or packageManager.
-    risk: Customer hosts, dependency resolution, local builds, CI, and release assets can exercise materially different runtimes and package-manager behavior.
+    concern: The distributed PHP minimum is enforced, but Node declarations remain below the fleet baseline and JavaScript tools are not pinned
+    reason: The plugin and Composer deliberately permit PHP 8.0 and required CI now installs the lockfile and runs the unit/property suite on PHP 8.0, alongside PHP 8.2 coverage and PHP 8.3 dependency/security lanes. The central first-party installation runs PHP 8.5.9, JavaScript CI uses Node 20, and neither package.json declares engines.node or packageManager.
+    risk: The declared PHP minimum is protected from regression, but JavaScript local builds, CI, and release assets can still exercise materially different runtimes and package-manager behavior.
     owner: Peanut Graphic
-    verification: Approve the supported WordPress PHP matrix, add its CI lanes, align Composer's platform declaration, and pin the fleet Node and npm versions for every JavaScript build.
+    verification: Keep the PHP 8.0 declaration contract and required minimum lane green, then pin the fleet Node and npm versions for every JavaScript build.
     review_date: "2026-11-14"
     status: proposed
   - id: PAR-306
