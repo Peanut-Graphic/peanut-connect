@@ -41,11 +41,6 @@
       "count": 1
     }
   },
-  "src/pages/Settings.tsx": {
-    "jsx-a11y/label-has-associated-control": {
-      "count": 3
-    }
-  },
   "src/test/accessibility/components.a11y.test.tsx": {
     "jsx-a11y/no-redundant-roles": {
       "count": 1

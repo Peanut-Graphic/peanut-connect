@@ -21,6 +21,13 @@ export default [
             '@typescript-eslint': tseslint.plugin,
             'react-hooks': reactHooks,
         },
-        rules: { ...jsxA11y.flatConfigs.recommended.rules },
+        rules: {
+            ...jsxA11y.flatConfigs.recommended.rules,
+            // Our wrapping labels nest their text one level deeper than the
+            // rule's default `depth: 2` (label > span > span > text). The
+            // markup is correct — the control is wrapped and the text is
+            // inside the label — so widen the search rather than restructure.
+            'jsx-a11y/label-has-associated-control': ['error', { depth: 3 }],
+        },
     },
 ];
