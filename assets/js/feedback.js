@@ -63,7 +63,7 @@
   function pageKey() {
     try {
       const u = new URL(location.href);
-      ['pp_review', 'pp_note', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid']
+      ['pp_review', 'pp_note', 'pp_as', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid']
         .forEach((k) => u.searchParams.delete(k));
       const qs = u.searchParams.toString();
       return u.pathname + (qs ? '?' + qs : '');
@@ -424,7 +424,10 @@
     '<li>Or click <strong>+ Mark it up</strong> and click a spot (for an image or button).</li>' +
     '<li>Or click <strong>✎ Draw</strong> and drag to circle or scribble on the page, then add a note. Click <strong>✎ Draw</strong> again to stop.</li>' +
     '<li>Type your note. A marker appears; click it to read the note. Tick a note off in this list once it\'s handled.</li>' +
+    '<li>If you are an <strong>approver</strong>, click your initials at the top to approve the page — or tell us what needs to change.</li>' +
     '</ol></div>' +
+    '<div class="pp-approve" hidden><div class="pp-approve-label">Click your initials to approve:</div>' +
+    '<div class="pp-approve-chips"></div><div class="pp-approve-flow" hidden></div></div>' +
     '<div class="pp-tabs"><button class="pp-tab pp-tab-on" data-tab="page">This page</button><button class="pp-tab" data-tab="site">All pages</button></div>' +
     '<div class="pp-tabbody" data-tab="page"><div class="pp-filter"><select class="pp-by"><option value="">Everyone</option></select></div>' +
     '<ul class="pp-list"></ul></div>' +
@@ -445,6 +448,21 @@
     toggle.setAttribute('aria-label', panelState.open ? 'Collapse notes' : 'Expand notes');
   }
   applyCollapsed();
+  // Resizable panel — the approval strip and rollup need room; size persists.
+  const SIZE_KEY = 'ppFeedbackPanelSize';
+  try {
+    const sz = JSON.parse(localStorage.getItem(SIZE_KEY) || 'null');
+    if (sz && sz.w > 200 && sz.h > 100) { panel.style.width = sz.w + 'px'; panel.style.height = sz.h + 'px'; }
+  } catch (e) {}
+  if (window.ResizeObserver) {
+    let sizeTimer = null;
+    new ResizeObserver(() => {
+      if (sizeTimer) clearTimeout(sizeTimer);
+      sizeTimer = setTimeout(() => {
+        localStorage.setItem(SIZE_KEY, JSON.stringify({ w: panel.offsetWidth, h: panel.offsetHeight }));
+      }, 300);
+    }).observe(panel);
+  }
   const INTRO_KEY = 'ppFeedbackSeenIntro';
   if (!localStorage.getItem(INTRO_KEY)) {
     panelState.open = true; applyCollapsed();
@@ -464,18 +482,60 @@
     panel.querySelectorAll('.pp-tabbody').forEach((body) => { body.hidden = body.getAttribute('data-tab') !== b.getAttribute('data-tab'); });
     if (b.getAttribute('data-tab') === 'site' && !summaryCache) loadSummary();
   }));
+  function approvalChipsRow(votes) {
+    const row = document.createElement('div');
+    row.className = 'pp-sw-chips';
+    approvers.forEach((ap) => {
+      const v = votes ? votes[ap.id] : null;
+      const cls = v ? (v.vote === 'yes' ? (v.stale ? ' pp-chip-stale' : ' pp-chip-yes') : ' pp-chip-no') : '';
+      const s = document.createElement('span');
+      s.className = 'pp-chip pp-chip-sm' + cls + (ap.required === false ? ' pp-chip-opt' : '');
+      s.textContent = ap.initials;
+      s.title = ap.name + (v ? (v.vote === 'yes' ? (v.stale ? ' — Approved · ' + apprDate(v.at) + ' · page changed ' + apprDate(v.modified_at) : ' — Approved · ' + apprDate(v.at)) : ' — Needs changes · ' + apprDate(v.at)) : ' — no response yet') + (ap.required === false ? ' · optional reviewer' : '');
+      row.appendChild(s);
+    });
+    return row;
+  }
   function loadSummary() {
     const box = panel.querySelector('.pp-sitewide');
     box.textContent = 'Loading…';
-    api('GET', '/feedback/summary').then((res) => {
-      if (!res || !res.pages) { box.textContent = 'Not available yet.'; return; }
-      summaryCache = res.pages;
+    const notesReq = api('GET', '/feedback/summary').catch(() => null);
+    const apprReq = approvers.length ? api('GET', '/approvals').catch(() => null) : Promise.resolve(null);
+    Promise.all([notesReq, apprReq]).then(([res, appr]) => {
+      const apprPages = (appr && appr.pages) || {};
+      if ((!res || !res.pages) && !Object.keys(apprPages).length) { box.textContent = 'Not available yet.'; return; }
+      if (res && res.pages) summaryCache = res.pages;
       box.innerHTML = '';
-      res.pages.forEach((pg) => {
+      const ready = (appr && appr.ready) || [];
+      const needs = ready.filter((p) => {
+        if (!/^\/(?!\/)/.test(p)) return false;
+        const votes = apprPages[p] || {};
+        if (youId) {
+          const v = votes[youId];
+          return !v || v.vote !== 'yes' || v.stale;
+        }
+        // Only REQUIRED approvers gate a page; optional reviewers never hold it up.
+        const req = approvers.filter((ap) => ap.required !== false);
+        return !req.length || !req.every((ap) => { const v = votes[ap.id]; return v && v.vote === 'yes' && !v.stale; });
+      });
+      if (needs.length) {
+        const head = document.createElement('div'); head.className = 'pp-sw-page pp-needs-head';
+        head.textContent = youId ? 'Needs your sign-off' : 'Awaiting approval';
+        box.appendChild(head);
+        needs.forEach((p) => {
+          const a = document.createElement('a'); a.className = 'pp-sw-note'; a.textContent = p; a.href = p;
+          box.appendChild(a);
+        });
+      }
+      const seen = {};
+      const notePages = (res && res.pages) || [];
+      notePages.forEach((pg) => {
         if (!pg || typeof pg.page_url !== 'string' || !/^\/(?!\/)/.test(pg.page_url)) return; // defense-in-depth: only same-site paths become hrefs
+        seen[pg.page_url] = true;
         const h = document.createElement('div'); h.className = 'pp-sw-page';
         h.textContent = (pg.page_title || pg.page_url) + ' — ' + pg.open_count + ' open, ' + pg.done_count + ' done';
         box.appendChild(h);
+        if (approvers.length) box.appendChild(approvalChipsRow(apprPages[pg.page_url]));
         (pg.notes || []).forEach((n) => {
           const a = document.createElement('a');
           a.className = 'pp-sw-note' + (n.status === 'done' ? ' pp-strike' : '');
@@ -484,7 +544,132 @@
           box.appendChild(a);
         });
       });
-    }).catch(() => { box.textContent = 'Not available yet.'; });
+      // Pages that have approval activity but no notes still show up.
+      Object.keys(apprPages).forEach((path) => {
+        if (seen[path] || !/^\/(?!\/)/.test(path)) return;
+        const h = document.createElement('div'); h.className = 'pp-sw-page';
+        h.textContent = path;
+        box.appendChild(h);
+        box.appendChild(approvalChipsRow(apprPages[path]));
+      });
+    });
+  }
+
+  // ---- approval chips ("Click your initials to approve") ----
+  const approvers = Array.isArray(cfg.approvers) ? cfg.approvers : [];
+  const youId = typeof cfg.youApproverId === 'string' ? cfg.youApproverId : '';
+  let apprVotes = {};
+  let readyList = [];
+
+  function apprDate(at) {
+    try { return new Date(at.replace(' ', 'T') + 'Z').toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; }
+  }
+  function hideApproveFlow() {
+    const flow = panel.querySelector('.pp-approve-flow');
+    flow.hidden = true; flow.innerHTML = '';
+  }
+  function renderApprovals() {
+    const box = panel.querySelector('.pp-approve');
+    if (!approvers.length) { box.hidden = true; return; }
+    box.hidden = false;
+    const chips = box.querySelector('.pp-approve-chips');
+    chips.innerHTML = '';
+    approvers.forEach((ap) => {
+      const v = apprVotes[ap.id];
+      const cls = v ? (v.vote === 'yes' ? (v.stale ? ' pp-chip-stale' : ' pp-chip-yes') : ' pp-chip-no') : '';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pp-chip' + cls + (ap.required === false ? ' pp-chip-opt' : '');
+      if (youId && ap.id === youId) b.classList.add('pp-chip-you');
+      b.textContent = ap.initials;
+      b.title = ap.name + (v
+        ? (v.vote === 'yes' ? (v.stale ? ' — Approved · ' + apprDate(v.at) + ' · page changed ' + apprDate(v.modified_at) : ' — Approved · ' + apprDate(v.at)) : ' — Needs changes · ' + apprDate(v.at))
+        : ' — no response yet') + (ap.required === false ? ' · optional reviewer' : '');
+      b.setAttribute('aria-label', b.title);
+      b.addEventListener('click', () => askApprove(ap));
+      chips.appendChild(b);
+    });
+    const oldReady = box.querySelector('.pp-ready-btn');
+    if (oldReady) oldReady.remove();
+    if (cfg.isAgency) {
+      const isReady = readyList.indexOf(pageKey()) !== -1;
+      const rb = document.createElement('button');
+      rb.type = 'button';
+      rb.className = 'pp-ready-btn' + (isReady ? ' pp-on' : '');
+      rb.textContent = isReady ? 'Requested — undo' : 'Request approval';
+      rb.addEventListener('click', () => {
+        api('POST', '/approvals/ready', { path: pageKey(), ready: !isReady })
+          .then((res) => { if (res && res.success) { readyList = res.ready || []; renderApprovals(); } });
+      });
+      box.appendChild(rb);
+    }
+  }
+  function approveError(flow) {
+    let err = flow.querySelector('.pp-approve-err');
+    if (!err) { err = document.createElement('div'); err.className = 'pp-approve-err'; flow.appendChild(err); }
+    err.textContent = "couldn't save — try again";
+  }
+  function askApprove(ap) {
+    if (youId && ap.id !== youId) { confirmIdentity(ap); return; }
+    askApproveFlow(ap);
+  }
+  function askApproveFlow(ap) {
+    const flow = panel.querySelector('.pp-approve-flow');
+    flow.innerHTML = ''; flow.hidden = false;
+    const q = document.createElement('div'); q.className = 'pp-approve-q';
+    q.textContent = 'Is this approved?  (' + ap.name + ')';
+    const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'pp-approve-btn pp-approve-yes'; yes.textContent = 'YES';
+    const no = document.createElement('button'); no.type = 'button'; no.className = 'pp-approve-btn pp-approve-no'; no.textContent = 'NO';
+    const row = document.createElement('div'); row.className = 'pp-approve-row'; row.append(yes, no);
+    flow.append(q, row);
+    yes.addEventListener('click', () => sendVote(ap, 'yes', '', flow));
+    no.addEventListener('click', () => askReason(ap, flow));
+  }
+  function confirmIdentity(ap) {
+    const flow = panel.querySelector('.pp-approve-flow');
+    flow.innerHTML = ''; flow.hidden = false;
+    const q = document.createElement('div'); q.className = 'pp-approve-q';
+    q.textContent = "You're voting as " + ap.name + ' — continue?';
+    const go = document.createElement('button'); go.type = 'button'; go.className = 'pp-approve-btn pp-approve-yes'; go.textContent = 'Continue';
+    const stop = document.createElement('button'); stop.type = 'button'; stop.className = 'pp-approve-btn pp-approve-no'; stop.textContent = 'Cancel';
+    const row = document.createElement('div'); row.className = 'pp-approve-row'; row.append(go, stop);
+    flow.append(q, row);
+    go.addEventListener('click', () => askApproveFlow(ap));
+    stop.addEventListener('click', () => hideApproveFlow());
+  }
+  function askReason(ap, flow) {
+    flow.innerHTML = '';
+    const q = document.createElement('div'); q.className = 'pp-approve-q';
+    q.textContent = 'What needs to change for approval?';
+    const ta = document.createElement('textarea'); ta.className = 'pp-approve-ta'; ta.rows = 3;
+    const submit = document.createElement('button'); submit.type = 'button'; submit.className = 'pp-approve-btn pp-approve-yes'; submit.textContent = 'submit';
+    const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'pp-approve-btn pp-approve-no'; edit.textContent = 'edit';
+    edit.title = 'Close and use the mark-it-up tools instead';
+    const row = document.createElement('div'); row.className = 'pp-approve-row'; row.append(submit, edit);
+    flow.append(q, ta, row);
+    ta.focus();
+    submit.addEventListener('click', () => sendVote(ap, 'no', ta.value.trim(), flow));
+    // "edit" = go mark up the page instead; the vote can be cast after.
+    edit.addEventListener('click', () => hideApproveFlow());
+  }
+  function sendVote(ap, vote, reason, flow) {
+    api('POST', '/approvals/vote', {
+      path: pageKey(), page_title: document.title,
+      approver_id: ap.id, vote: vote, reason: reason, author_key: authorKey(),
+    }).then((res) => {
+      if (res && res.success) {
+        apprVotes = res.votes || {};
+        readyList = (res && res.ready) || [];
+        hideApproveFlow(); renderApprovals();
+        if (vote === 'no' && reason && res.note_id) load(); // the reason is now a note — refresh the list
+      } else { approveError(flow); }
+    }).catch(() => approveError(flow));
+  }
+  function loadApprovals() {
+    if (!approvers.length) { renderApprovals(); return; }
+    api('GET', '/approvals?path=' + encodeURIComponent(pageKey()))
+      .then((res) => { apprVotes = (res && res.votes) || {}; readyList = (res && res.ready) || []; renderApprovals(); })
+      .catch(() => { apprVotes = {}; renderApprovals(); });
   }
 
   (function drag() {
@@ -604,4 +789,5 @@
   window.addEventListener('resize', () => { renderMarkers(); hideTip(); });
   window.addEventListener('scroll', () => { renderMarkers(); hideTip(); }, { passive: true });
   load();
+  loadApprovals();
 })();

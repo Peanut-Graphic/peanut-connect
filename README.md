@@ -255,8 +255,10 @@ The plugin includes a modern React-based admin dashboard with:
 To build the frontend:
 
 ```bash
+nvm use # exact Node 22.22.2 with npm 10.9.7
 cd frontend
-npm install
+npm ci --legacy-peer-deps
+npm run runtime:verify
 npm run build
 ```
 

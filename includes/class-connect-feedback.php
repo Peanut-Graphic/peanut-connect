@@ -135,9 +135,17 @@ class Peanut_Connect_Feedback {
             return;
         }
 
+        if (isset($_GET['pca_view']) && $_GET['pca_view'] === 'record' && class_exists('Peanut_Connect_Approvals')) {
+            Peanut_Connect_Approvals::render_record_view();
+            return;
+        }
+
         $notice = '';
-        if (! empty($_POST['pcf_action']) && check_admin_referer('pcf_review_token')) {
-            if ($_POST['pcf_action'] === 'generate') {
+        $action = isset($_POST['pcf_action'])
+            ? sanitize_key(wp_unslash($_POST['pcf_action']))
+            : '';
+        if ($action !== '' && check_admin_referer('pcf_review_token')) {
+            if ($action === 'generate') {
                 $token = bin2hex(random_bytes(20)); // 40-char hex secret
             } else {
                 $token = sanitize_text_field(wp_unslash($_POST['pcf_review_token'] ?? ''));
@@ -269,6 +277,11 @@ class Peanut_Connect_Feedback {
                     <button type="submit" name="pcf_action" value="generate" class="button"><?php esc_html_e('Generate a new token', 'peanut-connect'); ?></button>
                 </p>
             </form>
+            <?php
+            if (class_exists('Peanut_Connect_Approvals')) {
+                Peanut_Connect_Approvals::render_admin_section();
+            }
+            ?>
         </div>
         <?php
     }
@@ -312,8 +325,16 @@ class Peanut_Connect_Feedback {
         $url_token    = isset($_GET['pp_review']) ? sanitize_text_field(wp_unslash($_GET['pp_review'])) : '';
         $cookie_token = isset($_COOKIE[self::REVIEW_COOKIE]) ? sanitize_text_field(wp_unslash($_COOKIE[self::REVIEW_COOKIE])) : '';
 
-        return ($url_token !== '' && hash_equals($expected, $url_token))
-            || ($cookie_token !== '' && hash_equals($expected, $cookie_token));
+        return self::token_matches($expected, $url_token)
+            || self::token_matches($expected, $cookie_token);
+    }
+
+    /**
+     * Strict token comparison seam. The string "0" is a valid configured
+     * value and must not be discarded by PHP's empty-value coercion.
+     */
+    public static function token_matches(string $expected, string $candidate): bool {
+        return $expected !== '' && $candidate !== '' && hash_equals($expected, $candidate);
     }
 
     /**
@@ -328,12 +349,12 @@ class Peanut_Connect_Feedback {
         if (self::access_mode() === 'off') {
             return;
         }
-        if (empty($_GET['pp_review'])) {
+        if (! isset($_GET['pp_review']) || $_GET['pp_review'] === '') {
             return;
         }
         $expected = (string) get_option('peanut_connect_feedback_review_token', '');
         $token    = sanitize_text_field(wp_unslash($_GET['pp_review']));
-        if ($expected === '' || $token === '' || ! hash_equals($expected, $token)) {
+        if (! self::token_matches($expected, $token)) {
             return;
         }
         if (isset($_COOKIE[self::REVIEW_COOKIE]) && hash_equals($token, (string) $_COOKIE[self::REVIEW_COOKIE])) {
@@ -399,6 +420,8 @@ class Peanut_Connect_Feedback {
             'nonce'       => wp_create_nonce('wp_rest'),
             'isAgency'    => self::is_agency(),
             'reviewToken' => $token,
+            'approvers'   => class_exists('Peanut_Connect_Approvals') ? Peanut_Connect_Approvals::approvers() : [],
+            'youApproverId' => class_exists('Peanut_Connect_Approvals') ? Peanut_Connect_Approvals::you_approver_id() : '',
         ]);
     }
 
@@ -562,6 +585,24 @@ class Peanut_Connect_Feedback {
     public static function create(\WP_REST_Request $request) {
         $payload = self::build_store_payload($request->get_json_params() ?: [], self::is_agency());
         return self::relay('POST', '/feedback', $payload);
+    }
+
+    /**
+     * Server-side note create for sibling modules (the approvals "what needs
+     * to change" reason). Best-effort: relay/Hub failures return null and
+     * must not block the caller — the reason also lives on the approval
+     * record itself.
+     */
+    public static function store_note(array $req): ?int {
+        $payload = self::build_store_payload($req, self::is_agency());
+        $res     = self::relay('POST', '/feedback', $payload);
+        if ($res instanceof \WP_REST_Response) {
+            $data = $res->get_data();
+            if (is_array($data) && isset($data['feedback']['id'])) {
+                return (int) $data['feedback']['id'];
+            }
+        }
+        return null;
     }
 
     public static function update(\WP_REST_Request $request) {

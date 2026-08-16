@@ -3,6 +3,7 @@
 	bootstrap="tests/bootstrap.php"
 	backupGlobals="false"
 	colors="true"
+	failOnRisky="true"
 >
 	<testsuites>
 		<!-- Default suite: every test, the historical behaviour, plus the new

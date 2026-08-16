@@ -160,3 +160,38 @@
   .pp-selchip { padding: 10px 14px; font-size: 14px; }
   .pp-tip-btn { padding: 8px 12px; font-size: 13px; }
 }
+
+/* ---- approval chips ---- */
+.pp-approve { padding: 8px 10px; border-bottom: 1px solid #E5E7EB; }
+.pp-approve-label { font-weight: 600; font-size: 12px; margin-bottom: 6px; }
+.pp-approve-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pp-chip {
+  min-width: 34px; height: 34px; padding: 0 6px;
+  border: 1px solid #1F2937; border-radius: 4px;
+  background: #4AA3DF; color: #fff; font-weight: 700; font-size: 13px;
+  cursor: pointer;
+}
+.pp-chip-yes { background: #2FA34F; }
+.pp-chip-no { background: #DC2626; }
+.pp-approve-flow { margin-top: 8px; }
+.pp-approve-q { font-weight: 600; font-size: 12px; margin-bottom: 6px; }
+.pp-approve-row { display: flex; gap: 8px; margin-top: 6px; }
+.pp-approve-btn {
+  border: 1px solid #1F2937; border-radius: 4px; padding: 4px 14px;
+  color: #fff; font-weight: 700; font-size: 12px; cursor: pointer;
+}
+.pp-approve-yes { background: #2FA34F; }
+.pp-approve-no { background: #DC2626; }
+.pp-approve-ta { width: 100%; box-sizing: border-box; font: inherit; font-size: 12px; padding: 4px 6px; }
+.pp-approve-err { color: #DC2626; font-size: 11px; margin-top: 4px; }
+
+.pp-panel { resize: both; overflow: auto; min-width: 260px; min-height: 130px; max-width: 92vw; max-height: 85vh; }
+.pp-panel.pp-collapsed { resize: none; height: auto !important; }
+.pp-sw-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px; }
+.pp-chip-sm { min-width: 24px; height: 24px; font-size: 10px; line-height: 22px; text-align: center; cursor: default; }
+.pp-chip-you { outline: 2px solid #1F2937; outline-offset: 2px; }
+.pp-chip-stale { background: #D97706; }
+.pp-ready-btn { margin-top: 6px; border: 1px solid #1F2937; border-radius: 4px; background: #fff; color: #1F2937; font-weight: 600; font-size: 11px; padding: 3px 10px; cursor: pointer; }
+.pp-ready-btn.pp-on { background: #1F2937; color: #fff; }
+.pp-needs-head { font-weight: 700; }
+.pp-chip-opt { border-style: dashed; opacity: 0.85; }

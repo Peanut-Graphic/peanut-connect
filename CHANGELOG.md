@@ -5,10 +5,53 @@ All notable changes to **Peanut End to End** (slug: `peanut-connect`) will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.27.1] - 2026-07-25
+## [Unreleased]
 
 ### Added
 - Opt-in security response headers (`peanut_connect_security_headers`). When enabled, front-end page responses carry `Referrer-Policy: strict-origin-when-cross-origin`, a restrictive `Permissions-Policy` (geolocation/camera/microphone/payment/usb denied), and `X-Content-Type-Options: nosniff`. Values are overridable via the `peanut_connect_security_headers` filter, and any header already set by an upstream (edge WAF or server) is left untouched so no duplicate/conflicting header is emitted. Default off; intended mainly for sites without an edge that already sets these. Exposed in `Peanut_Connect_Security::get_settings()`.
+
+### Fixed
+- Mark It Up request handling now uses strict presence checks, so a literal `"0"` review token is not discarded by PHP's empty-value coercion; admin actions are sanitized before dispatch.
+- The test suite no longer calls PHP 8.5-deprecated reflection no-ops and now fails when PHPUnit marks a test risky.
+
+## [3.36.0] - 2026-08-10
+
+### Added
+- **Hub can fetch and remove a built backup archive** (`GET /backup/archive`, `DELETE /backup/archive`), so a client site's backup can be copied off the site and stored encrypted rather than left on the same disk as the thing it protects. Merged in #103.
+
+### Why this is a version bump and not a patch
+- The endpoints landed in `main` **without** a version change, so `main` and the published v3.35.1 release both reported `3.35.1` while only one of them could serve an archive. Every site in the field installed the release, so Hub had no way to tell a capable site from an incapable one — and any capability gate set at 3.35.1 would have enabled every site and 404'd on every backup. This release makes the capability detectable by version, which is what Hub's gate keys on.
+
+## [3.35.1] - 2026-08-03
+
+### Fixed
+- **Staleness now compares against the post each vote snapshotted** (`vote.post_id`) instead of re-resolving the page URL at read time. URL resolution is context-dependent — theme front-page filters (e.g. Enfold's) exist on the front end but not in wp-admin or cron — so on sites whose front page is theme-routed (`show_on_front = posts`), the sign-off record and digest still read stale approvals as fresh after 3.35.0. Comparing against the snapshotted post is context-independent by construction. Verified live on staging.
+
+## [3.35.0] - 2026-08-03
+
+### Added
+- **Required vs optional approvers.** Each approver row on the Mark It Up admin page gains a "Must approve" checkbox. Required approvers must give a fresh YES before a page counts as fully approved (gating the fully-approved email, the ready-queue auto-drop, and the sign-off record status); optional reviewers can vote and leave notes but never hold a page up. Optional reviewers render as dashed chips ("optional reviewer" on hover) and are marked in the sign-off record. Existing approvers default to required.
+
+### Fixed
+- **Front-page staleness read as fresh in wp-admin.** `url_to_postid()` on the bare home URL is context-dependent (resolved on the front end, returned 0 in wp-admin), so the sign-off record — and the daily digest — treated stale front-page approvals as current. The front page is now resolved explicitly via `page_on_front`. Verified live on staging.
+
+## [3.34.0] - 2026-08-03
+
+### Added
+- **Approval notifications.** Plain-text email (configurable address, default: site admin) the moment an approver requests changes, and when a page reaches full approval; optional daily digest of pages still awaiting sign-off (`peanut_connect_approvals_notify`, WP-Cron `peanut_connect_approvals_digest`).
+- **Stale-approval detection.** Votes snapshot the page's modified time; editing the page afterwards turns that approval amber ("page changed after this decision") in the widget, the All-pages rollup, and the sign-off record. Fully-approved status requires fresh approvals.
+- **Per-approver links.** Each approver gets a personal review link (`&pp_as=<id>`, shown on the admin page): their chip is highlighted as "you" and voting as someone else asks for confirmation first.
+- **Ready for review.** Agency users flag a page "Request approval" from the widget; approvers see a "Needs your sign-off" queue in All-pages; the flag clears automatically when the page is fully approved (`peanut_connect_approvals_ready`). Admin page lists and unflags.
+- **Printable sign-off record.** "View sign-off record" on the Mark It Up admin page renders every page's approver grid and full history with staleness annotations; print to PDF.
+- The widget walkthrough now explains the approve step.
+
+## [3.33.0] - 2026-08-03
+
+### Added
+- **Mark It Up approval process.** Admin-defined approvers (name + initials, honor system) appear as chips in the widget panel — "Click your initials to approve". YES turns the chip green, NO opens "What needs to change for approval?" (the reason posts as a regular Mark It Up note) and turns the chip red; hovering a chip shows who + when. Every vote, re-vote, and reset is kept in a timestamped per-page history (WP options; `peanut_connect_approvers`, `peanut_connect_approvals`). New same-origin REST routes `GET/POST /approvals*` reuse the existing review-access gates; reset is agency-only.
+- Approval rollup chips per page in the widget's All-pages view.
+- The Mark It Up panel is now resizable (drag the corner); the size persists per browser.
+- "Approvers" section on the Mark It Up admin page: add/remove/reorder approvers and reset approvals per page or site-wide.
 
 ## [3.21.0] - 2026-07-04
 

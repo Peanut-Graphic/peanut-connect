@@ -52,6 +52,8 @@ export interface Link {
   title: string | null;
   description: string | null;
   is_active: boolean;
+  /** True when the destination is a tel: number (click-to-call), not a web page. */
+  is_call?: boolean;
   click_count: number;
   expires_at: string | null;
   short_url?: string;
@@ -168,6 +170,8 @@ export interface DominionFunnelParams {
   from?: string;
   to?: string;
   campaign?: string;
+  /** Multi-select filter: comma-separated campaign names (CSV survives the WP proxy). */
+  campaigns?: string;
   include_test?: boolean;
   stage?: string;
   page?: number;
@@ -186,6 +190,8 @@ export interface DominionEnrolledReportParams {
   from?: string;
   to?: string;
   campaign?: string;
+  /** Multi-select filter: comma-separated campaign names (CSV survives the WP proxy). */
+  campaigns?: string;
   include_test?: boolean;
 }
 
