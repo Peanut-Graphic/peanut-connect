@@ -11,6 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mark It Up request handling now uses strict presence checks, so a literal `"0"` review token is not discarded by PHP's empty-value coercion; admin actions are sanitized before dispatch.
 - The test suite no longer calls PHP 8.5-deprecated reflection no-ops and now fails when PHPUnit marks a test risky.
 
+## [3.37.0] - 2026-08-16
+
+### Fixed
+- **`POST /backup` no longer builds the archive inside the request.** It zipped the
+  entire database and wp-content before answering, so the response could only arrive
+  if that finished inside the caller's timeout. On real client sites it did not:
+  Hub's only two recorded backup attempts both died at cURL 28 after 120s, leaving a
+  failed row and no archive. Across 23 active client sites, zero backups had ever
+  succeeded.
+
+### Added
+- Backups now run as a background job. `POST /backup` records the job and returns
+  **202** with a `job_id`; the archive is built on a WP-Cron request, and
+  `spawn_cron()` is called on queue so a quiet site does not wait for a visitor.
+- `GET /backup/job` reports a job's state. Called without `job` it returns the most
+  recent one, so Hub can recover the outcome of a request whose response it never saw.
+- A backup already queued or running returns that job rather than starting a
+  competing zip of the same disk.
+- A job left `running` beyond 30 minutes is reported as failed rather than believed.
+  Fatal errors, OOM kills and host request limits all end the worker without reaching
+  the failure path, so without this one killed run would wedge backups permanently.
+
+### Why this is a version bump
+- Hub's `SiteBackupCapability` gates on the reported Connect version, so the async
+  contract — 202 plus a pollable job — needs its own floor to be detectable.
+
 ## [3.36.0] - 2026-08-10
 
 ### Added
