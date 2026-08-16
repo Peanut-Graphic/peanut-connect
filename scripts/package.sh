@@ -1,7 +1,16 @@
 #!/bin/bash
 
-# Peanut Connect - WordPress Plugin Packaging Script
-# Creates a distributable ZIP file of the plugin
+# Peanut Connect — LOCAL packaging only.
+#
+# Builds a plugin ZIP for local testing. This artifact is NOT releasable: it
+# carries no Ed25519 signature and no .manifest.json sidecar, and Connect's
+# signed-update gate (peanut/formflow-core) refuses exactly that. Handing this
+# zip to a site as an update will fail closed, by design.
+#
+# To release, use the central publisher, which signs and ships the manifest:
+#   Peanut-meta/scripts/publish-plugin.sh peanut-connect <version> [--ship]
+#
+# PAR-403.
 
 set -e
 
