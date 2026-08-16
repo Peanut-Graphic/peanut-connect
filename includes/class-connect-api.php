@@ -858,6 +858,21 @@ class Peanut_Connect_API {
             ],
         ]);
 
+        // Poll the state of a queued backup. Hub calls this after POST /backup
+        // returns 202; it is also how Hub recovers a result whose response it
+        // never received.
+        register_rest_route(PEANUT_CONNECT_API_NAMESPACE, '/backup/job', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'backup_job_status'],
+            'permission_callback' => [Peanut_Connect_Auth::class, 'hub_permission_callback'],
+            'args' => [
+                'job' => [
+                    'required' => false,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+            ],
+        ]);
+
         // Serve / remove an archive Hub is copying offsite. Both validate the
         // name against the known-backups registry, so only an archive this
         // site produced is reachable. GET streams the site's entire database
@@ -3423,25 +3438,66 @@ class Peanut_Connect_API {
      * @return WP_REST_Response Response with backup details or error.
      * @since 3.4.0
      */
+    /**
+     * Queue a backup and return immediately.
+     *
+     * This used to build the archive inline and answer with the result, which
+     * meant the response could only arrive if zipping the entire database and
+     * wp-content finished inside the caller's timeout. On real client sites it
+     * did not: Hub's only two recorded attempts both died at cURL 28 after
+     * 120s, leaving a failed row and no archive.
+     *
+     * So the request now records a job and hands back its id. Hub polls
+     * GET /backup/job for the outcome. 202 is the honest status code: accepted,
+     * not done.
+     *
+     * @param WP_REST_Request $request REST request.
+     * @return WP_REST_Response 202 with the job record.
+     * @since 3.37.0
+     */
     public function create_backup(WP_REST_Request $request): WP_REST_Response {
-        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup.php';
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup-job.php';
 
-        $result = Peanut_Connect_Backup::create_backup([
+        $job = Peanut_Connect_Backup_Job::queue([
             'type' => $request->get_param('type'),
             'storage_driver' => $request->get_param('storage_driver'),
         ]);
 
-        if (is_wp_error($result)) {
+        return new WP_REST_Response([
+            'success' => true,
+            'accepted' => true,
+            'job' => $job,
+        ], 202);
+    }
+
+    /**
+     * Report the state of a backup job.
+     *
+     * Without a `job` parameter this answers with the most recent job, so Hub
+     * can recover the outcome of a request whose response it never saw.
+     *
+     * @param WP_REST_Request $request REST request with an optional `job`.
+     * @return WP_REST_Response The job record, or 404 when unknown.
+     * @since 3.37.0
+     */
+    public function backup_job_status(WP_REST_Request $request): WP_REST_Response {
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup-job.php';
+
+        $job_id = (string) $request->get_param('job');
+
+        $job = $job_id !== ''
+            ? Peanut_Connect_Backup_Job::get($job_id)
+            : Peanut_Connect_Backup_Job::latest();
+
+        if ($job === null) {
             return new WP_REST_Response([
                 'success' => false,
-                'code' => $result->get_error_code(),
-                'message' => $result->get_error_message(),
-            ], 500);
+                'code' => 'unknown_backup_job',
+                'message' => __('No such backup job.', 'peanut-connect'),
+            ], 404);
         }
 
-        Peanut_Connect_Activity_Log::log('backup_created', 'success', __('Backup created', 'peanut-connect'), is_array($result) ? $result : []);
-
-        return new WP_REST_Response($result, 200);
+        return new WP_REST_Response(['success' => true, 'job' => $job], 200);
     }
 
     /**

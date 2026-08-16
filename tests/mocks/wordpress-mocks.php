@@ -380,3 +380,42 @@ if (!class_exists('WP_REST_Request')) {
 global $mock_options, $mock_transients;
 $mock_options = [];
 $mock_transients = [];
+
+// --- Background-job primitives (Peanut_Connect_Backup_Job) ------------------
+// Recorded rather than executed, so a test can assert that queueing SCHEDULES
+// work instead of doing it — which is the whole point of the async backup path.
+
+if (!function_exists('wp_generate_uuid4')) {
+    function wp_generate_uuid4() {
+        return sprintf(
+            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+        );
+    }
+}
+
+if (!function_exists('wp_schedule_single_event')) {
+    function wp_schedule_single_event($timestamp, $hook, $args = []) {
+        global $mock_scheduled_events;
+        $mock_scheduled_events[] = ['timestamp' => $timestamp, 'hook' => $hook, 'args' => $args];
+        return true;
+    }
+}
+
+if (!function_exists('spawn_cron')) {
+    function spawn_cron($gmt_time = 0) {
+        global $mock_spawned_cron;
+        $mock_spawned_cron = (int) ($mock_spawned_cron ?? 0) + 1;
+        return true;
+    }
+}
+
+if (!function_exists('sanitize_title')) {
+    function sanitize_title($title) {
+        return strtolower(trim(preg_replace('/[^A-Za-z0-9]+/', '-', (string) $title), '-'));
+    }
+}
