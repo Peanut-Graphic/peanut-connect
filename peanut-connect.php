@@ -3,7 +3,7 @@
  * Plugin Name: End-to-End
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: End-to-end campaign and site platform for WordPress — runs campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all wired to a central Peanut Hub.
- * Version: 3.36.0
+ * Version: 3.37.0
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.36.0');
+define('PEANUT_CONNECT_VERSION', '3.37.0');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -89,6 +89,7 @@ final class Peanut_Connect {
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-health.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-updates.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-error-log.php';
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup-job.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-api.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-self-updater.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-roles.php';
@@ -177,6 +178,9 @@ final class Peanut_Connect {
         add_action('init', ['Peanut_Connect_Videos', 'register_block']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
         Peanut_Connect_Roles::boot(); // scoped UTM Builder role: cap filter + upgrade-safe install
+        // Registers the cron handler that builds queued backup archives. Without
+        // it the scheduled event fires into nothing and every job stays queued.
+        Peanut_Connect_Backup_Job::boot();
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('admin_head', [$this, 'hide_admin_notices_on_react_page']);
