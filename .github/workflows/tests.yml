@@ -115,3 +115,23 @@ jobs:
         run: npm audit --audit-level=high || true   # Net 2: non-blocking to start
       - name: Vitest (incl. Net 6 property tests)
         run: npx vitest run
+
+  release-readiness:
+    name: Release readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # Could this be released AT ALL? Read-only: no signing key, no network,
+      # nothing published. It proves the artifact the publisher WOULD build is
+      # coherent -- version constants that agree with the header, every INCLUDE
+      # path present, vendor/ shipped where the build needs it, a changelog
+      # entry for this version, and a stable-tag line the publisher's bump can
+      # actually match.
+      #
+      # The checker is synced here from peanut-meta by configs-sync, so this job
+      # needs no credential to reach that private repo. Drift is reported by
+      # configs-sync and surfaced in the weekly audit. PAR-406.
+      - name: Could this be released at all?
+        run: bash .peanut/release/verify-release-readiness.sh peanut-connect
