@@ -79,12 +79,12 @@ exceptions:
     status: accepted
   - id: PAR-404
     concern: Repository-local release and package scripts bypass the canonical signed publisher
-    reason: scripts/release.sh directly pushes main and creates an unsigned GitHub Release, while scripts/package.sh creates a ZIP without the Ed25519 manifest, license-server advertisement, or active canary assertions enforced by Peanut Meta.
-    risk: An operator can publish a plausible official release that clients cannot authenticate and that bypasses the proven release and canary contract.
+    reason: Resolved by PR #114 (3ee3497ccdd2). scripts/release.sh no longer releases anything - it prints why, exits 64 without a version, and otherwise forwards a DRY RUN to the central publisher, leaving --ship an explicit separate decision. scripts/package.sh remains but is scoped to local testing and states in its header that the ZIP it builds carries no signature or manifest sidecar and will be refused by the update gate.
+    risk: Historical. An operator could previously publish a plausible official release that clients cannot authenticate; no repository-local path now produces an outward-facing artifact.
     owner: Peanut Graphic
-    verification: Replace local outward-facing release behavior with a dry-run wrapper around Peanut Meta or retire it after the canonical path is documented and tested.
+    verification: Confirmed by reading both scripts on main - release.sh refuses and forwards, package.sh is local-testing only. Re-check if either script regains a gh release, git push, or license-server call.
     review_date: "2026-11-14"
-    status: proposed
+    status: retired
   - id: PAR-405
     concern: Release metadata, package completeness, and rollback evidence drift
     reason: The plugin reports 3.36.0 while root and frontend package metadata report 2.1.2 and 3.9.3. The live update endpoint advertises 3.36.0 but returns Peanut Suite description, installation, and changelog text. The signed 3.36.0 ZIP includes vendor and runtime assets but omits the tracked uninstall.php cleanup entrypoint, and the publisher has no rollback assertion.
@@ -125,5 +125,4 @@ verification:
     - Inventory supported distributed client-host PHP, WordPress, database version, collation, and SQL-mode compatibility without collecting customer data.
     - Repair and promote frontend dependency and accessibility gates under PAR-503.
     - Inventory supported distributed-client database contracts and add sanitized sequential-upgrade fixtures for each retained family under PAR-306/PAR-309.
-    - Retire or wrap the unsigned local release path under PAR-404.
     - Reconcile versions, package completeness, product metadata, and rollback under PAR-405.
