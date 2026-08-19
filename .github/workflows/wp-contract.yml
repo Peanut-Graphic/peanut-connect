@@ -41,6 +41,10 @@ jobs:
             "https://raw.githubusercontent.com/Peanut-Graphic/peanut-documentation/main/testing-standard/wp-harness/install-wp-tests.sh" \
           || cp .peanut/wp-harness/install-wp-tests.sh /tmp/install-wp-tests.sh   # vendored fallback (private repo)
           chmod +x /tmp/install-wp-tests.sh
+          # Regression test for the harness itself (GAP-03): proven to fail on the
+          # unfixed installer, which silently paired trunk's test library with
+          # pinned core. Runs offline; curl is stubbed.
+          bash .peanut/wp-harness/tests/install-wp-tests.test.sh
 
       - name: Install WordPress test suite
         env:
@@ -89,6 +93,10 @@ jobs:
             "https://raw.githubusercontent.com/Peanut-Graphic/peanut-documentation/main/testing-standard/wp-harness/install-wp-tests.sh" \
           || cp .peanut/wp-harness/install-wp-tests.sh /tmp/install-wp-tests.sh
           chmod +x /tmp/install-wp-tests.sh
+          # Regression test for the harness itself (GAP-03): proven to fail on the
+          # unfixed installer, which silently paired trunk's test library with
+          # pinned core. Runs offline; curl is stubbed.
+          bash .peanut/wp-harness/tests/install-wp-tests.test.sh
 
       - name: Install WordPress test suite
         env:
