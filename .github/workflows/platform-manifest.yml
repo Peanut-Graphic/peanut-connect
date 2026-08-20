@@ -1,0 +1,69 @@
+# Peanut — platform manifest validation.
+#
+# Canonical file. Synced into every repository that carries a
+# `.peanut/platform.yml` by scripts/configs-sync.sh; do not hand-edit the copy
+# in a consumer repo, because the sync reports it as drift.
+#
+# WHY THIS EXISTS
+#
+# The manifest is the fleet's machine-readable claim about how a repository is
+# built, deployed and tested, and until 2026-08-18 nothing checked it before it
+# merged. Four of twenty manifests on main were invalid against the schema they
+# claim to follow. Radio's had NEVER validated -- twenty violations, including a
+# health_check block asserting `verified` in a field the schema defines as
+# declarative, and observations whose evidence key did not exist. Every one of
+# them merged green.
+#
+# The failure mode is specific: an invalid manifest is not a broken build, it is
+# a claim nothing can read. The fleet scan that does validate is report-only and
+# weekly, so it describes the problem long after the merge that caused it.
+#
+# NO CREDENTIAL
+#
+# The validator and schema are vendored into `.peanut/platform/` rather than
+# fetched, for the reason PAR-406 established: the canonical repository is
+# private, so an unauthenticated fetch 404s and silently falls back -- which is
+# exactly how the shared WordPress test harness ended up running a 73-line copy
+# of a 137-line file in all seven plugins. Vendoring plus a drift report beats a
+# fetch that cannot succeed, and beats a read token in twenty repositories.
+name: platform-manifest
+
+on:
+  pull_request:
+    paths:
+      - ".peanut/platform.yml"
+      - ".peanut/platform/**"
+      - ".github/workflows/platform-manifest.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".peanut/platform.yml"
+      - ".peanut/platform/**"
+      - ".github/workflows/platform-manifest.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  platform-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned validator dependencies
+        run: python3 -m pip install --require-hashes --no-deps -r .peanut/platform/requirements.txt
+          || python3 -m pip install -r .peanut/platform/requirements.txt
+
+      # --strict is the point. The validator defaults to report-only and exits
+      # zero so the fleet sweep can describe a whole ecosystem without failing;
+      # a repository gating its own manifest wants the opposite.
+      - name: Validate this repository's platform manifest
+        run: |
+          python3 .peanut/platform/validate.py \
+            --strict \
+            --schema .peanut/platform/schema.json \
+            .peanut/platform.yml

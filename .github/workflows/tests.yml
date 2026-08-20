@@ -111,8 +111,13 @@ jobs:
         # legacy-peer-deps: eslint 10 vs eslint-plugin-jsx-a11y peer range
         # (pre-existing; tracked in known-gaps).
         run: npm ci --legacy-peer-deps
+      # Net 2: blocking — ratcheted 2026-08-18, level corrected 2026-08-20.
+      # Moderate, not high: npm grades GHSA-55q2-fjhq-7xh7 (the dompurify XSS
+      # this branch exists to close) "moderate", and at --audit-level=high the
+      # gate exits 0 on the vulnerable pin — verified by execution. Tree is
+      # clean at moderate today.
       - name: Dependency audit (frontend)
-        run: npm audit --audit-level=high   # Net 2: blocking — ratcheted 2026-08-18
+        run: npm audit --audit-level=moderate
       - name: Vitest (incl. Net 6 property tests)
         run: npx vitest run
 

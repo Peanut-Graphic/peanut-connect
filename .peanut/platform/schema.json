@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.peanutgraphic.com/schemas/platform-manifest/v1.json",
+  "title": "Peanut Platform Manifest",
+  "description": "Source-controlled platform, deployment, runtime, database, and verification contract for one Peanut repository.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project", "ownership", "environments", "runtimes", "databases", "services", "verification"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "project": { "$ref": "#/$defs/project" },
+    "ownership": { "$ref": "#/$defs/ownership" },
+    "environments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/environment" },
+      "uniqueItems": true
+    },
+    "runtimes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/runtime" }
+    },
+    "databases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/database" }
+    },
+    "services": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/service" }
+    },
+    "deployment": { "$ref": "#/$defs/deployment" },
+    "distribution": { "$ref": "#/$defs/distribution" },
+    "exceptions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/exception" }
+    },
+    "verification": { "$ref": "#/$defs/verification" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "project": {
+            "properties": {
+              "classification": { "enum": ["production-app", "internal-service"] }
+            },
+            "required": ["classification"]
+          }
+        }
+      },
+      "then": { "required": ["deployment"] }
+    },
+    {
+      "if": {
+        "properties": {
+          "project": {
+            "properties": {
+              "classification": { "enum": ["distributed-plugin", "desktop", "mobile", "library"] }
+            },
+            "required": ["classification"]
+          }
+        }
+      },
+      "then": { "required": ["distribution"] }
+    }
+  ],
+  "$defs": {
+    "nonEmpty": { "type": "string", "minLength": 1 },
+    "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$" },
+    "assurance": { "enum": ["yes", "no", "unknown", "not-applicable"] },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "classification", "repository", "lifecycle"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "name": { "$ref": "#/$defs/nonEmpty" },
+        "classification": {
+          "enum": ["production-app", "distributed-plugin", "desktop", "mobile", "library", "internal-service", "development-only", "archived"]
+        },
+        "repository": { "type": "string", "pattern": "^https://github\\.com/[^/]+/[^/]+(?:\\.git)?$" },
+        "lifecycle": { "enum": ["active", "maintenance", "development", "deprecated", "archived"] }
+      }
+    },
+    "ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "deployment", "rollback"],
+      "properties": {
+        "platform": { "$ref": "#/$defs/nonEmpty" },
+        "deployment": { "$ref": "#/$defs/nonEmpty" },
+        "rollback": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "provider"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "kind": { "enum": ["production", "staging", "preview", "development", "test"] },
+        "provider": { "$ref": "#/$defs/nonEmpty" },
+        "url": { "type": "string", "pattern": "^https?://" }
+      }
+    },
+    "declaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "source", "value"],
+      "properties": {
+        "scope": { "enum": ["dependency", "ci", "container", "development", "test", "documentation", "hosting", "release"] },
+        "source": { "$ref": "#/$defs/nonEmpty" },
+        "value": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["verified", "unverified", "unavailable", "not-applicable"] },
+        "value": { "$ref": "#/$defs/nonEmpty" },
+        "observed_at": { "$ref": "#/$defs/timestamp" },
+        "evidence": { "$ref": "#/$defs/nonEmpty" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "verified" } }, "required": ["status"] },
+          "then": { "required": ["value", "observed_at", "evidence"] }
+        }
+      ]
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "baseline", "declarations", "production_observation"],
+      "properties": {
+        "name": { "enum": ["php", "node", "python", "ruby", "java", "swift", "electron", "wordpress", "other"] },
+        "baseline": { "$ref": "#/$defs/nonEmpty" },
+        "declarations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/declaration" } },
+        "production_observation": { "$ref": "#/$defs/observation" }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role", "baseline", "declarations", "production_equivalent_test", "production_observation"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmpty" },
+        "role": { "enum": ["transactional", "analytics", "cache", "queue", "search", "embedded", "adjunct", "test-only"] },
+        "baseline": { "$ref": "#/$defs/nonEmpty" },
+        "declarations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/declaration" } },
+        "production_equivalent_test": { "$ref": "#/$defs/assurance" },
+        "production_observation": { "$ref": "#/$defs/observation" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "baseline", "declarations", "production_observation"],
+      "properties": {
+        "kind": { "enum": ["web-server", "queue", "scheduler", "cache", "object-storage", "search", "realtime", "observability", "other"] },
+        "baseline": { "$ref": "#/$defs/nonEmpty" },
+        "declarations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/declaration" } },
+        "production_observation": { "$ref": "#/$defs/observation" }
+      }
+    },
+    "healthCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["declared", "missing", "unknown", "not-applicable"] },
+        "endpoint": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "source_of_truth", "ci_gate", "concurrency_lock", "exact_revision", "backup_or_snapshot", "migration_safety", "health_check", "rollback"],
+      "properties": {
+        "mode": { "enum": ["github-actions", "forge", "vercel", "native-hosting", "script", "manual", "other"] },
+        "source_of_truth": { "$ref": "#/$defs/nonEmpty" },
+        "ci_gate": { "$ref": "#/$defs/assurance" },
+        "concurrency_lock": { "$ref": "#/$defs/assurance" },
+        "exact_revision": { "$ref": "#/$defs/assurance" },
+        "backup_or_snapshot": { "$ref": "#/$defs/assurance" },
+        "migration_safety": { "$ref": "#/$defs/assurance" },
+        "health_check": { "$ref": "#/$defs/healthCheck" },
+        "rollback": { "$ref": "#/$defs/assurance" }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "source_of_truth", "versioned_artifact", "signed", "canary", "rollback"],
+      "properties": {
+        "mode": { "enum": ["signed-github-release", "desktop-artifact", "app-store", "package-registry", "manual", "none", "other"] },
+        "source_of_truth": { "$ref": "#/$defs/nonEmpty" },
+        "versioned_artifact": { "$ref": "#/$defs/assurance" },
+        "signed": { "$ref": "#/$defs/assurance" },
+        "canary": { "$ref": "#/$defs/assurance" },
+        "rollback": { "$ref": "#/$defs/assurance" }
+      }
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "concern", "reason", "risk", "owner", "verification", "review_date", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z]+-[0-9]{3}$" },
+        "concern": { "$ref": "#/$defs/nonEmpty" },
+        "reason": { "$ref": "#/$defs/nonEmpty" },
+        "risk": { "$ref": "#/$defs/nonEmpty" },
+        "owner": { "$ref": "#/$defs/nonEmpty" },
+        "verification": { "$ref": "#/$defs/nonEmpty" },
+        "review_date": { "$ref": "#/$defs/date" },
+        "status": { "enum": ["proposed", "accepted", "expired", "retired"] }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "audited_commit", "last_reviewed", "sources", "outstanding"],
+      "properties": {
+        "status": { "enum": ["draft", "source-audited", "live-verified"] },
+        "audited_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "last_reviewed": { "$ref": "#/$defs/date" },
+        "sources": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/nonEmpty" } },
+        "outstanding": { "type": "array", "items": { "$ref": "#/$defs/nonEmpty" } }
+      }
+    }
+  }
+}
