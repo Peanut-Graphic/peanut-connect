@@ -121,6 +121,36 @@ def format_error(error: Any) -> str:
     return f"{location}: {error.message}"
 
 
+def validate_partial_exception_references(data: dict[str, Any]) -> list[str]:
+    """Require every partial assurance to point at a live manifest exception."""
+    exceptions = {
+        item.get("id"): item
+        for item in data.get("exceptions", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    findings: list[str] = []
+
+    def walk(value: Any, location: str) -> None:
+        if isinstance(value, dict):
+            if value.get("status") == "partial" and "exception" in value:
+                exception_id = value["exception"]
+                exception = exceptions.get(exception_id)
+                if exception is None:
+                    findings.append(f"{location}.exception: '{exception_id}' is not declared in $.exceptions")
+                elif exception.get("status") in {"expired", "retired"}:
+                    findings.append(
+                        f"{location}.exception: '{exception_id}' is {exception.get('status')}, not active"
+                    )
+            for key, child in value.items():
+                walk(child, f"{location}.{key}")
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                walk(child, f"{location}[{index}]")
+
+    walk(data, "$")
+    return findings
+
+
 def validate_manifest(path: Path, validator: Draft202012Validator) -> dict[str, Any]:
     result: dict[str, Any] = {"path": str(path), "status": "invalid", "errors": []}
     try:
@@ -139,6 +169,10 @@ def validate_manifest(path: Path, validator: Draft202012Validator) -> dict[str, 
     )
     if errors:
         result["errors"] = [format_error(error) for error in errors]
+        return result
+    semantic_errors = validate_partial_exception_references(data)
+    if semantic_errors:
+        result["errors"] = semantic_errors
         return result
     result["status"] = "valid"
     return result
@@ -164,7 +198,7 @@ def collect_targets(args: argparse.Namespace) -> tuple[list[Path], list[dict[str
     return sorted(manifests), missing
 
 
-def render_text(results: list[dict[str, Any]], schema_path: Path) -> None:
+def render_text(results: list[dict[str, Any]], schema_path: Path, *, strict: bool) -> None:
     print(f"Peanut platform manifest report (schema: {schema_path})")
     for result in results:
         label = result["status"].upper()
@@ -175,7 +209,7 @@ def render_text(results: list[dict[str, Any]], schema_path: Path) -> None:
     print(
         "Summary: "
         + ", ".join(f"{count} {status}" for status, count in counts.items())
-        + " (report-only)"
+        + (" (strict)" if strict else " (report-only)")
     )
 
 
@@ -196,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.json_output:
         print(json.dumps({"schema": str(args.schema.resolve()), "mode": "strict" if args.strict else "report-only", "results": results}, indent=2, sort_keys=True))
     else:
-        render_text(results, args.schema.resolve())
+        render_text(results, args.schema.resolve(), strict=args.strict)
 
     if not args.strict:
         return 0
