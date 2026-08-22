@@ -67,7 +67,23 @@
     "nonEmpty": { "type": "string", "minLength": 1 },
     "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
     "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$" },
-    "assurance": { "enum": ["yes", "no", "unknown", "not-applicable"] },
+    "assurance": {
+      "description": "Use a scalar for an unqualified guarantee. A partially enforced guarantee must be an object with qualification, source evidence, and an active manifest exception.",
+      "oneOf": [
+        { "enum": ["yes", "no", "unknown", "not-applicable"] },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "qualification", "evidence", "exception"],
+          "properties": {
+            "status": { "const": "partial" },
+            "qualification": { "type": "string", "minLength": 1, "description": "Exactly which paths or cases satisfy the guarantee and which do not." },
+            "evidence": { "type": "string", "minLength": 1, "description": "Repository-visible source or test evidence for the qualified guarantee." },
+            "exception": { "type": "string", "pattern": "^[A-Z]+-[0-9]{3}$", "description": "ID of an active entry in this manifest's exceptions list." }
+          }
+        }
+      ]
+    },
     "project": {
       "type": "object",
       "additionalProperties": false,

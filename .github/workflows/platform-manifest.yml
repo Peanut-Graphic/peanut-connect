@@ -55,8 +55,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install pinned validator dependencies
-        run: python3 -m pip install --require-hashes --no-deps -r .peanut/platform/requirements.txt
-          || python3 -m pip install -r .peanut/platform/requirements.txt
+        run: python3 -m pip install --require-hashes --no-deps -r .peanut/platform/requirements.lock
 
       # --strict is the point. The validator defaults to report-only and exits
       # zero so the fleet sweep can describe a whole ecosystem without failing;
