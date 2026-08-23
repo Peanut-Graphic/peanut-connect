@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<phpunit
+	bootstrap="tests/phpunit/bootstrap.php"
+	backupGlobals="false"
+	colors="true"
+	failOnRisky="true"
+>
+	<testsuites>
+		<testsuite name="LegacyUnit">
+			<file>./tests/phpunit/unit/ActivityLogTest.php</file>
+			<file>./tests/phpunit/unit/AuthTest.php</file>
+			<file>./tests/phpunit/unit/ErrorLogTest.php</file>
+			<file>./tests/phpunit/unit/HealthTest.php</file>
+			<file>./tests/phpunit/unit/PodcastPublishTest.php</file>
+			<file>./tests/phpunit/unit/RateLimiterTest.php</file>
+			<file>./tests/phpunit/unit/SelfUpdaterTest.php</file>
+			<file>./tests/phpunit/unit/TranscriptBlockTest.php</file>
+			<file>./tests/phpunit/unit/UpdatesTest.php</file>
+			<file>./tests/phpunit/unit/VideosTest.php</file>
+		</testsuite>
+	</testsuites>
+</phpunit>

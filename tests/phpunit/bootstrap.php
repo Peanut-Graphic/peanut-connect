@@ -363,6 +363,7 @@ function peanut_reset_test_state(): void {
 if (!isset($GLOBALS['wpdb'])) {
     $GLOBALS['wpdb'] = new class {
         public string $prefix = 'wp_';
+        public string $options = 'wp_options';
 
         public function prepare(string $query, ...$args): string {
             return sprintf($query, ...$args);
@@ -460,6 +461,12 @@ if (!function_exists('wp_get_themes')) {
                 public function exists(): bool {
                     return true;
                 }
+                public function parent() {
+                    return false;
+                }
+                public function get_screenshot(): string {
+                    return '';
+                }
             },
         ];
     }
@@ -485,6 +492,12 @@ if (!function_exists('wp_get_theme')) {
                 public function exists(): bool {
                     return true;
                 }
+                public function parent() {
+                    return false;
+                }
+                public function get_screenshot(): string {
+                    return '';
+                }
             };
         }
 
@@ -502,6 +515,12 @@ if (!function_exists('wp_get_theme')) {
             }
             public function exists(): bool {
                 return $this->stylesheet === 'twentytwentyfour';
+            }
+            public function parent() {
+                return false;
+            }
+            public function get_screenshot(): string {
+                return '';
             }
         };
     }
@@ -690,6 +709,40 @@ if (!function_exists('add_action')) {
 if (!function_exists('add_filter')) {
     function add_filter(string $hook, $callback, int $priority = 10, int $accepted_args = 1): bool {
         return true;
+    }
+}
+
+/**
+ * Mock apply_filters as an identity transform.
+ */
+if (!function_exists('apply_filters')) {
+    function apply_filters(string $hook, $value, ...$args) {
+        return $value;
+    }
+}
+
+/**
+ * Mock wp_trim_words with WordPress's default ellipsis behaviour.
+ */
+if (!function_exists('wp_trim_words')) {
+    function wp_trim_words(string $text, int $num_words = 55, ?string $more = null): string {
+        $more = $more ?? '&hellip;';
+        $words = preg_split('/\s+/', trim(strip_tags($text))) ?: [];
+
+        if (count($words) <= $num_words) {
+            return implode(' ', $words);
+        }
+
+        return implode(' ', array_slice($words, 0, $num_words)) . $more;
+    }
+}
+
+/**
+ * Mock the active theme stylesheet slug used by health reporting.
+ */
+if (!function_exists('get_stylesheet')) {
+    function get_stylesheet(): string {
+        return 'test-theme';
     }
 }
 
