@@ -24,6 +24,33 @@ jobs:
         run: php scripts/verify-php-runtime.php
       - name: Dependency audit (PHP)
         run: composer audit --locked   # Net 2: blocking — ratcheted 2026-08-18, tree verified clean
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install locked Python auditor
+        run: |
+          python -m venv "$RUNNER_TEMP/dependency-audit-venv"
+          "$RUNNER_TEMP/dependency-audit-venv/bin/python" -m pip install \
+            --require-hashes \
+            --no-deps \
+            -r requirements-dependency-audit.lock
+
+      - name: Audit the locked Python auditor
+        run: |
+          "$RUNNER_TEMP/dependency-audit-venv/bin/pip-audit" \
+            -r requirements-dependency-audit.lock \
+            --no-deps \
+            --disable-pip
+
+      - name: Audit the locked platform validator
+        working-directory: .peanut/platform
+        run: |
+          "$RUNNER_TEMP/dependency-audit-venv/bin/pip-audit" \
+            -r requirements.lock \
+            --no-deps \
+            --disable-pip
       - name: Secret scan (gitleaks)
         run: |
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz | tar -xz gitleaks

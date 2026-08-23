@@ -62,12 +62,12 @@ distribution:
   rollback: unknown
 exceptions:
   - id: PAR-503
-    concern: Frontend dependency and accessibility gates remain advisory
-    reason: Exact Node 22.22.2/npm 10.9.7 passes typecheck, 47 Vitest files with 454 tests, and the 2,104-module production build, but accessibility lint reports one existing label-without-accessible-text error in Campaigns.tsx and remains continue-on-error. npm audit reports the existing 1 high and 3 moderate advisory baseline and tests.yml deliberately suppresses its exit status.
-    risk: Runtime parity is enforced, but accessibility and dependency regressions can remain mergeable and enter a packaged plugin asset.
+    concern: Frontend accessibility gate remains advisory
+    reason: Exact Node 22.22.2/npm 10.9.7 passes typecheck, 47 Vitest files with 454 tests, the 2,104-module production build, and a blocking moderate dependency audit. Accessibility lint still reports one existing label-without-accessible-text error in Campaigns.tsx and remains continue-on-error.
+    risk: Runtime and dependency parity are enforced, but accessibility regressions can remain mergeable and enter a packaged plugin asset.
     owner: Peanut Graphic
-    verification: Repair the known accessibility finding and dependency advisory baseline in a separate regression-tested unit, then make both gates blocking.
-    review_date: "2026-08-22"
+    verification: Repair the known Campaigns.tsx accessibility finding in a regression-tested unit, then make the accessibility gate blocking while preserving the moderate dependency gate.
+    review_date: "2026-09-20"
     status: proposed
   - id: PAR-306
     concern: Distributed client database versions, collations, and SQL modes remain unverified
@@ -106,6 +106,8 @@ verification:
     - package-lock.json
     - frontend/package.json
     - frontend/package-lock.json
+    - requirements-dependency-audit.txt
+    - requirements-dependency-audit.lock
     - .nvmrc
     - includes/class-connect-database.php
     - includes/class-connect-self-updater.php
@@ -123,6 +125,6 @@ verification:
     - Read-only central first-party PHP, WordPress, active-plugin, MariaDB version, collation, and SQL-mode metadata on 2026-08-15
   outstanding:
     - Inventory supported distributed client-host PHP, WordPress, database version, collation, and SQL-mode compatibility without collecting customer data.
-    - Repair and promote frontend dependency and accessibility gates under PAR-503.
+    - Repair and promote the frontend accessibility gate under PAR-503 while preserving the blocking moderate dependency audit.
     - Inventory supported distributed-client database contracts and add sanitized sequential-upgrade fixtures for each retained family under PAR-306/PAR-309.
     - Reconcile versions, package completeness, product metadata, and rollback under PAR-405.
