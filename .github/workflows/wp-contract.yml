@@ -35,12 +35,15 @@ jobs:
           tools: composer
       - run: composer install --no-interaction --prefer-dist
 
-      - name: Fetch shared WP test installer
+      - name: Verify vendored WP test installer
+        env:
+          WP_HARNESS_SHA256: "51c84a4a63112daedb40c0ee31918623a7f412bbb8eb4bb6175c9b3df4e49926"
         run: |
-          curl -fsSL -o /tmp/install-wp-tests.sh \
-            "https://raw.githubusercontent.com/Peanut-Graphic/peanut-documentation/main/testing-standard/wp-harness/install-wp-tests.sh" \
-          || cp .peanut/wp-harness/install-wp-tests.sh /tmp/install-wp-tests.sh   # vendored fallback (private repo)
-          chmod +x /tmp/install-wp-tests.sh
+          set -euo pipefail
+          printf '%s  %s\n' "$WP_HARNESS_SHA256" .peanut/wp-harness/install-wp-tests.sh \
+            | sha256sum --check --strict
+          install -m 0755 .peanut/wp-harness/install-wp-tests.sh /tmp/install-wp-tests.sh
+          echo "WP harness SHA-256: $WP_HARNESS_SHA256"
           # Regression test for the harness itself (GAP-03): proven to fail on the
           # unfixed installer, which silently paired trunk's test library with
           # pinned core. Runs offline; curl is stubbed.
@@ -87,12 +90,15 @@ jobs:
           tools: composer
       - run: composer install --no-interaction --prefer-dist
 
-      - name: Fetch shared WP test installer
+      - name: Verify vendored WP test installer
+        env:
+          WP_HARNESS_SHA256: "51c84a4a63112daedb40c0ee31918623a7f412bbb8eb4bb6175c9b3df4e49926"
         run: |
-          curl -fsSL -o /tmp/install-wp-tests.sh \
-            "https://raw.githubusercontent.com/Peanut-Graphic/peanut-documentation/main/testing-standard/wp-harness/install-wp-tests.sh" \
-          || cp .peanut/wp-harness/install-wp-tests.sh /tmp/install-wp-tests.sh
-          chmod +x /tmp/install-wp-tests.sh
+          set -euo pipefail
+          printf '%s  %s\n' "$WP_HARNESS_SHA256" .peanut/wp-harness/install-wp-tests.sh \
+            | sha256sum --check --strict
+          install -m 0755 .peanut/wp-harness/install-wp-tests.sh /tmp/install-wp-tests.sh
+          echo "WP harness SHA-256: $WP_HARNESS_SHA256"
           # Regression test for the harness itself (GAP-03): proven to fail on the
           # unfixed installer, which silently paired trunk's test library with
           # pinned core. Runs offline; curl is stubbed.
