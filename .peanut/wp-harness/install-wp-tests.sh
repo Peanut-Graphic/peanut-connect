@@ -4,7 +4,7 @@
 # WordPress in PHPUnit (net 7 REST contract tests) instead of hand-rolled mocks.
 #
 # Usage: install-wp-tests.sh <db-name> <db-user> <db-pass> [db-host] [wp-version] [skip-db-create]
-# In CI (with a mysql service): install-wp-tests.sh wordpress_test root root 127.0.0.1 latest
+# Required CI omits wp-version and uses the source-pinned default below.
 #
 # Adapted from the canonical WP-CLI scaffold script; pinned to bash + mysqli, no svn required.
 set -euo pipefail
@@ -13,7 +13,11 @@ DB_NAME="${1:-wordpress_test}"
 DB_USER="${2:-root}"
 DB_PASS="${3:-root}"
 DB_HOST="${4:-127.0.0.1}"
-WP_VERSION="${5:-latest}"
+# Required PR/push lanes must be reproducible. Update this exact version through
+# the reviewed canonical-installer/digest rollout; explicit latest remains available
+# only for separately classified manual compatibility probes.
+PINNED_WP_VERSION="7.1"
+WP_VERSION="${5:-$PINNED_WP_VERSION}"
 SKIP_DB_CREATE="${6:-false}"
 
 WP_TESTS_DIR="${WP_TESTS_DIR:-/tmp/wordpress-tests-lib}"
@@ -44,7 +48,18 @@ install_wp() {
   mkdir -p "$WP_CORE_DIR"
   download "https://wordpress.org/wordpress-${WP_VERSION}.tar.gz" /tmp/wordpress.tar.gz
   tar --strip-components=1 -zxmf /tmp/wordpress.tar.gz -C "$WP_CORE_DIR"
-  download https://raw.githubusercontent.com/markoheijnen/wp-mysqli/master/db.php "$WP_CORE_DIR/wp-content/db.php"
+  # Preserve the exact four-line behavior of markoheijnen/wp-mysqli db.php at
+  # reviewed commit e37c7bcbc44ecda77c044f4cf0765bb513d5d856 (source file
+  # SHA-256 e19ed9d0fe988d0f34a274ac81d93ddb4c68f8a7bd61571a21c3f8aedcb439bb)
+  # without a mutable network-time master fetch.
+  mkdir -p "$WP_CORE_DIR/wp-content"
+  cat > "$WP_CORE_DIR/wp-content/db.php" <<'PHP'
+<?php
+
+if ( ! defined( 'WP_USE_EXT_MYSQL' ) ) {
+	define( 'WP_USE_EXT_MYSQL', false );
+}
+PHP
 }
 
 # Never report readiness we have not checked. This script exists so plugins can

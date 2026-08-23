@@ -37,7 +37,7 @@ jobs:
 
       - name: Verify vendored WP test installer
         env:
-          WP_HARNESS_SHA256: "51c84a4a63112daedb40c0ee31918623a7f412bbb8eb4bb6175c9b3df4e49926"
+          WP_HARNESS_SHA256: "e27b32255e0d61d7e5da05d082ba4b9d582b0a6adf676d67854d09b9dece14b6"
         run: |
           set -euo pipefail
           printf '%s  %s\n' "$WP_HARNESS_SHA256" .peanut/wp-harness/install-wp-tests.sh \
@@ -53,7 +53,7 @@ jobs:
         env:
           WP_TESTS_DIR: /tmp/wordpress-tests-lib
           WP_CORE_DIR: /tmp/wordpress
-        run: /tmp/install-wp-tests.sh wordpress_test root root 127.0.0.1 latest
+        run: /tmp/install-wp-tests.sh wordpress_test root root 127.0.0.1
 
       - name: REST contract tests (net 7, real WordPress)
         env:
@@ -92,7 +92,7 @@ jobs:
 
       - name: Verify vendored WP test installer
         env:
-          WP_HARNESS_SHA256: "51c84a4a63112daedb40c0ee31918623a7f412bbb8eb4bb6175c9b3df4e49926"
+          WP_HARNESS_SHA256: "e27b32255e0d61d7e5da05d082ba4b9d582b0a6adf676d67854d09b9dece14b6"
         run: |
           set -euo pipefail
           printf '%s  %s\n' "$WP_HARNESS_SHA256" .peanut/wp-harness/install-wp-tests.sh \
@@ -108,7 +108,7 @@ jobs:
         env:
           WP_TESTS_DIR: /tmp/wordpress-tests-lib
           WP_CORE_DIR: /tmp/wordpress
-        run: /tmp/install-wp-tests.sh wordpress_test root root 127.0.0.1 latest
+        run: /tmp/install-wp-tests.sh wordpress_test root root 127.0.0.1
 
       - name: REST contract tests (net 7, real WordPress on MariaDB 10.6)
         env:
