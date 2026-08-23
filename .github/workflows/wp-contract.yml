@@ -35,12 +35,18 @@ jobs:
           tools: composer
       - run: composer install --no-interaction --prefer-dist
 
-      - name: Verify vendored WP test installer
+      - name: Verify vendored WP harness
         env:
           WP_HARNESS_SHA256: "e27b32255e0d61d7e5da05d082ba4b9d582b0a6adf676d67854d09b9dece14b6"
+          WP_BOOTSTRAP_SHA256: "bf6bcf4a73f79d9ffb88381e5d334fd97e5876d771da5fce037acc46dd761619"
+          WP_LIFECYCLE_GUARD_SHA256: "19d9a22a3e680ceb4c1ad6304285148d0d2aabe58c2a65f83ccbd1f36bd05587"
         run: |
           set -euo pipefail
           printf '%s  %s\n' "$WP_HARNESS_SHA256" .peanut/wp-harness/install-wp-tests.sh \
+            | sha256sum --check --strict
+          printf '%s  %s\n' "$WP_BOOTSTRAP_SHA256" .peanut/wp-harness/bootstrap-wp.php \
+            | sha256sum --check --strict
+          printf '%s  %s\n' "$WP_LIFECYCLE_GUARD_SHA256" .peanut/wp-harness/lifecycle-hook-guard.php \
             | sha256sum --check --strict
           install -m 0755 .peanut/wp-harness/install-wp-tests.sh /tmp/install-wp-tests.sh
           echo "WP harness SHA-256: $WP_HARNESS_SHA256"
@@ -90,12 +96,18 @@ jobs:
           tools: composer
       - run: composer install --no-interaction --prefer-dist
 
-      - name: Verify vendored WP test installer
+      - name: Verify vendored WP harness
         env:
           WP_HARNESS_SHA256: "e27b32255e0d61d7e5da05d082ba4b9d582b0a6adf676d67854d09b9dece14b6"
+          WP_BOOTSTRAP_SHA256: "bf6bcf4a73f79d9ffb88381e5d334fd97e5876d771da5fce037acc46dd761619"
+          WP_LIFECYCLE_GUARD_SHA256: "19d9a22a3e680ceb4c1ad6304285148d0d2aabe58c2a65f83ccbd1f36bd05587"
         run: |
           set -euo pipefail
           printf '%s  %s\n' "$WP_HARNESS_SHA256" .peanut/wp-harness/install-wp-tests.sh \
+            | sha256sum --check --strict
+          printf '%s  %s\n' "$WP_BOOTSTRAP_SHA256" .peanut/wp-harness/bootstrap-wp.php \
+            | sha256sum --check --strict
+          printf '%s  %s\n' "$WP_LIFECYCLE_GUARD_SHA256" .peanut/wp-harness/lifecycle-hook-guard.php \
             | sha256sum --check --strict
           install -m 0755 .peanut/wp-harness/install-wp-tests.sh /tmp/install-wp-tests.sh
           echo "WP harness SHA-256: $WP_HARNESS_SHA256"
