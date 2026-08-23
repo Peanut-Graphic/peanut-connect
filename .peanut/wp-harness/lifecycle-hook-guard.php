@@ -58,6 +58,10 @@ final class Peanut_Lifecycle_Hook_Guard
         int $priority,
         ?int $current_priority
     ): void {
+        if (! self::is_plugin_owned_registration($callback)) {
+            return;
+        }
+
         $reason = null;
 
         if (did_action($hook_name) > 0 && ! doing_action($hook_name)) {
@@ -124,6 +128,88 @@ final class Peanut_Lifecycle_Hook_Guard
     public static function reset(): void
     {
         self::$violations = [];
+    }
+
+    /** @param callable|array|string|object $callback */
+    private static function is_plugin_owned_registration($callback): bool
+    {
+        if (! defined('PLUGIN_MAIN_FILE')) {
+            throw new RuntimeException('PLUGIN_MAIN_FILE is required for lifecycle ownership attribution.');
+        }
+
+        $source_file = self::callback_source_file($callback);
+        if ($source_file === false) {
+            return false;
+        }
+        if (is_string($source_file)) {
+            return self::is_plugin_owned_file($source_file);
+        }
+
+        foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS) as $frame) {
+            if (isset($frame['file']) && self::is_plugin_owned_file($frame['file'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Return null when a callback is not reflectable yet, false for an
+     * internal callback, or its defining source file.
+     *
+     * @param callable|array|string|object $callback
+     * @return string|false|null
+     */
+    private static function callback_source_file($callback)
+    {
+        try {
+            if ($callback instanceof Closure) {
+                return (new ReflectionFunction($callback))->getFileName();
+            }
+            if (is_array($callback) && count($callback) === 2) {
+                return (new ReflectionMethod($callback[0], (string) $callback[1]))->getFileName();
+            }
+            if (is_string($callback) && str_contains($callback, '::')) {
+                [$class_name, $method_name] = explode('::', $callback, 2);
+                return (new ReflectionMethod($class_name, $method_name))->getFileName();
+            }
+            if (is_string($callback) && function_exists($callback)) {
+                return (new ReflectionFunction($callback))->getFileName();
+            }
+            if (is_object($callback) && method_exists($callback, '__invoke')) {
+                return (new ReflectionMethod($callback, '__invoke'))->getFileName();
+            }
+        } catch (ReflectionException) {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static function is_plugin_owned_file(string $file): bool
+    {
+        $root = realpath(dirname((string) PLUGIN_MAIN_FILE));
+        $resolved = realpath($file);
+        if ($root === false || $resolved === false) {
+            return false;
+        }
+
+        $root = str_replace('\\', '/', $root);
+        $resolved = str_replace('\\', '/', $resolved);
+        $prefix = rtrim($root, '/') . '/';
+        if (! str_starts_with($resolved, $prefix)) {
+            return false;
+        }
+
+        $relative = substr($resolved, strlen($prefix));
+        foreach (['.peanut/', 'vendor/', 'tests/'] as $excluded_prefix) {
+            if (str_starts_with($relative, $excluded_prefix)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** @param callable|array|string|object $callback */
