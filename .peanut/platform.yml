@@ -95,8 +95,8 @@ exceptions:
     status: proposed
 verification:
   status: live-verified
-  audited_commit: 2f53a208d08f8bf2e16780d6b1fa883c9538e88d
-  last_reviewed: "2026-08-15"
+  audited_commit: 3318ebd39ec222e1530b2e9237ac5a6d6b74e62c
+  last_reviewed: "2026-08-22"
   sources:
     - peanut-connect.php
     - readme.txt
