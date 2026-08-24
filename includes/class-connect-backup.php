@@ -14,9 +14,18 @@ if (!defined('ABSPATH')) {
 class Peanut_Connect_Backup {
 
     /**
+     * Seconds between build heartbeats.
+     *
+     * Comfortably under the job runner's STALE_AFTER so a healthy build is
+     * never mistaken for a dead one, and long enough that the option write
+     * is noise next to the zipping.
+     */
+    const PROGRESS_INTERVAL = 15;
+
+    /**
      * Create a full site backup
      *
-     * @param array $params Optional parameters (type, storage_driver).
+     * @param array $params Optional parameters (type, storage_driver, progress).
      * @return array|WP_Error Backup result or error.
      */
     public static function create_backup(array $params = []): array|WP_Error {
@@ -46,7 +55,11 @@ class Peanut_Connect_Backup {
         }
 
         // 2. Create zip of wp-content (excluding peanut-backups, cache, upgrade dirs)
-        $zip_file = self::create_zip($backup_path, $db_file);
+        $progress = isset($params['progress']) && is_callable($params['progress'])
+            ? $params['progress']
+            : null;
+
+        $zip_file = self::create_zip($backup_path, $db_file, $progress);
         if (is_wp_error($zip_file)) {
             return $zip_file;
         }
@@ -162,7 +175,7 @@ class Peanut_Connect_Backup {
      * @param string $db_file     Path to the database SQL file.
      * @return string|WP_Error Path to the zip file or error.
      */
-    private static function create_zip(string $backup_path, string $db_file): string|WP_Error {
+    private static function create_zip(string $backup_path, string $db_file, ?callable $progress = null): string|WP_Error {
         $zip_file = $backup_path . '.zip';
 
         if (!class_exists('ZipArchive')) {
@@ -176,6 +189,9 @@ class Peanut_Connect_Backup {
 
         // Add database export
         $zip->addFile($db_file, 'database.sql');
+
+        $added = 0;
+        $last_beat = time();
 
         // Add wp-content directory (excluding large/cache dirs)
         $exclude_dirs = ['peanut-backups', 'cache', 'upgrade', 'wflogs', 'ai1wm-backups'];
@@ -208,9 +224,34 @@ class Peanut_Connect_Backup {
             }
 
             $zip->addFile($file_path, 'wp-content/' . $relative_path);
+            $added++;
+
+            // Heartbeat on a time interval, not a file count: file sizes vary
+            // by orders of magnitude, so "every N files" is silent for minutes
+            // on a media library and chatty on a plugin directory. Each beat
+            // is one option write, so seconds-not-files keeps the cost flat
+            // regardless of what the site is made of.
+            if ($progress !== null && (time() - $last_beat) >= self::PROGRESS_INTERVAL) {
+                $last_beat = time();
+                $progress($added);
+            }
+        }
+
+        // The single most likely place to be killed: close() is where libzip
+        // actually writes the archive, and on a large site that is minutes of
+        // solid I/O after the last file was queued. Beat immediately before,
+        // so a death in there is dated to the close rather than looking like
+        // a stall that began at the last file.
+        if ($progress !== null) {
+            $progress($added);
         }
 
         $zip->close();
+
+        if ($progress !== null) {
+            $progress($added);
+        }
+
         return $zip_file;
     }
 

@@ -102,4 +102,79 @@ final class Test_Backup_Job extends TestCase {
     public function test_unknown_job_is_null_rather_than_an_invented_record(): void {
         $this->assertNull(Peanut_Connect_Backup_Job::get('no-such-job'));
     }
+
+    /**
+     * Staleness must be measured from PROGRESS, not from the start.
+     *
+     * Hub made exactly this mistake on its own side: a 30-minute ceiling
+     * measured from dispatch recorded five healthy builds as failures on
+     * 2026-08-23. A big site legitimately zips for far longer than
+     * STALE_AFTER; only silence means the worker is gone.
+     */
+    public function test_a_long_but_alive_build_is_not_declared_dead(): void {
+        $job = Peanut_Connect_Backup_Job::queue();
+
+        $stored = get_option(Peanut_Connect_Backup_Job::OPTION, []);
+        $stored[0]['status'] = 'running';
+        $stored[0]['started_at'] = time() - (Peanut_Connect_Backup_Job::STALE_AFTER * 3);
+        $stored[0]['progress_at'] = time() - 5;
+        update_option(Peanut_Connect_Backup_Job::OPTION, $stored, false);
+
+        $this->assertSame(
+            $job['job_id'],
+            Peanut_Connect_Backup_Job::queue()['job_id'],
+            'A build that is still reporting progress was declared dead because it started long ago.'
+        );
+        $this->assertSame('running', Peanut_Connect_Backup_Job::get($job['job_id'])['status']);
+    }
+
+    /**
+     * The status endpoint is the ONLY thing Hub reads. If it keeps answering
+     * "running" for a worker that died, Hub polls until its own ceiling and
+     * then has to guess why — which is precisely what happened on 08-23.
+     */
+    public function test_the_status_read_path_reports_a_vanished_worker_as_failed(): void {
+        $job = Peanut_Connect_Backup_Job::queue();
+
+        $stored = get_option(Peanut_Connect_Backup_Job::OPTION, []);
+        $stored[0]['status'] = 'running';
+        $stored[0]['started_at'] = time() - (Peanut_Connect_Backup_Job::STALE_AFTER + 60);
+        $stored[0]['progress_at'] = time() - (Peanut_Connect_Backup_Job::STALE_AFTER + 60);
+        update_option(Peanut_Connect_Backup_Job::OPTION, $stored, false);
+
+        $read = Peanut_Connect_Backup_Job::get($job['job_id']);
+
+        $this->assertSame('failed', $read['status'], 'The status endpoint reported a dead worker as still running.');
+        $this->assertSame('backup_worker_vanished', $read['error_code']);
+    }
+
+    public function test_latest_also_reports_a_vanished_worker_as_failed(): void {
+        // Hub falls back to latest() when it never saw the create response,
+        // so this path needs the same honesty as get().
+        Peanut_Connect_Backup_Job::queue();
+
+        $stored = get_option(Peanut_Connect_Backup_Job::OPTION, []);
+        $stored[0]['status'] = 'running';
+        $stored[0]['started_at'] = time() - (Peanut_Connect_Backup_Job::STALE_AFTER + 60);
+        $stored[0]['progress_at'] = time() - (Peanut_Connect_Backup_Job::STALE_AFTER + 60);
+        update_option(Peanut_Connect_Backup_Job::OPTION, $stored, false);
+
+        $this->assertSame('failed', Peanut_Connect_Backup_Job::latest()['status']);
+    }
+
+    public function test_a_heartbeat_records_progress_so_the_build_stays_trusted(): void {
+        $job = Peanut_Connect_Backup_Job::queue();
+
+        $stored = get_option(Peanut_Connect_Backup_Job::OPTION, []);
+        $stored[0]['status'] = 'running';
+        $stored[0]['started_at'] = time() - 600;
+        $stored[0]['progress_at'] = time() - 600;
+        update_option(Peanut_Connect_Backup_Job::OPTION, $stored, false);
+
+        Peanut_Connect_Backup_Job::heartbeat($job['job_id'], 1234);
+
+        $read = Peanut_Connect_Backup_Job::get($job['job_id']);
+        $this->assertGreaterThan(time() - 5, (int) $read['progress_at']);
+        $this->assertSame(1234, (int) $read['files_added']);
+    }
 }
