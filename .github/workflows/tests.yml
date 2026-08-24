@@ -41,6 +41,7 @@ jobs:
         run: |
           bash scripts/tests/dependency-audit-transport.test.sh
           bash scripts/tests/dependency-audit-workflow.test.sh
+          bash scripts/tests/wp-contract-image-pins.test.sh
 
       - name: Audit the locked Python auditor
         run: |
