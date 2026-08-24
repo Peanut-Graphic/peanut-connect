@@ -12,6 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The test suite no longer calls PHP 8.5-deprecated reflection no-ops and now fails when PHPUnit marks a test risky.
 - The blocking Unit gate now runs 178 previously dormant module tests. Shared WordPress mocks cover filters, theme metadata, trimming, and `$wpdb->options`; updater fixtures model HTTP status and trusted package hosts; and the rate-limit assertion matches the security-hardened IP-only bucket contract. The 25 obsolete Manager-era API tests remain explicitly quarantined for a Hub-contract rewrite.
 
+## [3.37.4] - 2026-08-24
+
+### Fixed
+- **A Hub-driven update installed whatever was cached, not what was current.** The remote
+  update read WordPress's `update_plugins` transient — its own cache, up to 12 hours
+  stale — without refreshing it first. A fleet-wide push hours after 3.37.3 shipped
+  therefore installed **3.37.1** on five sites and was refused outright on four more with
+  "no update available"; every one of those was a cache artefact rather than a true
+  state. Hub asking for an update is precisely the moment a site should find out what is
+  actually available, so the check is now refreshed before the decision is read.
+
 ## [3.37.3] - 2026-08-24
 
 ### Fixed
