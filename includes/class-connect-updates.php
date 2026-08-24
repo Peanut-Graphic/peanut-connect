@@ -198,6 +198,66 @@ class Peanut_Connect_Updates {
         }
     }
 
+    /**
+     * Guarantee that an update leaves the plugin as it found it.
+     *
+     * WordPress deactivates a plugin before swapping its files
+     * (deactivate_plugin_before_upgrade, silently) and does not reliably
+     * switch it back on when the upgrade is driven from outside wp-admin. On
+     * 2026-08-24 a Hub-driven fleet push left Peanut Connect INACTIVE on seven
+     * client sites: files correct and current, homepages fine, and every Hub
+     * capability gone — no health, no backups, no remote control — while the
+     * update call itself had answered "Plugin updated to version 3.37.1."
+     *
+     * A plugin that was running before an update must be running after it, and
+     * when that cannot be achieved the caller has to hear about it: reporting
+     * a successful update over a switched-off plugin is what hid this.
+     *
+     * @param string $plugin_file Plugin basename.
+     * @param bool   $was_active  Whether it was active before the upgrade.
+     * @return array{active: bool, reactivated: bool, error: string}
+     */
+    public static function ensure_still_active(string $plugin_file, bool $was_active): array {
+        $report = ['active' => false, 'reactivated' => false, 'error' => ''];
+
+        if (!function_exists('is_plugin_active')) {
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        }
+
+        $active_now = is_plugin_active($plugin_file);
+
+        // Deliberately off before, deliberately off after. An update is not
+        // permission to start running something the site had switched off.
+        if (!$was_active) {
+            $report['active'] = $active_now;
+
+            return $report;
+        }
+
+        if ($active_now) {
+            $report['active'] = true;
+
+            return $report;
+        }
+
+        $activated = activate_plugin($plugin_file);
+
+        if (is_wp_error($activated)) {
+            $report['error'] = $activated->get_error_message();
+
+            return $report;
+        }
+
+        $report['active'] = is_plugin_active($plugin_file);
+        $report['reactivated'] = $report['active'];
+
+        if (!$report['active']) {
+            $report['error'] = __('The plugin could not be reactivated after the update.', 'peanut-connect');
+        }
+
+        return $report;
+    }
+
     public static function update_plugin(string $plugin_file): array|WP_Error {
         if (!function_exists('get_plugins')) {
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -227,6 +287,10 @@ class Peanut_Connect_Updates {
             return new WP_Error('no_update', __('No update available for this plugin.', 'peanut-connect'));
         }
 
+        // Captured BEFORE the upgrade, because the upgrade is what destroys
+        // the evidence: WordPress deactivates the plugin to swap its files.
+        $was_active = is_plugin_active($plugin_file);
+
         // Perform the update
         $skin = new Automatic_Upgrader_Skin();
         $upgrader = new Plugin_Upgrader($skin);
@@ -245,14 +309,35 @@ class Peanut_Connect_Updates {
         delete_site_transient('update_plugins');
         wp_update_plugins();
 
+        // Switch it back on if the update switched it off.
+        $state = self::ensure_still_active($plugin_file, $was_active);
+
         // Get new version
         $all_plugins = get_plugins();
         $new_version = $all_plugins[$plugin_file]['Version'] ?? 'unknown';
+
+        // An update that leaves the plugin off is not a success, however
+        // correct the files are. Say so, rather than answering "updated" over
+        // a site that has just gone dark to Hub.
+        if ($was_active && !$state['active']) {
+            return new WP_Error(
+                'update_left_plugin_inactive',
+                sprintf(
+                    /* translators: 1: version, 2: reason */
+                    __('Updated to version %1$s but the plugin could not be reactivated: %2$s', 'peanut-connect'),
+                    $new_version,
+                    $state['error'] !== '' ? $state['error'] : __('unknown reason', 'peanut-connect')
+                )
+            );
+        }
 
         return [
             'success' => true,
             'plugin' => $plugin_file,
             'new_version' => $new_version,
+            // Reported so Hub can verify the outcome instead of trusting it.
+            'active' => $state['active'],
+            'reactivated' => $state['reactivated'],
             'message' => sprintf(__('Plugin updated to version %s.', 'peanut-connect'), $new_version),
         ];
     }
