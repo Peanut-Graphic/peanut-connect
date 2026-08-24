@@ -48,16 +48,17 @@ class Peanut_Connect_Backup {
         $backup_name = "{$site_slug}-{$timestamp}-{$token}";
         $backup_path = "{$backup_dir}/{$backup_name}";
 
+        $progress = isset($params['progress']) && is_callable($params['progress'])
+            ? $params['progress']
+            : null;
+
         // 1. Export database
-        $db_file = self::export_database($backup_path);
+        $db_file = self::export_database($backup_path, $progress);
         if (is_wp_error($db_file)) {
             return $db_file;
         }
 
         // 2. Create zip of wp-content (excluding peanut-backups, cache, upgrade dirs)
-        $progress = isset($params['progress']) && is_callable($params['progress'])
-            ? $params['progress']
-            : null;
 
         $zip_file = self::create_zip($backup_path, $db_file, $progress);
         if (is_wp_error($zip_file)) {
@@ -107,9 +108,10 @@ class Peanut_Connect_Backup {
      * @param string $backup_path Base path for the backup file (without extension).
      * @return string|WP_Error Path to the SQL file or error.
      */
-    private static function export_database(string $backup_path): string|WP_Error {
+    private static function export_database(string $backup_path, ?callable $progress = null): string|WP_Error {
         global $wpdb;
         $db_file = $backup_path . '.sql';
+        $last_beat = time();
 
         // Get all tables for this site
         $tables = $wpdb->get_col($wpdb->prepare(
@@ -123,6 +125,14 @@ class Peanut_Connect_Backup {
         $handle = fopen($db_file, 'w');
         if (!$handle) {
             return new WP_Error('file_error', __('Could not create database export file.', 'peanut-connect'));
+        }
+
+        // Beat unconditionally at the phase boundary, not only on the interval.
+        // A site whose export finishes inside PROGRESS_INTERVAL would otherwise
+        // leave no trace that the phase ran at all, and the record could not
+        // distinguish "exported quickly" from "never started".
+        if ($progress !== null) {
+            $progress(0);
         }
 
         // Write header
@@ -157,6 +167,17 @@ class Peanut_Connect_Backup {
                     fwrite($handle, "INSERT INTO `{$table}` (" . implode(',', $columns) . ") VALUES (" . implode(',', $values) . ");\n");
                 }
                 $offset += $batch_size;
+
+                // The export is the OTHER half of the build, and on a real
+                // site it is the bigger half — peanutgraphic.com writes a
+                // 276 MB .sql before a single file is zipped. 3.37.2 only
+                // beat during zipping, so a long export looked exactly like
+                // a dead worker and would be reaped as one: the same blind
+                // spot, moved rather than closed.
+                if ($progress !== null && (time() - $last_beat) >= self::PROGRESS_INTERVAL) {
+                    $last_beat = time();
+                    $progress(0);
+                }
             } while (count($rows) === $batch_size);
 
             fwrite($handle, "\n");
