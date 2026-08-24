@@ -59,10 +59,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: static-and-security
     env:
-      # Coverage is near-zero today: the mock-backed Unit suite only exercises a
-      # couple of includes/ classes, and the large tests/phpunit/unit/ suite is
-      # dormant (needs WP fn mocks the bootstrap lacks — see known-gaps).
-      # Floor is honest (0) and non-regressing; ratchet up once that suite boots.
+      # Coverage still has an honest zero floor while the legacy API contract is
+      # rewritten, but 178 previously dormant tests now run in the blocking Unit
+      # suite. Ratchet the floor separately from this test-discovery repair.
       MIN_COVERAGE: "0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -77,8 +76,11 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
 
-      - name: Unit + Property tests + coverage
+      - name: Root Unit + Property tests + coverage
         run: vendor/bin/phpunit --testsuite=Unit,Property --coverage-clover=coverage/clover.xml
+
+      - name: Legacy module unit tests
+        run: vendor/bin/phpunit -c phpunit.legacy-unit.xml
 
       - name: Coverage gate
         run: php coverage-gate.php coverage/clover.xml "$MIN_COVERAGE"
