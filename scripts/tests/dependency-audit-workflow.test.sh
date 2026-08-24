@@ -9,6 +9,8 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 [ -x "$ROOT/scripts/run-pip-audit.sh" ] || fail "pip-audit transport wrapper is missing or not executable"
 [ -x "$ROOT/scripts/tests/dependency-audit-transport.test.sh" ] \
   || fail "pip-audit adversarial contract is missing or not executable"
+[ -x "$ROOT/scripts/tests/wp-contract-image-pins.test.sh" ] \
+  || fail "WordPress service-image contract is missing or not executable"
 
 wrapper_calls=$(grep -c 'scripts/run-pip-audit.sh' "$WORKFLOW" || true)
 [ "$wrapper_calls" -eq 2 ] || fail "expected two wrapped pip-audit calls, found $wrapper_calls"
@@ -25,5 +27,7 @@ grep -q 'bash scripts/tests/dependency-audit-transport.test.sh' "$WORKFLOW" \
   || fail "workflow does not execute the adversarial transport contract"
 grep -q 'bash scripts/tests/dependency-audit-workflow.test.sh' "$WORKFLOW" \
   || fail "workflow does not execute its own wrapper-bypass contract"
+grep -q 'bash scripts/tests/wp-contract-image-pins.test.sh' "$WORKFLOW" \
+  || fail "workflow does not execute the WordPress service-image contract"
 
 echo "PEANUT CONNECT DEPENDENCY-AUDIT WORKFLOW CONTRACT PASSED"

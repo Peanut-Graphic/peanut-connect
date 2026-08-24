@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: mysql:8
+        image: mysql:8.4.11@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: wordpress_test
@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mariadb:
-        image: mariadb:10.6
+        image: mariadb:10.6.28-jammy@sha256:92e50059ea0a5965a33ef751970eab37d421b91ebbd01ac909039cffe159e574
         env:
           MARIADB_ROOT_PASSWORD: root
           MARIADB_DATABASE: wordpress_test
