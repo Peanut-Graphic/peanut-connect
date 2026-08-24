@@ -173,6 +173,31 @@ class Peanut_Connect_Updates {
     /**
      * Perform a plugin update
      */
+    /**
+     * Force WordPress to re-ask what plugin updates exist.
+     *
+     * Deleting the transient alone is not enough: something must then run the
+     * check, or the next read simply sees an empty cache and reports that
+     * nothing is available — which fails in the same direction as the stale
+     * cache it was meant to fix.
+     *
+     * @return void
+     */
+    public static function refresh_plugin_updates(): void {
+        if (function_exists('wp_clean_plugins_cache')) {
+            // Clears the transient AND the plugin list cache.
+            wp_clean_plugins_cache(true);
+
+            return;
+        }
+
+        delete_site_transient('update_plugins');
+
+        if (function_exists('wp_update_plugins')) {
+            wp_update_plugins();
+        }
+    }
+
     public static function update_plugin(string $plugin_file): array|WP_Error {
         if (!function_exists('get_plugins')) {
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -186,6 +211,16 @@ class Peanut_Connect_Updates {
         if (!isset($all_plugins[$plugin_file])) {
             return new WP_Error('plugin_not_found', __('Plugin not found.', 'peanut-connect'));
         }
+
+        // Refresh BEFORE reading. `update_plugins` is WordPress's own cache
+        // and it is up to 12 hours stale, so trusting it means a remote update
+        // installs whatever was current the last time the site happened to
+        // look. On 2026-08-24, hours after 3.37.3 shipped, a fleet-wide push
+        // landed 3.37.1 on five sites and was refused outright on four more
+        // with "no update available" — every one of them a cache artefact
+        // rather than a true state. Hub asking for an update is exactly the
+        // moment the site should find out what is actually available.
+        self::refresh_plugin_updates();
 
         $update_plugins = get_site_transient('update_plugins');
         if (!isset($update_plugins->response[$plugin_file])) {
