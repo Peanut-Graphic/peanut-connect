@@ -12,6 +12,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The test suite no longer calls PHP 8.5-deprecated reflection no-ops and now fails when PHPUnit marks a test risky.
 - The blocking Unit gate now runs 178 previously dormant module tests. Shared WordPress mocks cover filters, theme metadata, trimming, and `$wpdb->options`; updater fixtures model HTTP status and trusted package hosts; and the rate-limit assertion matches the security-hardened IP-only bucket contract. The 25 obsolete Manager-era API tests remain explicitly quarantined for a Hub-contract rewrite.
 
+## [3.37.5] - 2026-08-24
+
+### Fixed
+- **A Hub-driven update could leave the plugin switched off, and still report success.**
+  WordPress deactivates a plugin before swapping its files and does not reliably switch it
+  back on when the upgrade runs outside wp-admin. A fleet-wide push left Peanut Connect
+  **inactive on seven client sites**: files correct and current, homepages fine, and every
+  Hub capability silently gone — no health reporting, no backups, no remote control —
+  while the update call had answered "Plugin updated to version 3.37.1." Recovering four
+  of them took a single reactivation; the other three needed someone with wp-admin,
+  because the API required to fix a site was the one that had been switched off.
+  A plugin that was running before an update is now running after it, a deliberately
+  deactivated plugin is still left alone, and an update that cannot restore the plugin
+  reports a failure instead of a version number. The response now also carries the
+  plugin's real `active` state so Hub can verify the outcome rather than trust it.
+
 ## [3.37.4] - 2026-08-24
 
 ### Fixed
