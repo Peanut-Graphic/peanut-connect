@@ -12,6 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The test suite no longer calls PHP 8.5-deprecated reflection no-ops and now fails when PHPUnit marks a test risky.
 - The blocking Unit gate now runs 178 previously dormant module tests. Shared WordPress mocks cover filters, theme metadata, trimming, and `$wpdb->options`; updater fixtures model HTTP status and trusted package hosts; and the rate-limit assertion matches the security-hardened IP-only bucket contract. The 25 obsolete Manager-era API tests remain explicitly quarantined for a Hub-contract rewrite.
 
+## [3.37.3] - 2026-08-24
+
+### Fixed
+- **The database export reported no progress, so a long export still looked like a dead
+  backup.** 3.37.2 made the build heartbeat, but only while zipping files. On a real site
+  the export is the bigger half — peanutgraphic.com writes a 276 MB `.sql` before a single
+  file is zipped — and watching a live build showed its progress timestamp frozen for the
+  whole export. The blind spot had been moved rather than closed. The export now
+  heartbeats on the same interval, plus once at the phase boundary so even a fast export
+  leaves a trace.
+
 ## [3.37.2] - 2026-08-24
 
 ### Fixed
