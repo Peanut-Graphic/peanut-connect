@@ -12,6 +12,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The test suite no longer calls PHP 8.5-deprecated reflection no-ops and now fails when PHPUnit marks a test risky.
 - The blocking Unit gate now runs 178 previously dormant module tests. Shared WordPress mocks cover filters, theme metadata, trimming, and `$wpdb->options`; updater fixtures model HTTP status and trusted package hosts; and the rate-limit assertion matches the security-hardened IP-only bucket contract. The 25 obsolete Manager-era API tests remain explicitly quarantined for a Hub-contract rewrite.
 
+## [3.37.2] - 2026-08-24
+
+### Fixed
+- **A backup that died mid-build reported `running` forever, and a healthy long build
+  risked being called dead.** Five scheduled backups on 2026-08-23 sat `running` for
+  hours while Hub had to guess why. Three causes, all in the same seam. The build never
+  raised its execution limit — WP-Cron runs over HTTP, so it inherited the web server's
+  request cap and was killed mid-zip, and a killed request never reaches the failure
+  path. Staleness was already understood by the plugin but applied only when a *new*
+  backup was requested, so the status endpoint — the only thing Hub reads — kept
+  answering `running` for a worker that was already gone. And measuring staleness from
+  the start would have condemned honest long builds, so the build now heartbeats every
+  15 seconds (including either side of the archive write, where a large site is most
+  likely to be killed): silence means dead, duration does not.
+- Backup job records reported a null size for every backup, reading a `size` key where
+  the builder returns `size_bytes`.
+
+## [3.37.1] - 2026-08-21
+
+### Fixed
+- **The database migration could never run.** Its `plugins_loaded` hook was registered
+  from a boot path that already runs on `init`, so the hook had fired long before the
+  callback was added and the migration silently never executed — since v3.7.24. It now
+  runs immediately when its hook has already fired, and the boot contract is pinned by
+  a test that fails if the registration goes back to being too late.
+
 ## [3.37.0] - 2026-08-16
 
 ### Fixed
