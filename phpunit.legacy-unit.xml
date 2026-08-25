@@ -7,6 +7,7 @@
 >
 	<testsuites>
 		<testsuite name="LegacyUnit">
+			<file>./tests/phpunit/unit/ApiTest.php</file>
 			<file>./tests/phpunit/unit/ActivityLogTest.php</file>
 			<file>./tests/phpunit/unit/AuthTest.php</file>
 			<file>./tests/phpunit/unit/ErrorLogTest.php</file>

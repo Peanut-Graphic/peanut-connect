@@ -9,7 +9,7 @@
 
 // Define WordPress constants if not already defined
 if (!defined('ABSPATH')) {
-    define('ABSPATH', '/tmp/wordpress/');
+    define('ABSPATH', sys_get_temp_dir() . '/peanut-connect-wordpress/');
 }
 
 if (!defined('WP_CONTENT_DIR')) {
@@ -346,11 +346,14 @@ if (!class_exists('WP_REST_Response')) {
  * Helper function to reset test state
  */
 function peanut_reset_test_state(): void {
-    global $peanut_test_options, $peanut_test_transients, $peanut_test_shortcodes, $peanut_test_blocks;
+    global $peanut_test_options, $peanut_test_transients, $peanut_test_shortcodes, $peanut_test_blocks, $mock_remote_response, $peanut_last_http, $mock_user_caps;
     $peanut_test_options = [];
     $peanut_test_transients = [];
     $peanut_test_shortcodes = [];
     $peanut_test_blocks = [];
+    $mock_remote_response = null;
+    $peanut_last_http = null;
+    $mock_user_caps = ['manage_options' => true];
 }
 
 // ==========================================
@@ -695,6 +698,15 @@ if (!function_exists('current_user_can')) {
 }
 
 /**
+ * Stable WordPress salt for exercising encrypted credential storage.
+ */
+if (!function_exists('wp_salt')) {
+    function wp_salt(string $scheme = 'auth'): string {
+        return 'peanut-connect-test-salt-' . $scheme;
+    }
+}
+
+/**
  * Mock add_action
  */
 if (!function_exists('add_action')) {
@@ -754,6 +766,22 @@ if (!function_exists('wp_remote_get')) {
         global $mock_remote_response;
         if (isset($mock_remote_response)) {
             return $mock_remote_response;
+        }
+        return new WP_Error('http_request_failed', 'Mock: No response configured');
+    }
+}
+
+/**
+ * Mock wp_remote_post and retain the dispatched request for contract assertions.
+ */
+if (!function_exists('wp_remote_post')) {
+    function wp_remote_post(string $url, array $args = []) {
+        global $mock_remote_response, $peanut_last_http;
+        $peanut_last_http = ['url' => $url, 'args' => $args];
+        if (isset($mock_remote_response)) {
+            return is_callable($mock_remote_response)
+                ? ($mock_remote_response)($url, $args)
+                : $mock_remote_response;
         }
         return new WP_Error('http_request_failed', 'Mock: No response configured');
     }
