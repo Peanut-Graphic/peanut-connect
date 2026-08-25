@@ -9,7 +9,7 @@
  */
 
 if (!defined('ABSPATH')) {
-    define('ABSPATH', '/tmp/wordpress/');
+    define('ABSPATH', sys_get_temp_dir() . '/peanut-connect-wordpress-main/');
 }
 
 if (!defined('WPINC')) {
