@@ -60,10 +60,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: static-and-security
     env:
-      # Coverage still has an honest zero floor while the legacy API contract is
-      # rewritten, but 178 previously dormant tests now run in the blocking Unit
-      # suite. Ratchet the floor separately from this test-discovery repair.
-      MIN_COVERAGE: "0"
+      # Main measured 14.26% statement coverage on 2026-08-29 after the legacy
+      # API contract rewrite. Keep roughly five points of headroom for honest
+      # source/test movement while preventing a return to unmeasured coverage.
+      MIN_COVERAGE: "9"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

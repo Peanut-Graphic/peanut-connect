@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The blocking PHP coverage gate now enforces a 9% statement floor against the current 14.26% baseline, replacing the zero-threshold placeholder while retaining roughly five points of headroom.
 - Mark It Up request handling now uses strict presence checks, so a literal `"0"` review token is not discarded by PHP's empty-value coercion; admin actions are sanitized before dispatch.
 - The test suite no longer calls PHP 8.5-deprecated reflection no-ops and now fails when PHPUnit marks a test risky.
 - The blocking Unit gate now runs 203 previously dormant module and API tests. The former Manager-era API quarantine has been rewritten around the current Hub admin contract, including encrypted credentials, manual pairing outcomes, SSRF rejection, disconnect cleanup, Hub modes, permissions, health, updates, and activity responses. Its WordPress mock filesystem is isolated from other repositories so shared `/tmp` state cannot inject real core files or redeclare test stubs.
