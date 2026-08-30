@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Opt-in security response headers (`peanut_connect_security_headers`). When enabled, front-end page responses carry `Referrer-Policy: strict-origin-when-cross-origin`, a restrictive `Permissions-Policy` (geolocation/camera/microphone/payment/usb denied), and `X-Content-Type-Options: nosniff`. Values are overridable via the `peanut_connect_security_headers` filter, and any header already set by an upstream (edge WAF or server) is left untouched so no duplicate/conflicting header is emitted. Default off; intended mainly for sites without an edge that already sets these. Exposed in `Peanut_Connect_Security::get_settings()`.
+
 ### Fixed
 - The blocking PHP coverage gate now enforces a 9% statement floor against the current 14.26% baseline, replacing the zero-threshold placeholder while retaining roughly five points of headroom.
 - Mark It Up request handling now uses strict presence checks, so a literal `"0"` review token is not discarded by PHP's empty-value coercion; admin actions are sanitized before dispatch.

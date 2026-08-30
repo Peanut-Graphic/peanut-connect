@@ -29,6 +29,15 @@ class Peanut_Connect_Security {
             add_filter('script_loader_src', [__CLASS__, 'remove_version_from_assets'], 10, 2);
         }
 
+        // Extra response headers (Referrer-Policy / Permissions-Policy). Opt-in
+        // and filterable. Primarily for sites with no edge WAF already setting
+        // these — behind an F5/Cloudflare the same headers are better set at the
+        // edge. Never clobbers a header an upstream already emitted, so it is
+        // safe to leave on even where the edge sets some of them.
+        if (get_option('peanut_connect_security_headers', '0') === '1') {
+            add_action('send_headers', [__CLASS__, 'send_security_headers']);
+        }
+
         // Disable comments
         if (get_option('peanut_connect_disable_comments', '0') === '1') {
             self::disable_comments();
@@ -60,7 +69,55 @@ class Peanut_Connect_Security {
             'disable_xmlrpc' => get_option('peanut_connect_disable_xmlrpc', '0') === '1',
             'disable_file_editing' => defined('DISALLOW_FILE_EDIT') && DISALLOW_FILE_EDIT,
             'remove_version' => get_option('peanut_connect_remove_version', '0') === '1',
+            'security_headers' => get_option('peanut_connect_security_headers', '0') === '1',
         ];
+    }
+
+    /**
+     * Send conservative security response headers on front-end requests.
+     *
+     * Values are filterable via `peanut_connect_security_headers`; return an
+     * empty string for any key to skip it, or an empty array to send nothing.
+     * A header already present on the response (e.g. set by an edge WAF or the
+     * server) is left untouched so we never emit a conflicting duplicate.
+     */
+    public static function send_security_headers(): void {
+        // Front-end page responses only. Admin, AJAX, REST, and login already
+        // have their own header handling and are governed elsewhere.
+        if (is_admin() || wp_doing_ajax() || (defined('REST_REQUEST') && REST_REQUEST)) {
+            return;
+        }
+        if (headers_sent()) {
+            return;
+        }
+
+        $headers = apply_filters('peanut_connect_security_headers', [
+            'Referrer-Policy' => 'strict-origin-when-cross-origin',
+            'Permissions-Policy' => 'geolocation=(), camera=(), microphone=(), payment=(), usb=()',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+
+        if (!is_array($headers)) {
+            return;
+        }
+
+        $already = [];
+        foreach (headers_list() as $sent) {
+            $name = strtolower(trim(strtok($sent, ':')));
+            if ($name !== '') {
+                $already[$name] = true;
+            }
+        }
+
+        foreach ($headers as $name => $value) {
+            if (!is_string($name) || $value === '' || $value === null) {
+                continue;
+            }
+            if (isset($already[strtolower($name)])) {
+                continue; // do not clobber an upstream-set header
+            }
+            header($name . ': ' . $value, true);
+        }
     }
 
     /**
