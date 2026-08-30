@@ -92,7 +92,7 @@
         "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
         "name": { "$ref": "#/$defs/nonEmpty" },
         "classification": {
-          "enum": ["production-app", "distributed-plugin", "desktop", "mobile", "library", "internal-service", "development-only", "archived"]
+          "enum": ["production-app", "distributed-plugin", "desktop", "mobile", "library", "internal-service", "platform", "development-only", "archived"]
         },
         "repository": { "type": "string", "pattern": "^https://github\\.com/[^/]+/[^/]+(?:\\.git)?$" },
         "lifecycle": { "enum": ["active", "maintenance", "development", "deprecated", "archived"] }
