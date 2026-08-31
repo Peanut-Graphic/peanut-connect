@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Unauthenticated user enumeration is now blocked by default.** Stock WordPress publishes
+  the exact login name of any user with content through three public vectors: `/wp-json/wp/v2/users`
+  returns it in the `slug` field, `/?author=<id>` 301-redirects to `/author/<login-name>/`, and
+  `wp-sitemap-users-N.xml` lists the author archives. On a client site that login name is half of
+  a credential pair, and it was readable by anyone — the admin account on a live Itron staging site
+  was recoverable in a single unauthenticated request. All three vectors are now closed for callers
+  who cannot already `list_users`, so the block editor, the REST author picker and authenticated
+  tooling are unaffected, and `/wp/v2/users/me` (self-scoped, already 401s when logged out) is
+  preserved. Sites that legitimately publish author archives can opt out via the `security`
+  endpoint's `block_user_enumeration` flag.
+
 ### Fixed
 - The blocking PHP coverage gate now enforces a 9% statement floor against the current 14.26% baseline, replacing the zero-threshold placeholder while retaining roughly five points of headroom.
 - Mark It Up request handling now uses strict presence checks, so a literal `"0"` review token is not discarded by PHP's empty-value coercion; admin actions are sanitized before dispatch.

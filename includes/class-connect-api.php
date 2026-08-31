@@ -2859,6 +2859,12 @@ class Peanut_Connect_API {
             $updated['remove_version'] = (bool) $params['remove_version'];
         }
 
+        // Block user enumeration
+        if (isset($params['block_user_enumeration'])) {
+            update_option('peanut_connect_block_user_enumeration', $params['block_user_enumeration'] ? '1' : '0');
+            $updated['block_user_enumeration'] = (bool) $params['block_user_enumeration'];
+        }
+
         // Disable comments
         if (isset($params['disable_comments'])) {
             update_option('peanut_connect_disable_comments', $params['disable_comments'] ? '1' : '0');
