@@ -33,6 +33,10 @@
       "type": "array",
       "items": { "$ref": "#/$defs/exception" }
     },
+    "dependency_surface_exceptions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependencySurfaceException" }
+    },
     "verification": { "$ref": "#/$defs/verification" }
   },
   "allOf": [
@@ -217,6 +221,23 @@
         "signed": { "$ref": "#/$defs/assurance" },
         "canary": { "$ref": "#/$defs/assurance" },
         "rollback": { "$ref": "#/$defs/assurance" }
+      }
+    },
+    "dependencySurfaceException": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ecosystem", "manifest", "mode", "workflow", "owner", "reason", "review_date", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^DEP-[0-9]{3}$" },
+        "ecosystem": { "enum": ["npm", "composer"] },
+        "manifest": { "$ref": "#/$defs/nonEmpty" },
+        "mode": { "const": "dynamic-resolution" },
+        "workflow": { "type": "string", "pattern": "^[.]github/workflows/.+[.]ya?ml$" },
+        "script": { "type": "string", "pattern": "^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*[.]sh$" },
+        "owner": { "$ref": "#/$defs/nonEmpty" },
+        "reason": { "$ref": "#/$defs/nonEmpty" },
+        "review_date": { "$ref": "#/$defs/date" },
+        "status": { "const": "accepted" }
       }
     },
     "exception": {
