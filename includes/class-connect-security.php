@@ -41,6 +41,11 @@ class Peanut_Connect_Security {
                 self::hide_login($slug);
             }
         }
+
+        // Block user enumeration
+        if (get_option('peanut_connect_block_user_enumeration', '1') === '1') {
+            self::block_user_enumeration();
+        }
     }
 
     /**
@@ -60,6 +65,7 @@ class Peanut_Connect_Security {
             'disable_xmlrpc' => get_option('peanut_connect_disable_xmlrpc', '0') === '1',
             'disable_file_editing' => defined('DISALLOW_FILE_EDIT') && DISALLOW_FILE_EDIT,
             'remove_version' => get_option('peanut_connect_remove_version', '0') === '1',
+            'block_user_enumeration' => get_option('peanut_connect_block_user_enumeration', '1') === '1',
         ];
     }
 
@@ -142,6 +148,91 @@ class Peanut_Connect_Security {
             }
             return $endpoints;
         });
+    }
+
+    /**
+     * Block unauthenticated user (author) enumeration.
+     *
+     * Stock WordPress publishes the exact login name of any user with content
+     * through three unauthenticated vectors:
+     *
+     *   1. GET /wp-json/wp/v2/users     -> JSON including `slug` (the login name)
+     *   2. GET /?author=<id>            -> 301 to /author/<login-name>/
+     *   3. GET /wp-sitemap-users-1.xml  -> author archive URLs
+     *
+     * On a client site the admin login name is half of a credential pair, so
+     * all three are closed. The block is scoped to callers that cannot already
+     * list users, leaving the block editor, the REST author picker and any
+     * authenticated tooling untouched.
+     *
+     * Hook timing: init() runs on `init` priority 0. Every hook used here fires
+     * after `init` -- `rest_endpoints` during REST dispatch, `template_redirect`
+     * and `wp_sitemaps_add_provider` during the main query -- so none of them is
+     * registered too late to take effect.
+     */
+    private static function block_user_enumeration(): void {
+        add_filter('rest_endpoints', [__CLASS__, 'filter_user_endpoints']);
+        // Priority 0: must beat redirect_canonical() (priority 10), which is
+        // what turns ?author=<id> into the slug-revealing 301.
+        add_action('template_redirect', [__CLASS__, 'block_author_archive'], 0);
+        add_filter('wp_sitemaps_add_provider', [__CLASS__, 'remove_users_sitemap'], 10, 2);
+    }
+
+    /**
+     * Whether the current caller is already entitled to see the user list.
+     */
+    private static function can_list_users(): bool {
+        return function_exists('current_user_can') && current_user_can('list_users');
+    }
+
+    /**
+     * Remove the public user collection from the REST API.
+     *
+     * `/wp/v2/users/me` is deliberately preserved: it only ever returns the
+     * caller's own record, already 401s when logged out, and the block editor
+     * depends on it.
+     */
+    public static function filter_user_endpoints($endpoints) {
+        if (!is_array($endpoints) || self::can_list_users()) {
+            return $endpoints;
+        }
+
+        unset($endpoints['/wp/v2/users']);
+        unset($endpoints['/wp/v2/users/(?P<id>[\d]+)']);
+
+        return $endpoints;
+    }
+
+    /**
+     * Turn author archives into a 404 for callers who cannot list users.
+     */
+    public static function block_author_archive(): void {
+        if (self::can_list_users() || !is_author()) {
+            return;
+        }
+
+        global $wp_query;
+        if (isset($wp_query) && is_object($wp_query) && method_exists($wp_query, 'set_404')) {
+            $wp_query->set_404();
+        }
+
+        // redirect_canonical() would otherwise still 301 ?author=<id> to the
+        // named archive, leaking the login name we just hid.
+        remove_action('template_redirect', 'redirect_canonical');
+
+        status_header(404);
+        nocache_headers();
+    }
+
+    /**
+     * Drop the users provider from core sitemaps (wp-sitemap-users-N.xml).
+     */
+    public static function remove_users_sitemap($provider, $name) {
+        if ($name === 'users') {
+            return false;
+        }
+
+        return $provider;
     }
 
     /**
