@@ -20,10 +20,14 @@ jobs:
           tools: composer
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
+      - name: Validate Composer audit transport contract
+        run: |
+          bash scripts/tests/composer-audit-transport.test.sh
+          bash scripts/tests/composer-npm-audit-workflow.test.sh
       - name: Verify declared PHP support
         run: php scripts/verify-php-runtime.php
       - name: Dependency audit (PHP)
-        run: composer audit --locked   # Net 2: blocking — ratcheted 2026-08-18, tree verified clean
+        run: bash scripts/run-dependency-audit-transport.sh composer
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -136,6 +140,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Verify Node/npm contract
         run: test "$(npm --version)" = "10.9.7" && npm run runtime:verify
+      - name: Validate npm audit transport contract
+        run: bash ../scripts/tests/npm-audit-transport.test.sh
       - name: Install dependencies
         # legacy-peer-deps: eslint 10 vs eslint-plugin-jsx-a11y peer range
         # (pre-existing; tracked in known-gaps).
@@ -146,7 +152,7 @@ jobs:
       # gate exits 0 on the vulnerable pin — verified by execution. Tree is
       # clean at moderate today.
       - name: Dependency audit (frontend)
-        run: npm audit --audit-level=moderate
+        run: bash ../scripts/run-dependency-audit-transport.sh npm
       - name: Vitest (incl. Net 6 property tests)
         run: npx vitest run
 
