@@ -1,5 +1,7 @@
 # Peanut End to End
 
+> **Dependency updates:** `renovate.json` extends `local>peanutgraphic/renovate-config`, but Renovate is not installed on the Peanut-Graphic GitHub org, so it has never opened a PR here. `.github/dependabot.yml` provides automated dependency PRs instead — see that file to add/adjust ecosystems.
+
 > Plugin slug: `peanut-connect` · REST namespace: `peanut-connect/v1` · Brand: **Peanut End to End**
 >
 > The slug, namespace, and option keys remain `peanut-connect` for backwards compatibility with existing installs and the Peanut License Server / mu-plugin update flow. The product name is "Peanut End to End."
