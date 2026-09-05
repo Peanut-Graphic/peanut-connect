@@ -15,7 +15,13 @@ const QUICK_TIMEOUT_MS = 1500;
 /** `Stop` parks the turn on purpose, so it gets the daemon's full gate window. */
 const GATE_TIMEOUT_MS = 11 * 60 * 1000;
 
-const GATING_EVENTS = new Set(['Stop', 'SubagentStop']);
+/**
+ * Only the top-level turn parks. Deliberately not `SubagentStop`: you should
+ * not have to answer for every helper the agent spawns, and a subagent that
+ * shares its parent's session id would cancel the gate the real turn is
+ * waiting on.
+ */
+const GATING_EVENTS = new Set(['Stop']);
 
 function port() {
   return Number(process.env.DINO_PORT) || DEFAULT_PORT;

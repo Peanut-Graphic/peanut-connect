@@ -32,6 +32,13 @@ const EVENTS = [
   ['Stop', 720],
 ];
 
+// Deliberately absent: `SubagentStop`. It must never gate (see hook.mjs), and
+// until it is confirmed whether Claude Code gives a subagent its own
+// session_id or reuses its parent's, installing it risks a phantom session
+// appearing in the window for every helper. The daemon handles the event
+// defensively if you add it anyway — it records a line and returns.
+
+
 function entryFor(event, timeout) {
   return {
     matcher: '*',

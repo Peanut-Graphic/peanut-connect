@@ -157,3 +157,30 @@ async function waitFor(predicate, timeoutMs = 2000) {
   }
   throw new Error('timed out waiting for condition');
 }
+
+test('a subagent finishing never parks the turn', async () => {
+  const stdout = await runHookProcess('SubagentStop', {
+    session_id: 's8',
+    demo_closing: 'Found it in three files.',
+  });
+
+  assert.equal(stdout, '', 'a helper finishing must not ask the user anything');
+  assert.equal(state.isWaiting('s8'), false, 'and must not open a gate');
+
+  const session = (await currentState()).find((s) => s.id === 's8');
+  assert.equal(session.lastActivity.text, 'A helper finished its digging');
+});
+
+test('a helper finishing cannot cancel the gate the real turn waits on', async () => {
+  // The failure this guards: openGate() supersedes an open gate on the same
+  // session, so a gating SubagentStop sharing its parent's session id would
+  // end the parent's turn silently and make the click do nothing.
+  const parent = runHookProcess('Stop', { session_id: 's9', demo_closing: 'Done the main work.' });
+  await waitFor(() => state.isWaiting('s9'));
+
+  await runHookProcess('SubagentStop', { session_id: 's9', demo_closing: 'Helper done.' });
+  assert.equal(state.isWaiting('s9'), true, 'the parent should still be parked');
+
+  await post('/api/decide', { session_id: 's9', action: 'go', reason: 'Keep going.' });
+  assert.deepEqual(JSON.parse(await parent), { decision: 'block', reason: 'Keep going.' });
+});

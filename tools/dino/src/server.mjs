@@ -91,8 +91,17 @@ async function handleEvent(event, gateMs) {
       return null;
     }
 
-    case 'Stop':
-    case 'SubagentStop': {
+    case 'SubagentStop':
+      // A helper finishing is something to *report*, never something to ask
+      // about: you should not have to click "keep going" once per subagent the
+      // agent spawns. It must not gate for a second reason too — openGate()
+      // supersedes any open gate on the same session, so if subagents share
+      // their parent's session id, a helper finishing would silently cancel
+      // the gate the real turn is parked on and the click would do nothing.
+      state.record(id, { text: 'A helper finished its digging', kind: 'look' });
+      return null;
+
+    case 'Stop': {
       // `demo_closing` lets `dino demo` stand in for a transcript. It is only
       // ever a display string, and the daemon is loopback-only.
       const closing = event.demo_closing
