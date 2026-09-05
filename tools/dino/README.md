@@ -13,7 +13,7 @@ are going from the corner of your eye, without reading.
 
 | work stacking up | one of them wants you |
 | --- | --- |
-| ![three projects, three colours](docs/working.png) | ![the dino looks at you](docs/waiting.png) |
+| ![work stacked beside the dino](docs/working.png) | ![the dino looks at you](docs/waiting.png) |
 
 The dino is the one fixed thing on screen — it never changes colour. Work drops
 in from the top as coloured blocks and stacks up beside it, and the dino
@@ -25,6 +25,37 @@ little hop when you decide something.
 the same repo today as it did last week, so you can recognise past work at a
 glance. You set the colour and the name in the Projects panel, and every piece
 of work reads as `{project}: {title}`.
+
+## What counts as a project
+
+A project is a **repository**, not a working directory. An agent started in
+`peanut-connect/includes` and one started in `peanut-connect` are the same
+project — dino walks up from the agent's directory to the nearest `.git` and
+uses that. Without it the same repo would get two names, two colours and two
+rows, which would make the colour mean nothing.
+
+A directory with no repo above it is simply its own project, which is right for
+a notes folder or a scratch directory. Work that reports no directory at all
+lands in **Unassigned**, where you can still name and colour it; if it was a
+stray it ages out of the list on its own after six hours.
+
+![the projects panel](docs/projects.png)
+
+## Two agents on the same repo
+
+The panel counts the agents live in each project, because two agents in one
+repo is how the same work quietly gets done twice. When there is more than one,
+it says so and offers to fold them together: pick the one to keep, and
+
+- every other agent is **dismissed** — its next parked turn ends instead of
+  asking you whether to continue
+- the one you keep gets a **note**, delivered the next time it parks, naming
+  what it has taken over and telling it to check for overlap before continuing
+
+Worth being precise about the limit: dino only ever speaks to an agent when its
+turn is parked at the `Stop` gate, so there is no way to interrupt one
+mid-turn. A dismissed agent finishes whatever it is doing right now. It just
+does not get invited to start anything else.
 
 ### Three tabs
 
@@ -122,28 +153,27 @@ archive.
 
 ## The dinosaur
 
-It's a sprite on a 20×18 grid, drawn as a character map at the top of the script
-in `ui/index.html` and marked `SWAP POINT`:
+A rounded green square with eyes. It's the placeholder, and a deliberately
+plain one — it is easier to grow a character out of something simple than to
+un-commit from something detailed.
 
-```
-'.BEBBBB..............',
-'.BBBBBB..............',
-'.BMBBBB.........BB...',
-```
+The swap point is marked `SWAP POINT` in `ui/index.html`. Two attributes drive
+the whole performance:
 
-`.` empty, `B` body, `b` darker underside, `E` eye, `M` mouth. Redrawing it means
-editing that map — no asset pipeline, no build step.
+| attribute | values |
+| --- | --- |
+| `data-mood` | `bored` · `watching` · `alert` · `pleased` |
+| `data-look` | `stack` · `you` · `away` |
 
-Two attributes drive the whole performance: `data-mood` (`bored` / `watching` /
-`alert` / `pleased`) and `data-look` (`stack` / `you` / `away`). Looking is one
-pixel of eye movement, which at this resolution is plenty and is how the real
-thing was done.
+Anything honouring those six moods and three directions inherits the lot: the
+doze, the breath, the glow in whatever colour is asking, the pleased hop, and
+the wandering gaze. Looking is a few pixels of eye movement, which turns out to
+be enough.
 
-It renders as SVG rects with `shape-rendering: crispEdges` and
-`image-rendering: pixelated`, so a pixel really is a square. If you extend it,
-keep the two rules that hold the look together: **hard shadows, never blurs**
-(the alert state is a hard outline exactly one sprite-pixel out, not a halo),
-and **stepped animation, never eased**.
+The rest of the window keeps a retro treatment around it — monospace type,
+square corners, hard offset shadows, scanlines, and stepped rather than eased
+animation on the blocks. The creature is the one soft thing on screen, which is
+the point of it.
 
 ## Tests
 

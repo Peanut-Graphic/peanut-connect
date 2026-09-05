@@ -8,6 +8,8 @@
  */
 
 import path from 'node:path';
+import { existsSync } from 'node:fs';
+
 import { load, save, flush } from './store.mjs';
 
 const FILE = 'projects.json';
@@ -30,6 +32,47 @@ export const PALETTE = [
 
 const DEFAULT_COLOR = PALETTE[0].id;
 
+/** Work with no directory at all has to live somewhere nameable. */
+export const UNASSIGNED = 'unassigned';
+
+/** Resolving a directory means walking it, so remember the answers. */
+const roots = new Map();
+
+/**
+ * The project a directory belongs to: the nearest ancestor holding a `.git`,
+ * or the directory itself if there is none.
+ *
+ * Without this, an agent started in `repo/includes` would register as a
+ * different project from one started in `repo` — same code, two colours, two
+ * rows in the panel — which defeats the point of colour meaning project.
+ *
+ * `.git` is checked with existsSync rather than isDirectory because in a
+ * worktree or a submodule it is a *file* pointing elsewhere, and those are
+ * still the same project.
+ */
+export function rootFor(cwd) {
+  if (!cwd) return UNASSIGNED;
+
+  const cached = roots.get(cwd);
+  if (cached) return cached;
+
+  let dir = path.resolve(cwd);
+  let found = dir;
+  // Bounded so a pathological path cannot spin, and stop at the filesystem root.
+  for (let i = 0; i < 64; i += 1) {
+    if (existsSync(path.join(dir, '.git'))) {
+      found = dir;
+      break;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  roots.set(cwd, found);
+  return found;
+}
+
 /** @type {Record<string, {id: string, name: string, color: string}>} */
 let projects = load(FILE, {});
 
@@ -50,13 +93,16 @@ function autoColor(id) {
   return PALETTE[hash % PALETTE.length].id;
 }
 
-/** The project for a working directory, registering it on first sight. */
+/**
+ * The project for a working directory, registering it on first sight.
+ * Any directory inside a repo resolves to that repo.
+ */
 export function ensure(cwd) {
-  const id = cwd || 'unknown';
+  const id = rootFor(cwd);
   if (!projects[id]) {
     projects[id] = {
       id,
-      name: path.basename(id) || id,
+      name: id === UNASSIGNED ? 'Unassigned' : (path.basename(id) || id),
       color: autoColor(id),
     };
     persist();
@@ -84,5 +130,6 @@ export function hex(colorId) {
 /** Test seam. */
 export function reset() {
   projects = {};
+  roots.clear();
   flush(FILE, () => projects);
 }

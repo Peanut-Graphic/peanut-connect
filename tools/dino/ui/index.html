@@ -27,7 +27,6 @@
 
     /* The dino never changes colour: it is the one fixed thing on screen. */
     --dino: #4d9e68;
-    --dino-dark: #33754c;
     --dino-ink: #080c0a;
 
     /* Set from the focused task's project colour. */
@@ -148,66 +147,100 @@
      the whole performance.
      ---------------------------------------------------------------------- */
 
-  .dino-anchor {
-    position: absolute;
-    left: 68%; bottom: 26%;
-    transform: translateX(-50%);
-    line-height: 0;
-  }
+  .dino-anchor { position: absolute; left: 68%; bottom: 26%; transform: translateX(-50%); }
 
-  /* The sprite is drawn on a 20x18 grid and scaled up, with crisp edges and
-     no smoothing, so a "pixel" really is a square. Motion is stepped rather
-     than eased for the same reason: 8-bit things move in whole frames. */
+  /**
+   * The dinosaur, currently a rounded square with eyes.
+   *
+   * SWAP POINT. Everything hangs off two attributes: `data-mood`
+   * (bored / watching / alert / pleased) and `data-look` (stack / you / away).
+   * A sprite honouring those inherits the whole performance.
+   *
+   * It is the one thing on screen that never changes colour — colour belongs
+   * to the projects, and the creature is the constant.
+   */
   .dino {
-    width: 132px;
-    display: block;
-    image-rendering: pixelated;
-    shape-rendering: crispEdges;
-    filter: drop-shadow(3px 3px 0 rgba(0, 0, 0, .55));
-    transition: filter 1s ease;
+    width: 108px; height: 108px;
+    border-radius: 26px;
+    background: var(--dino);
+    position: relative;
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, .5);
+    transition: background 1s ease, box-shadow .6s ease, transform .6s ease;
   }
 
-  .dino[data-mood="bored"] {
-    opacity: .7;
-    animation: doze 4.8s steps(2, jump-none) infinite;
+  .dino::before,
+  .dino::after {
+    content: "";
+    position: absolute;
+    top: 42px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--dino-ink);
+    transition: transform .55s cubic-bezier(.22,1,.36,1), height .14s ease, top .14s ease;
+  }
+  .dino::before { left: 28px; }
+  .dino::after  { right: 28px; }
+
+  /* Looking. The work stacks to its left, so watching it means eyes left;
+     something that wants you means eyes front. */
+  .dino[data-look="stack"]::before,
+  .dino[data-look="stack"]::after { transform: translateX(-4px); }
+  .dino[data-look="you"]::before,
+  .dino[data-look="you"]::after   { transform: translateX(0); }
+
+  /* Bored: half-lidded, and the gaze wanders on a long slow loop. */
+  .dino[data-mood="bored"] { opacity: .58; animation: doze 6s ease-in-out infinite; }
+  .dino[data-mood="bored"]::before,
+  .dino[data-mood="bored"]::after {
+    height: 3px; top: 47px; border-radius: 2px;
+    animation: wander 13s ease-in-out infinite;
   }
   @keyframes doze {
-    0%, 100% { transform: translateY(0);   }
-    50%      { transform: translateY(3px); }
+    0%, 100% { transform: translateY(0)   scaleY(1);    }
+    50%      { transform: translateY(2px) scaleY(.985); }
+  }
+  @keyframes wander {
+    0%, 30%   { transform: translateX(0);    }
+    40%, 55%  { transform: translateX(-5px); }
+    65%, 80%  { transform: translateX(4px);  }
+    90%, 100% { transform: translateX(0);    }
   }
 
-  .dino[data-mood="watching"] { animation: breathe 2.4s steps(2, jump-none) infinite; }
+  /* Watching work happen: a slow breath, so "still going" needs no spinner. */
+  .dino[data-mood="watching"] { animation: breathe 3.4s ease-in-out infinite; }
   @keyframes breathe {
-    0%, 100% { transform: translateY(0);    }
-    50%      { transform: translateY(-5px); }
+    0%, 100% { transform: translateY(0)    scale(1);    }
+    50%      { transform: translateY(-6px) scale(1.02); }
   }
 
-  /* Something wants you: lit in the colour of whatever is asking. */
-  .dino[data-mood="alert"] { animation: alert 1.6s steps(2, jump-none) infinite; }
+  /* Something wants you: upright, eyes front, lit in the colour of whatever
+     is asking. It holds still on purpose — a thing that jiggles at you all
+     day is a thing you end up resenting. */
+  .dino[data-mood="alert"] {
+    transform: translateY(-4px);
+    animation: alert 4.5s ease-in-out infinite;
+  }
   @keyframes alert {
-    0%, 100% {
-      transform: translateY(0);
-      filter: drop-shadow(3px 3px 0 rgba(0,0,0,.55));
-    }
-    50% {
-      transform: translateY(-6px);
-      /* A hard outline exactly one sprite-pixel out, in the colour of whatever
-         is asking. Chained hard shadows, never a blur — a blurred glow is the
-         one thing that would give the pixel art away. */
-      filter: drop-shadow(3px 3px 0 rgba(0,0,0,.55))
-              drop-shadow(6px 0 0 var(--accent))
-              drop-shadow(-6px 0 0 var(--accent))
-              drop-shadow(0 6px 0 var(--accent))
-              drop-shadow(0 -6px 0 var(--accent));
-    }
+    0%, 100% { box-shadow: 4px 4px 0 rgba(0,0,0,.5), 0 0 38px -10px var(--accent); }
+    50%      { box-shadow: 4px 4px 0 rgba(0,0,0,.5), 0 0 52px -4px  var(--accent); }
   }
 
-  /* Just ate, or you just decided something. Three frames, then still. */
-  .dino[data-mood="pleased"] { animation: pleased .72s steps(3, jump-none) 1; }
+  /* Just ate, or you just decided something. A short, pleased bob. */
+  .dino[data-mood="pleased"] { animation: pleased .85s ease-out; }
   @keyframes pleased {
-    0%   { transform: translateY(0);    }
-    50%  { transform: translateY(-11px); }
-    100% { transform: translateY(0);    }
+    0%   { transform: translateY(0)     scaleX(1);    }
+    28%  { transform: translateY(-11px) scaleX(.93);  }
+    58%  { transform: translateY(0)     scaleX(1.08); }
+    100% { transform: translateY(0)     scaleX(1);    }
+  }
+
+  .dino-shadow {
+    position: absolute;
+    left: 68%; bottom: calc(26% - 5px);
+    width: 96px; height: 12px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: #000; opacity: .3; filter: blur(5px);
   }
 
   /* --- the work, stacking up ------------------------------------------- */
@@ -270,7 +303,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .dino, .task { animation: none !important; }
+    .dino, .dino::before, .dino::after, .task { animation: none !important; }
   }
 
   /* --- caption -------------------------------------------------------- */
@@ -316,6 +349,17 @@
     margin: 10px 0 0; text-wrap: pretty;
   }
   .ask[data-echo="true"] { display: none; }
+
+  /* Something queued for this agent — currently only a merge instruction. */
+  .note {
+    font-size: 13px; line-height: 1.5;
+    color: var(--muted);
+    margin: 14px auto 0; max-width: 440px;
+    padding: 10px 14px;
+    border-left: 3px solid #f5b942;
+    text-align: left;
+    background: var(--panel);
+  }
 
   /* --- answering -------------------------------------------------------- */
 
@@ -442,6 +486,19 @@
     display: block; font-size: 11px; color: var(--faint);
     margin: 6px 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     direction: rtl; text-align: left;
+  }
+
+  .crowd-note { font-size: 12px; color: var(--faint); margin: 12px 0 0; }
+  .crowd-note[data-many="true"] { color: #f5b942; }
+
+  .crowd { margin-top: 4px; }
+  .crowd-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 0 0;
+  }
+  .crowd-title {
+    flex: 1; font-size: 13px; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
   .swatches { display: flex; gap: 7px; flex-wrap: wrap; }
@@ -577,77 +634,6 @@
       <ul class="trail" ${trailOpen ? '' : 'hidden'}>${items || '<li>Nothing yet.</li>'}</ul>`;
   }
 
-  /**
-   * The dinosaur, drawn on a 20x18 grid.
-   *
-   * SWAP POINT — but a friendlier one than before: this *is* pixel art now, so
-   * editing it means editing the map below. `.` is empty, `B` body, `b` a
-   * darker underside, `E` the eye, `M` the mouth line. Everything else about
-   * the creature (mood, shadow, motion) is CSS and stays as it is.
-   *
-   * It faces left because that is where the work stacks up.
-   */
-  const DINO = [
-    '.....................',
-    '..BBBB...............',
-    '.BBBBBB..............',
-    '.BEBBBB..............',
-    '.BBBBBB..............',
-    '.BMBBBB.........BB...',
-    '.BBBBBB........BBB...',
-    '..BBBBB.......BBBB...',
-    '...BBBBBBBBBBBBBBB...',
-    '..BBBBBBBBBBBBBBBB...',
-    '.BBBBBBBBBBBBBBBB....',
-    'BBBBBBBBBBBBBBBB.....',
-    'bBBBBBBBBBBBBBB......',
-    '.bbBBBBBBBBBBb.......',
-    '...BBB...BBBB........',
-    '...BB....BBB.........',
-    '...BB.....BB.........',
-    '..BBBB...BBBB........',
-  ];
-
-  /**
-   * Where the eye sits, per look direction. Moving one pixel is the whole
-   * animation — at this resolution that is plenty, and it is how the real
-   * thing was done.
-   */
-  const EYE = { stack: [1, 3], you: [2, 3], away: [2, 3] };
-
-  /** Render the sprite as SVG rects: one rect per filled cell, no smoothing. */
-  function dinoSprite(mood, lookAt) {
-    const w = DINO[0].length;
-    const h = DINO.length;
-    const [eyeX, eyeY] = EYE[lookAt] || EYE.away;
-    const cells = [];
-
-    DINO.forEach((row, y) => {
-      [...row].forEach((cell, x) => {
-        if (cell === '.') return;
-        // The eye and mouth are body pixels that get overpainted below, so the
-        // silhouette stays solid whatever the creature is looking at.
-        const fill = cell === 'b' ? 'var(--dino-dark)' : 'var(--dino)';
-        cells.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="${fill}"/>`);
-      });
-    });
-
-    // Bored means half-lidded: the eye becomes a lid one row lower.
-    const eye = mood === 'bored'
-      ? `<rect x="${eyeX}" y="${eyeY + 1}" width="2" height="1" fill="var(--dino-ink)"/>`
-      : `<rect x="${eyeX}" y="${eyeY}" width="1" height="1" fill="var(--dino-ink)"/>`;
-
-    // A wider mouth when it is pleased — the closest thing a box has to a grin.
-    const mouth = mood === 'pleased'
-      ? `<rect x="1" y="5" width="3" height="1" fill="var(--dino-ink)"/>`
-      : `<rect x="1" y="5" width="1" height="1" fill="var(--dino-ink)"/>`;
-
-    return `<svg class="dino" viewBox="0 0 ${w} ${h}"
-                 data-mood="${mood}" data-look="${lookAt}"
-                 preserveAspectRatio="xMidYMax meet" aria-hidden="true"
-              >${cells.join('')}${eye}${mouth}</svg>`;
-  }
-
   /** Work that is asking for you, as opposed to work merely finished. */
   const wantsYou = (s) => s.state === 'waiting' || s.state === 'asking' || s.state === 'blocked';
 
@@ -697,8 +683,9 @@
                     title="${escapeHtml(s.label)}"></button>`).join('')}
         </div>
 
+        <div class="dino-shadow"></div>
         <div class="dino-anchor">
-          ${dinoSprite(currentMood, look(rows, currentMood))}
+          <div class="dino" data-mood="${currentMood}" data-look="${look(rows, currentMood)}"></div>
         </div>
       </div>`;
   }
@@ -740,6 +727,7 @@
 
           <p class="status">${escapeHtml(status)}</p>
           ${ask ? `<p class="ask" data-echo="${ask === status}">${escapeHtml(ask)}</p>` : ''}
+          ${session.note ? `<p class="note">${escapeHtml(session.note)}</p>` : ''}
 
           <div class="actions" ${session.waiting ? '' : 'hidden'}>
             <button class="act primary" data-act="go">Keep going</button>
@@ -788,6 +776,32 @@
     else if (composerOpen) stage.querySelector('.composer input')?.focus();
   }
 
+  /** Live agents working in a given project, newest first. */
+  const agentsIn = (projectId) => data.sessions.filter((s) => s.project.id === projectId);
+
+  /**
+   * More than one agent in the same project is the case worth surfacing: it is
+   * how two of them end up doing the same work without either knowing.
+   */
+  function crowdFor(project) {
+    const agents = agentsIn(project.id);
+    if (agents.length < 2) {
+      return agents.length === 1
+        ? '<p class="crowd-note">1 agent working here.</p>'
+        : '';
+    }
+    return `
+      <div class="crowd">
+        <p class="crowd-note" data-many="true">${agents.length} agents working here.
+          They may be doing the same work — keep one and fold the rest into it.</p>
+        ${agents.map((s) => `
+          <div class="crowd-row">
+            <span class="crowd-title">${escapeHtml(s.title)}</span>
+            <button class="ghost" data-merge-keep="${s.id}">Keep this one</button>
+          </div>`).join('')}
+      </div>`;
+  }
+
   function renderProjects() {
     if (data.projects.length === 0) {
       projectListEl.innerHTML = '<p class="empty">No projects seen yet.</p>';
@@ -803,6 +817,7 @@
                     aria-pressed="${c.id === p.color}"
                     style="background:${c.hex}" title="${c.id}"></button>`).join('')}
         </div>
+        ${crowdFor(p)}
       </div>`).join('');
   }
 
@@ -824,7 +839,20 @@
   document.getElementById('close-projects').addEventListener('click', () => { scrim.hidden = true; });
   scrim.addEventListener('click', (e) => { if (e.target === scrim) scrim.hidden = true; });
 
-  projectListEl.addEventListener('click', (event) => {
+  projectListEl.addEventListener('click', async (event) => {
+    const keep = event.target.closest('[data-merge-keep]');
+    if (keep) {
+      const projectId = keep.closest('[data-project]').dataset.project;
+      const keepId = keep.dataset.mergeKeep;
+      const absorb = agentsIn(projectId).map((s) => s.id).filter((id) => id !== keepId);
+      await post('/api/merge', { keep_id: keepId, absorb_ids: absorb });
+      // Show the survivor, so the note it just picked up is in front of you.
+      tab = tabOf(data.sessions.find((s) => s.id === keepId) || { state: 'working' });
+      focusId = keepId;
+      scrim.hidden = true;
+      return render();
+    }
+
     const pick = event.target.closest('[data-color]');
     if (!pick) return;
     const id = pick.closest('[data-project]').dataset.project;
@@ -859,7 +887,9 @@
     const act = event.target.closest('[data-act]')?.dataset.act;
     if (!session || !act) return;
 
-    if (act === 'go') decide(session.id, 'go', 'Keep going.');
+    // A merge note is the whole reason the agent is being kept, so it goes as
+    // the instruction rather than a bare "keep going".
+    if (act === 'go') decide(session.id, 'go', session.note || 'Keep going.');
     if (act === 'stop') decide(session.id, 'stop');
     if (act === 'say') { composerOpen = true; render(); }
     if (act === 'feed') feed(session.id);
@@ -925,7 +955,7 @@
     }
     if (event.key !== 'Enter' || event.target.tagName === 'INPUT') return;
     const session = focused();
-    if (session?.waiting) decide(session.id, 'go', 'Keep going.');
+    if (session?.waiting) decide(session.id, 'go', session.note || 'Keep going.');
   });
 
   // --- live state -------------------------------------------------------------

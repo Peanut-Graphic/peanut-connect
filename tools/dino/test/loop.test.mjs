@@ -228,3 +228,69 @@ test('feeding a session archives it and releases any parked turn', async () => {
   assert.ok(entry, 'and present in the archive');
   assert.equal(entry.headline, 'Shipped the thing.');
 });
+
+test('merging folds duplicate agents into one and tells it what it took over', async () => {
+  // Two agents in the same repo, which is how the same work gets done twice.
+  for (const [id, title] of [['m1', 'fix the auth refresh'], ['m2', 'also fixing auth']]) {
+    await post('/api/event', {
+      session_id: id, hook_event_name: 'SessionStart', cwd: '/home/you/dupe-project',
+    });
+    await post('/api/title', { session_id: id, title });
+  }
+
+  const merged = await post('/api/merge', { keep_id: 'm1', absorb_ids: ['m2'] });
+  assert.deepEqual(merged.absorbed, ['also fixing auth']);
+
+  const live = await currentState();
+  assert.equal(live.some((s) => s.id === 'm2'), false, 'the absorbed one is gone');
+
+  const keeper = live.find((s) => s.id === 'm1');
+  assert.match(keeper.note, /also fixing auth/);
+  assert.match(keeper.note, /do not redo it/);
+});
+
+test('a merged-away agent is not asked to keep going again', async () => {
+  // It cannot be interrupted mid-turn, but its next parked turn must end
+  // rather than putting the same question back in front of you.
+  const stdout = await runHookProcess('Stop', {
+    session_id: 'm2',
+    demo_closing: 'Finished the auth work.',
+  });
+
+  assert.equal(stdout, '', 'the turn ends instead of asking');
+  assert.equal(state.isWaiting('m2'), false, 'and it never parks');
+  const live = await currentState();
+  assert.equal(live.some((s) => s.id === 'm2'), false, 'and it does not come back');
+});
+
+test('the merge note is what the kept agent actually gets told', async () => {
+  const hook = runHookProcess('Stop', { session_id: 'm1', demo_closing: 'Where next?' });
+  await waitFor(() => state.isWaiting('m1'));
+
+  const parked = (await currentState()).find((s) => s.id === 'm1');
+  // The window sends the note as the reason; this is that request.
+  await post('/api/decide', { session_id: 'm1', action: 'go', reason: parked.note });
+
+  const decision = JSON.parse(await hook);
+  assert.match(decision.reason, /also fixing auth/);
+
+  const after = (await currentState()).find((s) => s.id === 'm1');
+  assert.equal(after.note, '', 'and it is not delivered twice');
+});
+
+test('an agent in a subdirectory counts toward the same project', async () => {
+  // Two agents started at different depths of one repo must show up as two
+  // agents in one project, or the merge prompt would never appear.
+  await post('/api/event', {
+    session_id: 'd1', hook_event_name: 'SessionStart', cwd: process.cwd(),
+  });
+  await post('/api/event', {
+    session_id: 'd2', hook_event_name: 'SessionStart', cwd: `${process.cwd()}/tools/dino/src`,
+  });
+
+  const live = await currentState();
+  const a = live.find((s) => s.id === 'd1');
+  const b = live.find((s) => s.id === 'd2');
+  assert.equal(a.project.id, b.project.id);
+  assert.equal(a.project.color, b.project.color);
+});

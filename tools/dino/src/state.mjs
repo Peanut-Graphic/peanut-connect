@@ -41,6 +41,20 @@ let archived = load(ARCHIVE_FILE, []);
 const tombstones = new Map();
 const TOMBSTONE_MS = 8000;
 
+/**
+ * Sessions merged into another one. Stronger and longer-lived than a
+ * tombstone: archiving means "I have filed this", but merging means "this
+ * agent should stop duplicating work", so every turn it parks from now on is
+ * released immediately instead of asking you again.
+ *
+ * @type {Set<string>}
+ */
+const dismissed = new Set();
+
+export function isDismissed(id) {
+  return dismissed.has(id);
+}
+
 function buried(id) {
   const at = tombstones.get(id);
   if (at === undefined) return false;
@@ -89,6 +103,9 @@ function blank(id, cwd = '') {
     startedAt: Date.now(),
     updatedAt: Date.now(),
     gate: null,
+    // Something to tell this agent the next time it comes up for air —
+    // currently only set by a merge.
+    note: '',
   };
 }
 
@@ -119,6 +136,53 @@ export function ensure(id, cwd) {
     projects.ensure(cwd);
   }
   return s;
+}
+
+/** Drop a queued note once it has been delivered. */
+export function clearNote(id) {
+  const s = sessions.get(id);
+  if (!s || !s.note) return;
+  s.note = '';
+  changed();
+}
+
+/**
+ * Fold several agents into one, so they stop doing the same work twice.
+ *
+ * What this can and cannot do is worth being precise about. dino only ever
+ * speaks to an agent when its turn is parked at the Stop gate — there is no
+ * way to interrupt one mid-turn. So merging does two things it *can* do:
+ * every absorbed agent is dismissed, meaning its next parked turn ends rather
+ * than asking you whether to continue; and the one you keep gets a note
+ * delivered the next time it parks, telling it what it is taking over.
+ *
+ * An absorbed agent still finishes whatever turn it is in the middle of. It
+ * just will not be invited to start another.
+ */
+export function merge(keepId, absorbIds = []) {
+  const keeper = sessions.get(keepId);
+  if (!keeper) return null;
+
+  const taken = [];
+  for (const id of absorbIds) {
+    if (id === keepId) continue;
+    const s = sessions.get(id);
+    if (!s) continue;
+    taken.push(s.title || 'untitled');
+    dismissed.add(id);
+    archive(id, { mergedInto: keepId });
+  }
+
+  if (taken.length === 0) return { kept: decorate(keeper), absorbed: [] };
+
+  const list = taken.map((t) => `"${t}"`).join(', ');
+  keeper.note = `You are also taking over work that was running separately on `
+    + `this project: ${list}. Check for overlap with what you have already done `
+    + `before continuing, and do not redo it.`;
+  keeper.updatedAt = Date.now();
+  changed();
+
+  return { kept: decorate(keeper), absorbed: taken };
 }
 
 /** Name this piece of work. Empty input clears it back to the default. */
@@ -205,7 +269,7 @@ function isStale(s) {
  * archive. Any turn still parked is released first — archiving something is a
  * clear "I am done with this", so leaving its agent blocked would be wrong.
  */
-export function archive(id) {
+export function archive(id, extra = {}) {
   const s = sessions.get(id);
   if (!s) return null;
 
@@ -226,6 +290,7 @@ export function archive(id) {
     steps: s.events.length,
     startedAt: s.startedAt,
     archivedAt: Date.now(),
+    ...extra,
   };
 
   archived.unshift(entry);
@@ -271,6 +336,8 @@ export function list() {
 export function reset() {
   for (const id of sessions.keys()) closeGate(id, null);
   sessions.clear();
+  dismissed.clear();
+  tombstones.clear();
   archived = [];
   save(ARCHIVE_FILE, () => archived);
 }

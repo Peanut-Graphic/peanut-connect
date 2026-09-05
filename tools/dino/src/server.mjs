@@ -110,6 +110,10 @@ async function handleEvent(event, gateMs) {
       return null;
 
     case 'Stop': {
+      // Merged into another agent: let every turn end quietly from here on,
+      // rather than asking again about work you already folded away.
+      if (state.isDismissed(id)) return {};
+
       // `demo_closing` lets `dino demo` stand in for a transcript. It is only
       // ever a display string, and the daemon is loopback-only.
       const closing = event.demo_closing
@@ -209,6 +213,12 @@ export function createServer({ gateMs = DEFAULT_GATE_MS } = {}) {
         return json(res, session ? 200 : 404, { session });
       }
 
+      if (req.method === 'POST' && url.pathname === '/api/merge') {
+        const { keep_id: keepId, absorb_ids: absorbIds } = await readBody(req);
+        const result = state.merge(keepId, absorbIds);
+        return json(res, result ? 200 : 404, result || {});
+      }
+
       if (req.method === 'POST' && url.pathname === '/api/archive') {
         const { session_id: sessionId } = await readBody(req);
         const entry = state.archive(sessionId);
@@ -235,6 +245,8 @@ export function createServer({ gateMs = DEFAULT_GATE_MS } = {}) {
           action,
           reason: reason || 'Keep going.',
         });
+        // Whatever you decided, any queued note has now had its chance.
+        if (answered) state.clearNote(sessionId);
         return json(res, answered ? 200 : 409, { answered });
       }
 
