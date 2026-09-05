@@ -284,8 +284,10 @@ test('an agent in a subdirectory counts toward the same project', async () => {
   await post('/api/event', {
     session_id: 'd1', hook_event_name: 'SessionStart', cwd: process.cwd(),
   });
+  // Derived from this file rather than hard-coded, so the test does not care
+  // where the package lives — it works in its own repo or nested inside another.
   await post('/api/event', {
-    session_id: 'd2', hook_event_name: 'SessionStart', cwd: `${process.cwd()}/tools/dino/src`,
+    session_id: 'd2', hook_event_name: 'SessionStart', cwd: path.resolve(HERE, '..', 'src'),
   });
 
   const live = await currentState();

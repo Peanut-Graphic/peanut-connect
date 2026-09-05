@@ -77,7 +77,7 @@ going, the picture above them has failed.
 ## Try it without wiring anything up
 
 ```bash
-node tools/dino/bin/dino.mjs demo
+npm run demo
 ```
 
 That starts the window, opens a browser, and drives it with a scripted session
@@ -87,8 +87,8 @@ prints what a real agent would have been told.
 ## Use it for real
 
 ```bash
-node tools/dino/bin/dino.mjs install   # add the hooks to ~/.claude/settings.json
-node tools/dino/bin/dino.mjs           # start the window, leave it open
+npm run install-hooks   # add the hooks to ~/.claude/settings.json
+npm start               # start the window, leave it open
 ```
 
 Start a **new** agent session (hooks load at session start) and it appears in
@@ -99,7 +99,7 @@ leaves the rest of the file alone.
 Worth an alias:
 
 ```bash
-alias dino="node $PWD/tools/dino/bin/dino.mjs"
+alias dino="node $PWD/bin/dino.mjs"
 ```
 
 ## How the button actually reaches the terminal
@@ -178,7 +178,7 @@ the point of it.
 ## Tests
 
 ```bash
-node --test 'tools/dino/test/*.test.mjs'
+npm test
 ```
 
 `narrate.test.mjs` covers the English. `loop.test.mjs` is the one that matters:
@@ -191,6 +191,12 @@ Loopback only, and it should stay that way — it handles transcript paths and
 file names, and it has no authentication because it doesn't need any while it's
 bound to `127.0.0.1`.
 
-This lives in `tools/` and is not part of the Peanut Connect plugin. It is not
-copied by `scripts/package.sh`, which uses an explicit allowlist, so it can
-never end up in a plugin zip.
+Zero dependencies and no build step, so the whole thing is `git clone` and run.
+It imports nothing outside its own directory, which means it works the same
+standing on its own or nested inside another repo. If you find it living under
+some host project's `tools/`, that is where it started, not something it needs:
+it is not part of that project and nothing there builds or ships it.
+
+One thing to know if you move it: dino decides what a project is by walking up
+to the nearest `.git`. Give its own directory a `git init`, or it will report
+itself as belonging to whatever repo happens to be above it.
