@@ -17,9 +17,12 @@ are going from the corner of your eye, without reading.
 
 The dino is the one fixed thing on screen — it never changes colour. Work drops
 in from the top as coloured blocks and stacks up beside it, and the dino
-reacts: it watches the pile while things are running, looks at you when
-something is asking, gets bored when nothing is happening, and does a pleased
-little hop when you decide something.
+reacts: it watches the pile while things are running, hunches and frets when
+something fails, looks at you when something is asking, sleeps when nothing is
+happening, and does a pleased little hop when you decide something.
+
+He also **grows on what he eats** — a little bigger with every piece of work you
+feed him.
 
 **Colour means project, not agent.** That is the whole point of it: green means
 the same repo today as it did last week, so you can recognise past work at a
@@ -57,7 +60,33 @@ turn is parked at the `Stop` gate, so there is no way to interrupt one
 mid-turn. A dismissed agent finishes whatever it is doing right now. It just
 does not get invited to start anything else.
 
-### Three tabs
+### Intent, and outcome
+
+Most of what a window like this shows is what an agent is *about* to do. dino
+listens to `PostToolUse` as well, so it can say how it went: **Tests passed** or
+**Tests failed**, **Pushed to GitHub** or **Push rejected**. A failure also puts
+the creature into its worried posture until something succeeds or the turn ends,
+so a red test is something you notice from across the desk rather than something
+you find later.
+
+Outcome detection is best-effort and deliberately conservative — hook payloads
+carry a tool's response but its shape is not a contract, so anything ambiguous
+is `unknown` and reported as nothing at all. A wrong "failed" would be worse
+than silence: it would have the creature worried about nothing. Successes are
+only mentioned when finishing is news in its own right (tests, builds, pushes,
+installs); otherwise the trail would say everything twice.
+
+## Being called back
+
+The window is only useful while you are looking at it — unless it can tap you on
+the shoulder. Under **?** → *Settings* you can turn on a browser notification
+when work lands in Review, and optionally a short blip. Both are **off by
+default**: a noise you did not ask for is the fastest thing to resent.
+
+A parked turn also shows how long it has been waiting, and warns you before the
+gate gives up and lets the turn end on its own.
+
+## Three tabs
 
 | tab | what's in it |
 | --- | --- |
@@ -175,15 +204,28 @@ square corners, hard offset shadows, scanlines, and stepped rather than eased
 animation on the blocks. The creature is the one soft thing on screen, which is
 the point of it.
 
+## Help
+
+**?** in the toolbar opens it: what each posture means, what the tabs are for,
+the keys, where the data lives, and how to disconnect it again. The intro that
+runs on a first visit can be replayed from there too.
+
 ## Tests
 
 ```bash
 npm test
 ```
 
-`narrate.test.mjs` covers the English. `loop.test.mjs` is the one that matters:
-it runs the real hook shim as a subprocess against a real daemon and asserts
-that a click comes back out as an instruction the agent will act on.
+`narrate.test.mjs` covers the English, including how conservatively outcomes are
+judged. `projects.test.mjs` covers what counts as a project — depths, worktrees,
+symlinks, and colour stability. `layout.test.mjs` guards the one rule the design
+rests on, that the creature does not move; it reads the stylesheet rather than a
+rendered page, so it is narrower than the real property and catches the specific
+mistakes that have actually been made here.
+
+`loop.test.mjs` is the one that matters: it runs the real hook shim as a
+subprocess against a real daemon and asserts that a click comes back out as an
+instruction the agent will act on.
 
 ## Scope
 

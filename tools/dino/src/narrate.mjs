@@ -100,6 +100,96 @@ export function narrateTool(toolName, input = {}) {
   return { text: 'Working', kind: 'run' };
 }
 
+/**
+ * Did a tool call work?
+ *
+ * Best-effort and deliberately conservative. Hook payloads carry the tool's
+ * response, but its shape varies by tool and is not a contract, so this checks
+ * several plausible failure signals and answers 'unknown' rather than guessing.
+ * A wrong "failed" is worse than no answer: it would make the creature look
+ * worried about nothing.
+ *
+ * @returns {'ok'|'failed'|'unknown'}
+ */
+export function outcomeOf(toolResponse) {
+  if (toolResponse === undefined || toolResponse === null) return 'unknown';
+
+  if (typeof toolResponse === 'object') {
+    // The explicit flags, in the shapes they actually turn up in.
+    if (toolResponse.is_error === true || toolResponse.isError === true) return 'failed';
+    if (toolResponse.success === false) return 'failed';
+    if (toolResponse.interrupted === true) return 'failed';
+    if (typeof toolResponse.exit_code === 'number') {
+      return toolResponse.exit_code === 0 ? 'ok' : 'failed';
+    }
+    if (typeof toolResponse.exitCode === 'number') {
+      return toolResponse.exitCode === 0 ? 'ok' : 'failed';
+    }
+    if (toolResponse.error) return 'failed';
+    if (toolResponse.success === true) return 'ok';
+
+    // Some tools hand back their output as a string field. Fall through to the
+    // text check below rather than declaring success on a shape we don't know.
+    const text = toolResponse.stderr || toolResponse.output || toolResponse.stdout;
+    if (typeof text === 'string') return outcomeOf(text);
+
+    return 'unknown';
+  }
+
+  if (typeof toolResponse === 'string') {
+    // Only patterns that are unambiguous about failure. Plenty of successful
+    // output contains the word "error" in passing, so this looks for the
+    // shapes a runner actually reports a failure in.
+    const failed = /\b(\d+ failed|FAILED|FAILURES!|Tests failed|command not found|No such file or directory)\b/
+      .test(toolResponse)
+      || /^\s*(error|fatal):/im.test(toolResponse)
+      || /\berror TS\d+\b/.test(toolResponse);
+    return failed ? 'failed' : 'unknown';
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Commands where finishing is news in its own right. Everything else is only
+ * worth a line when it goes wrong — otherwise the trail says everything twice.
+ */
+const NEWSWORTHY = [
+  [/\bcomposer\s+(run\s+)?test\b|\b(npm|npx|yarn|pnpm)\s+(run\s+)?test\b|\bjest\b|\bvitest\b|\bphpunit\b|\bpest\b|\bpytest\b|\bgo\s+test\b|\bcargo\s+test\b/,
+    { ok: 'Tests passed', failed: 'Tests failed' }],
+  [/\bgit\s+push\b/,
+    { ok: 'Pushed to GitHub', failed: 'Push rejected' }],
+  [/\b(npm|yarn|pnpm)\s+(run\s+)?build\b|\bvite\s+build\b/,
+    { ok: 'Build finished', failed: 'The build broke' }],
+  [/\b(npm|yarn|pnpm)\s+(ci|install)\b|\bcomposer\s+(install|update)\b|\bpip\s+install\b/,
+    { ok: 'Dependencies installed', failed: 'Installing dependencies failed' }],
+  [/\b(eslint|prettier|phpcs|ruff|black|gofmt)\b|\blint\b/,
+    { ok: 'Code style is clean', failed: 'Code style check failed' }],
+  [/\bgit\s+commit\b/,
+    { ok: 'Committed', failed: 'The commit was rejected' }],
+];
+
+/**
+ * Describe how a tool call turned out — or return null when saying anything
+ * would only repeat what the "about to" line already said.
+ *
+ * @returns {{text: string, kind: string}|null}
+ */
+export function narrateOutcome(toolName, input = {}, outcome = 'unknown') {
+  if (outcome === 'unknown') return null;
+
+  if (toolName === 'Bash') {
+    const cmd = firstLine(input.command);
+    for (const [pattern, phrases] of NEWSWORTHY) {
+      if (pattern.test(cmd)) return { text: phrases[outcome], kind: outcome };
+    }
+  }
+
+  // Anything else: silence when it worked, a plain note when it did not.
+  if (outcome === 'ok') return null;
+  return { text: `${narrateTool(toolName, input).text} — that failed`, kind: 'failed' };
+}
+
 /** Strip the markdown that reads as noise once it isn't being rendered. */
 function plainText(markdown) {
   return String(markdown ?? '')

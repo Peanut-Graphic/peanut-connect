@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>dino</title>
+<link rel="icon" href="/favicon.ico" type="image/svg+xml" />
 <style>
   /* ---------------------------------------------------------------
      A thing to look at, not a thing to operate.
@@ -173,26 +174,30 @@
    * to the projects, and the creature is the constant.
    */
   .dino {
-    width: 108px; height: 108px;
-    border-radius: 26px;
+    /* Grows as you feed it. Set from the archive count; see growthPx(). */
+    width: var(--dino-size, 108px);
+    height: var(--dino-size, 108px);
+    border-radius: 24%;
     background: var(--dino);
     position: relative;
     box-shadow: 4px 4px 0 rgba(0, 0, 0, .5);
     transition: background 1s ease, box-shadow .6s ease, transform .6s ease;
   }
 
+  /* Everything about the face is a percentage, so it stays in proportion as
+     he grows rather than drifting off his head. */
   .dino::before,
   .dino::after {
     content: "";
     position: absolute;
-    top: 42px;
-    width: 12px; height: 12px;
+    top: 39%;
+    width: 11%; height: 11%;
     border-radius: 50%;
     background: var(--dino-ink);
     transition: transform .55s cubic-bezier(.22,1,.36,1), height .14s ease, top .14s ease;
   }
-  .dino::before { left: 28px; }
-  .dino::after  { right: 28px; }
+  .dino::before { left: 26%; }
+  .dino::after  { right: 26%; }
 
   /* Looking. The work stacks to its left, so watching it means eyes left;
      something that wants you means eyes front. */
@@ -205,7 +210,7 @@
   .dino[data-mood="bored"] { opacity: .58; animation: doze 6s ease-in-out infinite; }
   .dino[data-mood="bored"]::before,
   .dino[data-mood="bored"]::after {
-    height: 3px; top: 47px; border-radius: 2px;
+    height: 3%; top: 44%; border-radius: 2px;
     animation: wander 13s ease-in-out infinite;
   }
   @keyframes doze {
@@ -236,6 +241,17 @@
   @keyframes alert {
     0%, 100% { box-shadow: 4px 4px 0 rgba(0,0,0,.5), 0 0 38px -10px var(--accent); }
     50%      { box-shadow: 4px 4px 0 rgba(0,0,0,.5), 0 0 52px -4px  var(--accent); }
+  }
+
+  /* Something went wrong. Posture only — colour belongs to the projects, so
+     the creature never changes his. He hunches, narrows his eyes, and frets. */
+  .dino[data-mood="worried"] { animation: fret 2.8s ease-in-out infinite; }
+  .dino[data-mood="worried"]::before,
+  .dino[data-mood="worried"]::after { width: 8%; height: 8%; top: 42%; }
+  @keyframes fret {
+    0%, 100% { transform: translateY(4px) scale(.97) rotate(0deg);    }
+    30%      { transform: translateY(4px) scale(.97) rotate(-1.4deg); }
+    70%      { transform: translateY(4px) scale(.97) rotate(1.4deg);  }
   }
 
   /* Just ate, or you just decided something. A short, pleased bob. */
@@ -288,6 +304,24 @@
     background: #000; opacity: .3; filter: blur(5px);
   }
 
+  /* Once in a while, while he is bored, something crosses the floor and he
+     watches it. Rare on purpose — catching it should feel like a small gift. */
+  .bug {
+    position: absolute;
+    bottom: calc(26% - 3px);
+    left: -14px;
+    width: 7px; height: 5px;
+    border-radius: 40%;
+    background: #38473d;
+    opacity: 0;
+  }
+  .bug[data-running="true"] { animation: scuttle 6.5s linear; }
+  @keyframes scuttle {
+    0%        { left: -14px;            opacity: 0; }
+    6%, 94%   {                          opacity: .9; }
+    100%      { left: calc(100% + 14px); opacity: 0; }
+  }
+
   /* --- the work, stacking up ------------------------------------------- */
 
   .stack {
@@ -310,6 +344,9 @@
     opacity: .82;
     /* Hard offset shadow, no blur — a sprite sitting on a surface, not a card. */
     box-shadow: 3px 3px 0 rgba(0, 0, 0, .55);
+    /* A per-task tilt, derived from its id so it never changes under you.
+       A pile of perfectly square blocks reads as a chart, not a pile. */
+    transform: rotate(var(--tilt, 0deg));
     transition: opacity .2s steps(2), box-shadow .2s steps(2);
   }
   .task:hover { opacity: 1; }
@@ -327,9 +364,16 @@
   /* Dropping in, in whole frames rather than a smooth arc. */
   .task[data-dropping="true"] { animation: drop .5s steps(7, jump-none); }
   @keyframes drop {
-    0%   { transform: translateY(-260px); opacity: 0;   }
-    99%  { transform: translateY(0);      opacity: .82; }
-    100% { transform: translateY(0);      opacity: .82; }
+    0%   { transform: translateY(-260px) rotate(var(--tilt, 0deg)); opacity: 0;   }
+    99%  { transform: translateY(0)      rotate(var(--tilt, 0deg)); opacity: .82; }
+    100% { transform: translateY(0)      rotate(var(--tilt, 0deg)); opacity: .82; }
+  }
+
+  /* The whole pile takes the weight for a frame when something lands on it. */
+  .stack[data-landing="true"] { animation: jostle .22s steps(2, jump-none); }
+  @keyframes jostle {
+    0%, 100% { transform: translateX(-50%) scaleY(1);   }
+    50%      { transform: translateX(-50%) scaleY(.94); }
   }
 
   /* Fed to the dino: across the floor and gone. */
@@ -337,9 +381,9 @@
     animation: feed .42s steps(6, jump-none) forwards;
   }
   @keyframes feed {
-    0%   { transform: translateX(0);                          opacity: 1; }
-    99%  { transform: translateX(var(--feed-dx, 150px)) scaleX(.1); opacity: 1; }
-    100% { transform: translateX(var(--feed-dx, 150px)) scaleX(.1); opacity: 0; }
+    0%   { transform: translateX(0) rotate(var(--tilt, 0deg));                opacity: 1; }
+    99%  { transform: translateX(var(--feed-dx, 150px)) scaleX(.1) rotate(0deg); opacity: 1; }
+    100% { transform: translateX(var(--feed-dx, 150px)) scaleX(.1) rotate(0deg); opacity: 0; }
   }
 
   .stack-more {
@@ -440,6 +484,63 @@
   .feed[hidden] { display: none; }
 
   .hint { text-align: center; font-size: 12px; color: var(--faint); margin-top: 12px; min-height: 18px; }
+
+  /* How long it has been holding the agent, and a warning before the gate
+     times out and the turn ends on its own. */
+  .waiting-for { font-size: 12px; color: var(--faint); margin-top: 10px; }
+  .waiting-for[data-urgent="true"] { color: #f5b942; }
+
+  .tally { text-align: center; font-size: 12px; color: var(--faint); margin-top: 18px; }
+  .tally strong { color: var(--muted); font-weight: 600; }
+
+  .icon-btn {
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--faint);
+    font: inherit; font-size: 13px;
+    width: 30px; height: 30px;
+    border-radius: 0;
+    cursor: pointer;
+    flex: none;
+  }
+  .icon-btn:hover { color: var(--text); background: var(--panel); }
+
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 11px 0; border-top: 1px solid var(--line-soft);
+  }
+  .toggle-row p { margin: 0; font-size: 13px; color: var(--muted); }
+  .toggle-row p small { display: block; color: var(--faint); font-size: 11px; margin-top: 2px; }
+
+  /* --- welcome and help ------------------------------------------------- */
+
+  .modal h3 {
+    font-size: 13px; font-weight: 600; margin: 20px 0 8px;
+    color: var(--muted); letter-spacing: .06em; text-transform: uppercase;
+  }
+  .modal h3:first-of-type { margin-top: 8px; }
+  .modal p { font-size: 13px; line-height: 1.65; color: var(--muted); margin: 0 0 10px; }
+  .modal dl { margin: 0; font-size: 13px; }
+  .modal dt { color: var(--text); margin-top: 10px; }
+  .modal dd { margin: 2px 0 0; color: var(--faint); line-height: 1.6; }
+  .modal kbd {
+    background: var(--bg); border: 1px solid var(--line);
+    padding: 1px 6px; font-size: 12px; font-family: inherit;
+  }
+  .modal .flow {
+    background: var(--bg); border: 1px solid var(--line);
+    padding: 12px 14px; font-size: 12px; line-height: 1.8;
+    color: var(--faint); white-space: pre; overflow-x: auto; margin: 0 0 10px;
+  }
+
+  .steps { display: flex; gap: 6px; justify-content: center; margin-top: 22px; }
+  .step-dot { width: 6px; height: 6px; background: var(--line); }
+  .step-dot[data-on="true"] { background: var(--accent); }
+
+  .welcome-art { display: flex; justify-content: center; padding: 8px 0 18px; }
+  .welcome-art .dino { position: relative; }
+
+  .modal-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; }
 
   .composer { display: flex; gap: 8px; margin-top: 14px; }
   .composer[hidden] { display: none; }
@@ -563,10 +664,19 @@
     <div class="toolbar-right">
       <span class="link" id="link" data-live="true">reconnecting</span>
       <button class="ghost" id="open-projects">Projects</button>
+      <button class="icon-btn" id="open-help" title="What is this?" aria-label="Help">?</button>
     </div>
   </div>
 
   <div class="stage" id="stage"></div>
+
+  <div class="scrim" id="welcome-scrim" hidden>
+    <div class="modal" role="dialog" aria-label="Welcome" id="welcome"></div>
+  </div>
+
+  <div class="scrim" id="help-scrim" hidden>
+    <div class="modal" role="dialog" aria-label="Help" id="help"></div>
+  </div>
 
   <div class="scrim" id="scrim" hidden>
     <div class="modal" role="dialog" aria-label="Projects">
@@ -618,7 +728,7 @@
 
   // --- view state ---------------------------------------------------------
 
-  let data = { sessions: [], archived: [], projects: [], palette: [] };
+  let data = { sessions: [], archived: [], projects: [], palette: [], fed: { total: 0, today: 0 } };
   let tab = 'review';
   /** Explicit pick in the current tab; cleared when it leaves. */
   let focusId = null;
@@ -633,6 +743,23 @@
   let dropping = new Set();
   /** A short-lived reaction that outranks the ambient mood. */
   let reactionUntil = 0;
+  /** Sessions already parked, so a notification fires once per arrival. */
+  let announced = new Set();
+  /** Which onboarding screen is showing. */
+  let welcomeStep = 0;
+  /** Whether something is currently crossing the floor. */
+  let bugRunning = false;
+
+  /** Small per-viewer preferences. Never fatal if storage is unavailable. */
+  const prefs = {
+    get(key, fallback) {
+      try { const v = localStorage.getItem(`dino.${key}`); return v === null ? fallback : v === 'true'; }
+      catch { return fallback; }
+    },
+    set(key, value) {
+      try { localStorage.setItem(`dino.${key}`, String(value)); } catch { /* private window */ }
+    },
+  };
 
   const post = (route, body) =>
     fetch(route, {
@@ -692,7 +819,10 @@
    */
   function mood(rows) {
     if (Date.now() < reactionUntil) return 'pleased';
+    // Wanting you outranks worrying: one is something you can act on now, the
+    // other is something the agent is still in the middle of.
     if (rows.some(wantsYou)) return 'alert';
+    if (rows.some((s) => s.trouble)) return 'worried';
     if (rows.length > 0) return 'watching';
     return 'bored';
   }
@@ -700,8 +830,31 @@
   /** Eyes front when something wants you; on the pile when work is happening. */
   function look(rows, currentMood) {
     if (currentMood === 'alert') return 'you';
+    if (bugRunning) return 'stack';
     if (rows.length > 0) return 'stack';
     return 'away';
+  }
+
+  /**
+   * He grows on what he eats. Capped, and gently — the point is that you
+   * notice one day that he is bigger, not that he fills the window.
+   */
+  function growthPx() {
+    return 108 + Math.min(data.fed?.total || 0, 40) * 1.1;
+  }
+
+  /** A stable tilt per task, so the pile never rearranges itself under you. */
+  function tiltFor(id) {
+    let hash = 0;
+    for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+    return ((hash % 100) / 100 * 3 - 1.5).toFixed(2);
+  }
+
+  /** How long a turn has been parked, in words. */
+  function waitedFor(since) {
+    const mins = Math.floor((Date.now() - since) / 60000);
+    if (mins < 1) return 'Waiting less than a minute';
+    return `Waiting ${mins} minute${mins === 1 ? '' : 's'}`;
   }
 
   /** How many rectangles fit before the pile would run off the top. */
@@ -717,7 +870,7 @@
       <div class="scene" data-mood="${currentMood}">
         <div class="horizon"></div>
 
-        <div class="stack">
+        <div class="stack" data-landing="${dropping.size > 0}">
           ${hidden > 0 ? `<span class="stack-more">+${hidden} more</span>` : ''}
           ${shown.map((s) => `
             <button class="task"
@@ -727,12 +880,13 @@
                     data-selected="${session && s.id === session.id}"
                     data-dropping="${dropping.has(s.id)}"
                     data-feeding="${feedingId === s.id}"
-                    style="--task:${colorOf(s)}"
+                    style="--task:${colorOf(s)};--tilt:${tiltFor(s.id)}deg"
                     title="${escapeHtml(s.label)}"></button>`).join('')}
         </div>
 
+        <div class="bug" data-running="${bugRunning}"></div>
         <div class="dino-shadow"></div>
-        <div class="dino-anchor">
+        <div class="dino-anchor" style="--dino-size:${growthPx()}px">
           <div class="dino" data-mood="${currentMood}" data-look="${look(rows, currentMood)}"></div>
           <div class="zzz" aria-hidden="true"><span class="z">z</span><span class="z">z</span><span class="z">z</span></div>
         </div>
@@ -740,10 +894,16 @@
   }
 
   function archivedView() {
+    const fed = data.fed || { total: 0, today: 0 };
+    const tally = `<p class="tally">
+      <strong>${fed.today}</strong> fed today · <strong>${fed.total}</strong> all told
+    </p>`;
+
     if (data.archived.length === 0) {
       return `${sceneFor([], null)}<p class="empty">Nothing fed to the dino yet.</p>`;
     }
     return `
+      ${tally}
       <div class="roster">
         ${data.archived.map((entry) => `
           <div class="row" data-static="true">
@@ -790,6 +950,12 @@
           </form>
 
           <p class="hint">${session.waiting ? 'or just hit Enter' : ''}</p>
+          ${session.waitingSince ? `
+            <p class="waiting-for" data-urgent="${Date.now() - session.waitingSince > 8 * 60000}">
+              ${waitedFor(session.waitingSince)}${
+                Date.now() - session.waitingSince > 8 * 60000
+                  ? ' — it will give up and end the turn soon' : ''}
+            </p>` : ''}
 
           <button class="feed" data-act="feed"
                   ${tabOf(session) === 'review' ? '' : 'hidden'}>Feed it to the dino</button>
@@ -999,6 +1165,8 @@
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
+      if (!helpScrim.hidden) return void (helpScrim.hidden = true);
+      if (!welcomeScrim.hidden) return void (welcomeScrim.hidden = true);
       if (!scrim.hidden) return void (scrim.hidden = true);
       if (editingTitle || composerOpen) { editingTitle = composerOpen = false; return render(); }
     }
@@ -1006,6 +1174,282 @@
     const session = focused();
     if (session?.waiting) decide(session.id, 'go', session.note || 'Keep going.');
   });
+
+  // --- welcome, and help ------------------------------------------------------
+
+  const welcomeScrim = document.getElementById('welcome-scrim');
+  const welcomeEl = document.getElementById('welcome');
+  const helpScrim = document.getElementById('help-scrim');
+  const helpEl = document.getElementById('help');
+
+  const WELCOME = [
+    {
+      title: 'This is dino',
+      mood: 'bored',
+      body: `
+        <p>A skin for your terminal. Somewhere calm to look while your agents
+           work, so you can tell how things are going without reading a wall of
+           tool calls.</p>
+        <p>He sits here. Your work stacks up beside him as coloured blocks. He
+           watches the pile while things run, looks at you when something needs
+           you, and sleeps when nothing is happening.</p>
+        <p>You should be able to tell which of those it is from across the desk,
+           without reading a word.</p>`,
+    },
+    {
+      title: 'Answering without typing',
+      mood: 'alert',
+      body: `
+        <p>When an agent finishes a turn it stops and waits here instead of
+           ending. You get one line of plain English about what it did, and a
+           button.</p>
+        <div class="flow">agent finishes a turn
+  └─ it parks, and waits for you
+       └─ the window lights up
+            └─ you click "Keep going"
+                 └─ the agent carries on</div>
+        <p><strong>Keep going</strong> sends it back to work. <strong>All
+           good</strong> lets the turn end. <strong>Say something…</strong> lets
+           you type the next instruction instead. Or just hit
+           <kbd>Enter</kbd>.</p>`,
+    },
+    {
+      title: 'Three tabs, and a dinosaur to feed',
+      mood: 'pleased',
+      body: `
+        <dl>
+          <dt>Active</dt><dd>Work still in flight.</dd>
+          <dt>Review</dt><dd>Finished, or asking you something. The queue that wants you.</dd>
+          <dt>Archived</dt><dd>What you have fed him.</dd>
+        </dl>
+        <p style="margin-top:14px">When a piece of work is done, <strong>feed it
+           to the dino</strong>. The block slides across the floor, he eats it,
+           and it lands in Archived. He grows on what he eats.</p>
+        <p>Colour belongs to the <strong>project</strong>, not the agent — so
+           green means the same repo tomorrow as it does today. Set the colours
+           and names under <strong>Projects</strong>.</p>`,
+    },
+  ];
+
+  function openWelcome() {
+    welcomeStep = 0;
+    renderWelcome();
+    welcomeScrim.hidden = false;
+  }
+
+  function renderWelcome() {
+    const screen = WELCOME[welcomeStep];
+    const last = welcomeStep === WELCOME.length - 1;
+    welcomeEl.innerHTML = `
+      <header><h2>${screen.title}</h2></header>
+      <div class="welcome-art">
+        <div class="dino" data-mood="${screen.mood}" data-look="you"
+             style="--dino-size:88px"></div>
+      </div>
+      ${screen.body}
+      <div class="steps">
+        ${WELCOME.map((_, i) => `<span class="step-dot" data-on="${i === welcomeStep}"></span>`).join('')}
+      </div>
+      <div class="modal-foot">
+        <button class="ghost" data-welcome="skip">${last ? '' : 'Skip'}</button>
+        <button class="act primary" data-welcome="${last ? 'begin' : 'next'}">
+          ${last ? 'Begin' : 'Next'}
+        </button>
+      </div>`;
+  }
+
+  welcomeEl.addEventListener('click', (event) => {
+    const action = event.target.closest('[data-welcome]')?.dataset.welcome;
+    if (!action) return;
+    if (action === 'next') { welcomeStep += 1; return renderWelcome(); }
+    prefs.set('welcomed', true);
+    welcomeScrim.hidden = true;
+  });
+
+  function renderHelp() {
+    const notify = prefs.get('notify', false);
+    const granted = 'Notification' in window && Notification.permission === 'granted';
+    helpEl.innerHTML = `
+      <header>
+        <h2>dino</h2>
+        <button class="ghost" data-help="close">Done</button>
+      </header>
+
+      <h3>What it is</h3>
+      <p>A window onto the agents running in your terminals. One line of plain
+         English each, and a button so answering costs a click instead of a
+         typed sentence.</p>
+
+      <h3>How he behaves</h3>
+      <dl>
+        <dt>Asleep, with z's</dt><dd>Nothing is running.</dd>
+        <dt>Breathing slowly</dt><dd>Work is happening. Watching the pile.</dd>
+        <dt>Hunched, fretting</dt><dd>Something just failed — a test, a build, a push.</dd>
+        <dt>Upright and lit, looking at you</dt><dd>Something is waiting on you.</dd>
+        <dt>A pleased hop</dt><dd>You decided something, or he just ate.</dd>
+      </dl>
+
+      <h3>Tabs</h3>
+      <dl>
+        <dt>Active</dt><dd>Work still in flight.</dd>
+        <dt>Review</dt><dd>Finished or asking. Feed it to the dino when you are done with it.</dd>
+        <dt>Archived</dt><dd>Everything he has eaten, newest first.</dd>
+      </dl>
+
+      <h3>Keys</h3>
+      <dl>
+        <dt><kbd>Enter</kbd></dt><dd>Keep going, on whatever is waiting.</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Close a panel, or cancel what you were typing.</dd>
+      </dl>
+      <p>Click the project name under the scene to rename that piece of work.
+         Click any block in the pile to bring it into focus.</p>
+
+      <h3>Projects</h3>
+      <p>A project is a repository — anything inside one counts as the same
+         project, however deep you started. Colour belongs to the project so you
+         can recognise past work; set it under <strong>Projects</strong>, which
+         also warns you when two agents are loose in the same repo and offers to
+         fold them together.</p>
+
+      <h3>Settings</h3>
+      <div class="toggle-row">
+        <p>Notify me when work needs me
+           <small>${granted ? 'Permission granted.' : 'Your browser will ask permission once.'}</small></p>
+        <button class="ghost" data-help="notify">${notify && granted ? 'On' : 'Off'}</button>
+      </div>
+      <div class="toggle-row">
+        <p>Play a sound too<small>A short blip. Off by default.</small></p>
+        <button class="ghost" data-help="sound">${prefs.get('sound', false) ? 'On' : 'Off'}</button>
+      </div>
+
+      <h3>Where things live</h3>
+      <p>Project colours and the archive are kept in <code>~/.dino/</code>.
+         Everything else is in memory and rebuilds itself. Nothing leaves your
+         machine — the daemon only listens on localhost.</p>
+      <p>To disconnect it from your agents, run
+         <code>npm run uninstall-hooks</code>. It fails open regardless: if the
+         daemon is not running, your agents behave as if none of this existed.</p>
+
+      <div class="modal-foot">
+        <button class="ghost" data-help="replay">Show the intro again</button>
+        <button class="act primary" data-help="close">Done</button>
+      </div>`;
+  }
+
+  helpEl.addEventListener('click', async (event) => {
+    const action = event.target.closest('[data-help]')?.dataset.help;
+    if (!action) return;
+
+    if (action === 'close') { helpScrim.hidden = true; return; }
+    if (action === 'replay') { helpScrim.hidden = true; return openWelcome(); }
+
+    if (action === 'sound') {
+      const next = !prefs.get('sound', false);
+      prefs.set('sound', next);
+      if (next) blip();
+      return renderHelp();
+    }
+
+    if (action === 'notify') {
+      const on = prefs.get('notify', false);
+      if (on) { prefs.set('notify', false); return renderHelp(); }
+      // Permission can only be asked for from a gesture — this click is it.
+      let granted = Notification.permission === 'granted';
+      if (!granted && 'Notification' in window) {
+        granted = (await Notification.requestPermission()) === 'granted';
+      }
+      prefs.set('notify', granted);
+      renderHelp();
+    }
+  });
+
+  document.getElementById('open-help').addEventListener('click', () => {
+    renderHelp();
+    helpScrim.hidden = false;
+  });
+
+  for (const [el, panel] of [[welcomeScrim, welcomeScrim], [helpScrim, helpScrim]]) {
+    el.addEventListener('click', (e) => { if (e.target === el) panel.hidden = true; });
+  }
+
+  // --- calling for you when you are not looking -----------------------------
+
+  /**
+   * A short blip, synthesised rather than shipped as a file — one less thing
+   * to load, and a square wave is the right sound for this window anyway.
+   * Off by default: a noise you did not ask for is the fastest thing to resent.
+   */
+  function blip() {
+    if (!prefs.get('sound', false)) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(660, ctx.currentTime);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.24);
+      setTimeout(() => ctx.close(), 400);
+    } catch {
+      // No audio available. Not worth mentioning.
+    }
+  }
+
+  /**
+   * The window is only useful while you are looking at it — unless it can tap
+   * you on the shoulder. Fires once per arrival, never on a repeat render.
+   */
+  function announce(session) {
+    if (!prefs.get('notify', false)) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+      const note = new Notification(session.label, {
+        body: session.summary?.ask || session.summary?.headline || 'Wants you.',
+        tag: session.id,
+        silent: true,
+      });
+      note.onclick = () => { window.focus(); note.close(); };
+    } catch { /* some browsers refuse outside a service worker */ }
+  }
+
+  /** Notify and chime for work that has *just* arrived in Review. */
+  function callOut(sessions) {
+    const parked = sessions.filter((s) => s.waiting);
+    const fresh = parked.filter((s) => !announced.has(s.id));
+    announced = new Set(parked.map((s) => s.id));
+    if (fresh.length === 0) return;
+    blip();
+    for (const s of fresh) announce(s);
+  }
+
+  // --- the bug he watches ----------------------------------------------------
+
+  /**
+   * Rare on purpose. Somewhere between one and four minutes apart, and only
+   * while he is bored — the whole charm is that it is uncommon enough to
+   * notice, so a shorter timer would spend it.
+   */
+  function scheduleBug() {
+    const wait = 60000 + Math.random() * 180000;
+    setTimeout(() => {
+      const idle = tab !== 'archived' && inTab().length === 0 && !bugRunning;
+      if (idle) {
+        bugRunning = true;
+        render();
+        setTimeout(() => { bugRunning = false; render(); }, 6600);
+      }
+      scheduleBug();
+    }, wait);
+  }
+
+  // Keep "Waiting 4 minutes" honest without re-rendering constantly.
+  setInterval(() => {
+    if (inTab().some((s) => s.waitingSince)) render();
+  }, 20000);
 
   // --- live state -------------------------------------------------------------
 
@@ -1034,6 +1478,8 @@
     const session = focused();
     if (!session?.waiting) composerOpen = false;
 
+    callOut(data.sessions);
+
     render();
     if (!scrim.hidden) renderProjects();
   }
@@ -1051,6 +1497,8 @@
 
   render();
   connect();
+  scheduleBug();
+  if (!prefs.get('welcomed', false)) openWelcome();
 </script>
 </body>
 </html>

@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 import * as state from './state.mjs';
 import * as projects from './projects.mjs';
-import { narrateTool, summarize } from './narrate.mjs';
+import { narrateTool, narrateOutcome, outcomeOf, summarize } from './narrate.mjs';
 import { lastAssistantMessage } from './transcript.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -87,6 +87,16 @@ async function handleEvent(event, gateMs) {
       return null;
     }
 
+    case 'PostToolUse': {
+      // The half that was missing: PreToolUse says what is about to happen,
+      // this says whether it worked. Without it the window can report "Running
+      // the tests" and never mention that they failed.
+      const outcome = outcomeOf(event.tool_response ?? event.tool_result);
+      const line = narrateOutcome(event.tool_name, event.tool_input || {}, outcome);
+      if (line) state.record(id, line);
+      return null;
+    }
+
     case 'Notification': {
       // Claude Code sends these when it wants permission or has gone quiet.
       // Either way the honest headline is "it can't move without you".
@@ -123,6 +133,9 @@ async function handleEvent(event, gateMs) {
         cwd,
         summary,
         state: summary.question ? 'asking' : 'waiting',
+        // Whatever went wrong mid-turn, the turn is over now — carrying the
+        // worry into a finished piece of work would misreport it.
+        trouble: false,
       });
 
       const decision = await state.openGate(id, gateMs);
@@ -163,6 +176,7 @@ function streamState(res) {
     archived: state.archiveList(),
     projects: projects.list(),
     palette: projects.PALETTE,
+    fed: state.fedStats(),
   })}\n\n`);
   send();
 
@@ -199,6 +213,7 @@ export function createServer({ gateMs = DEFAULT_GATE_MS } = {}) {
           archived: state.archiveList(),
           projects: projects.list(),
           palette: projects.PALETTE,
+          fed: state.fedStats(),
         });
       }
 
@@ -227,6 +242,20 @@ export function createServer({ gateMs = DEFAULT_GATE_MS } = {}) {
 
       if (req.method === 'GET' && url.pathname === '/api/stream') {
         return streamState(res);
+      }
+
+      if (req.method === 'GET' && url.pathname === '/favicon.ico') {
+        // A green square, so the tab is recognisable in a row of them — and so
+        // the browser stops logging a 404 on every load.
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
+          + '<rect width="16" height="16" rx="4" fill="#4d9e68"/>'
+          + '<rect x="4" y="7" width="2" height="2" fill="#080c0a"/>'
+          + '<rect x="10" y="7" width="2" height="2" fill="#080c0a"/></svg>';
+        res.writeHead(200, {
+          'content-type': 'image/svg+xml',
+          'cache-control': 'max-age=86400',
+        });
+        return res.end(svg);
       }
 
       if (req.method === 'GET' && url.pathname === '/api/health') {

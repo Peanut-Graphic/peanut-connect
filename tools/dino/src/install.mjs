@@ -27,6 +27,7 @@ const EVENTS = [
   ['SessionStart', 5],
   ['UserPromptSubmit', 5],
   ['PreToolUse', 5],
+  ['PostToolUse', 5],
   ['Notification', 5],
   ['SessionEnd', 5],
   ['Stop', 720],

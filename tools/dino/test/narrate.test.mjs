@@ -2,7 +2,7 @@ import './setup.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { narrateTool, summarize } from '../src/narrate.mjs';
+import { narrateTool, summarize, outcomeOf, narrateOutcome } from '../src/narrate.mjs';
 
 test('file tools name the file, not the path', () => {
   assert.equal(
@@ -103,4 +103,67 @@ test('a question closing a paragraph counts, not just one on its own line', () =
   assert.equal(question, true);
   assert.equal(ask, 'Want me to push this?');
   assert.equal(headline, 'Fixed the token refresh. All 84 tests pass.');
+});
+
+// --- outcomes ---------------------------------------------------------------
+
+test('explicit failure flags are believed', () => {
+  assert.equal(outcomeOf({ is_error: true }), 'failed');
+  assert.equal(outcomeOf({ success: false }), 'failed');
+  assert.equal(outcomeOf({ interrupted: true }), 'failed');
+  assert.equal(outcomeOf({ error: 'boom' }), 'failed');
+  assert.equal(outcomeOf({ exit_code: 1 }), 'failed');
+});
+
+test('an exit code of zero is success', () => {
+  assert.equal(outcomeOf({ exit_code: 0 }), 'ok');
+  assert.equal(outcomeOf({ success: true }), 'ok');
+});
+
+test('nothing to go on is "unknown", never a guess', () => {
+  // A wrong "failed" is worse than no answer — it would have the creature
+  // looking worried about nothing.
+  assert.equal(outcomeOf(undefined), 'unknown');
+  assert.equal(outcomeOf(null), 'unknown');
+  assert.equal(outcomeOf({}), 'unknown');
+  assert.equal(outcomeOf({ stdout: 'All 84 tests passed.' }), 'unknown');
+});
+
+test('the word "error" in passing is not a failure', () => {
+  assert.equal(outcomeOf('Added error handling to the auth module'), 'unknown');
+  assert.equal(outcomeOf('0 errors, 0 warnings'), 'unknown');
+});
+
+test('but a real failure report is', () => {
+  assert.equal(outcomeOf('Tests: 3 failed, 81 passed'), 'failed');
+  assert.equal(outcomeOf('fatal: refusing to merge unrelated histories'), 'failed');
+  assert.equal(outcomeOf('bash: composer: command not found'), 'failed');
+  assert.equal(outcomeOf('src/a.ts(4,1): error TS2345: bad'), 'failed');
+});
+
+test('outcomes are said in English, for the commands worth saying it about', () => {
+  const say = (command, outcome) => narrateOutcome('Bash', { command }, outcome)?.text;
+  assert.equal(say('composer run test', 'ok'), 'Tests passed');
+  assert.equal(say('composer run test', 'failed'), 'Tests failed');
+  assert.equal(say('git push -u origin main', 'ok'), 'Pushed to GitHub');
+  assert.equal(say('git push -u origin main', 'failed'), 'Push rejected');
+  assert.equal(say('npm run build', 'failed'), 'The build broke');
+});
+
+test('a success worth nothing is said nothing about', () => {
+  // Otherwise the trail repeats itself: "Reading auth.php", "Reading auth.php".
+  assert.equal(narrateOutcome('Read', { file_path: '/a/auth.php' }, 'ok'), null);
+  assert.equal(narrateOutcome('Grep', {}, 'ok'), null);
+  assert.equal(narrateOutcome('Bash', { command: 'ls -la' }, 'ok'), null);
+});
+
+test('but any failure is worth a line', () => {
+  assert.equal(
+    narrateOutcome('Edit', { file_path: '/a/auth.php' }, 'failed').text,
+    'Editing auth.php — that failed',
+  );
+});
+
+test('an unknown outcome says nothing at all', () => {
+  assert.equal(narrateOutcome('Bash', { command: 'composer run test' }, 'unknown'), null);
 });

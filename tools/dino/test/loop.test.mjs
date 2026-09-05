@@ -296,3 +296,86 @@ test('an agent in a subdirectory counts toward the same project', async () => {
   assert.equal(a.project.id, b.project.id);
   assert.equal(a.project.color, b.project.color);
 });
+
+test('a failed tool call is reported, and the creature has something to worry about', async () => {
+  await post('/api/event', {
+    session_id: 'o1', hook_event_name: 'SessionStart', cwd: '/home/you/outcomes',
+  });
+  await post('/api/event', {
+    session_id: 'o1', hook_event_name: 'PreToolUse',
+    tool_name: 'Bash', tool_input: { command: 'composer run test' },
+  });
+  await post('/api/event', {
+    session_id: 'o1', hook_event_name: 'PostToolUse',
+    tool_name: 'Bash', tool_input: { command: 'composer run test' },
+    tool_response: { exit_code: 1 },
+  });
+
+  const session = (await currentState()).find((s) => s.id === 'o1');
+  assert.equal(session.lastActivity.text, 'Tests failed');
+  assert.equal(session.trouble, true, 'the failure is visible to the window');
+});
+
+test('a later success clears the worry', async () => {
+  await post('/api/event', {
+    session_id: 'o1', hook_event_name: 'PostToolUse',
+    tool_name: 'Bash', tool_input: { command: 'composer run test' },
+    tool_response: { exit_code: 0 },
+  });
+
+  const session = (await currentState()).find((s) => s.id === 'o1');
+  assert.equal(session.lastActivity.text, 'Tests passed');
+  assert.equal(session.trouble, false);
+});
+
+test('an uninteresting success adds no line to the trail', async () => {
+  const before = (await currentState()).find((s) => s.id === 'o1').events.length;
+  await post('/api/event', {
+    session_id: 'o1', hook_event_name: 'PostToolUse',
+    tool_name: 'Read', tool_input: { file_path: '/a/b.php' }, tool_response: { exit_code: 0 },
+  });
+  const after = (await currentState()).find((s) => s.id === 'o1').events.length;
+  assert.equal(after, before, 'reading a file successfully is not news');
+});
+
+test('a parked turn reports when it parked, so the wait can be shown', async () => {
+  const hook = runHookProcess('Stop', { session_id: 'o2', demo_closing: 'Done.' });
+  await waitFor(() => state.isWaiting('o2'));
+
+  const session = (await currentState()).find((s) => s.id === 'o2');
+  assert.equal(typeof session.waitingSince, 'number');
+  assert.ok(Date.now() - session.waitingSince < 5000, 'and it is a fresh timestamp');
+
+  await post('/api/decide', { session_id: 'o2', action: 'stop' });
+  await hook;
+});
+
+test('finishing a turn clears any worry from mid-turn', async () => {
+  await post('/api/event', {
+    session_id: 'o3', hook_event_name: 'PostToolUse',
+    tool_name: 'Bash', tool_input: { command: 'npm run build' },
+    tool_response: { exit_code: 1 },
+  });
+  assert.equal((await currentState()).find((s) => s.id === 'o3').trouble, true);
+
+  const hook = runHookProcess('Stop', { session_id: 'o3', demo_closing: 'Fixed it.' });
+  await waitFor(() => state.isWaiting('o3'));
+
+  // The turn is over; carrying the worry into finished work would misreport it.
+  assert.equal((await currentState()).find((s) => s.id === 'o3').trouble, false);
+  await post('/api/decide', { session_id: 'o3', action: 'stop' });
+  await hook;
+});
+
+test('the dino counts what it has eaten, today and in total', async () => {
+  const before = (await fetch(`${base}/api/state`).then((r) => r.json())).fed;
+
+  const hook = runHookProcess('Stop', { session_id: 'o4', demo_closing: 'Shipped.' });
+  await waitFor(() => state.isWaiting('o4'));
+  await post('/api/archive', { session_id: 'o4' });
+  await hook;
+
+  const after = (await fetch(`${base}/api/state`).then((r) => r.json())).fed;
+  assert.equal(after.total, before.total + 1);
+  assert.equal(after.today, before.today + 1);
+});

@@ -106,6 +106,10 @@ function blank(id, cwd = '') {
     // Something to tell this agent the next time it comes up for air —
     // currently only set by a merge.
     note: '',
+    // Set when a tool call fails, cleared when one succeeds or the turn ends.
+    // Drives the creature's worried posture: its mood is otherwise only about
+    // whether it wants you, never about how the work is actually going.
+    trouble: false,
   };
 }
 
@@ -217,6 +221,8 @@ export function update(id, patch) {
 export function record(id, entry) {
   if (buried(id)) return null;
   const s = ensure(id);
+  if (entry.kind === 'failed') s.trouble = true;
+  else if (entry.kind === 'ok') s.trouble = false;
   s.events.push({ at: Date.now(), ...entry });
   if (s.events.length > MAX_EVENTS) s.events.splice(0, s.events.length - MAX_EVENTS);
   s.lastActivity = entry;
@@ -301,6 +307,19 @@ export function archive(id, extra = {}) {
   return entry;
 }
 
+/**
+ * How much the dino has eaten. `today` resets at local midnight, which is what
+ * "today" means to the person reading it.
+ */
+export function fedStats() {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  return {
+    total: archived.length,
+    today: archived.filter((e) => e.archivedAt >= midnight.getTime()).length,
+  };
+}
+
 /** The archive, newest first, decorated with each project's current colour. */
 export function archiveList() {
   return archived.map((entry) => {
@@ -328,7 +347,13 @@ export function list() {
     .sort((a, b) => needsYou(a) - needsYou(b) || b.updatedAt - a.updatedAt)
     .map((s) => {
       const { gate, ...rest } = decorate(s);
-      return { ...rest, waiting: Boolean(s.gate) };
+      return {
+        ...rest,
+        waiting: Boolean(s.gate),
+        // When the turn parked, so the window can show how long it has been
+        // holding the agent and warn before the gate times out.
+        waitingSince: s.gate ? s.gate.openedAt : null,
+      };
     });
 }
 
