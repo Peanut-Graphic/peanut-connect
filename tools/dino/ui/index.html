@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>dino</title>
+<style>
+  /* ---------------------------------------------------------------
+     The whole point of this window is calm. Nothing blinks, scrolls,
+     or moves unless it is telling you something you need to know.
+     --------------------------------------------------------------- */
+  :root {
+    --bg: #0d1210;
+    --card: #151b18;
+    --card-hi: #1b231f;
+    --line: #26302a;
+    --text: #e8efea;
+    --muted: #8b9a91;
+    --green: #4ade80;
+    --green-dim: #2c6b45;
+    --amber: #fbbf24;
+    --radius: 14px;
+    --gap: 18px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell { max-width: 720px; margin: 0 auto; padding: 28px 20px 64px; }
+
+  /* --- header ------------------------------------------------------ */
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 22px;
+  }
+  .wordmark { font-size: 15px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .link-status { font-size: 13px; color: var(--muted); }
+  .link-status[data-live="false"] { color: var(--amber); }
+
+  /* --- session card ------------------------------------------------ */
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 14px;
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: var(--gap);
+    transition: border-color .3s ease, background .3s ease;
+  }
+  .card[data-waiting="true"] {
+    border-color: var(--green-dim);
+    background: var(--card-hi);
+  }
+
+  .project { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+
+  .headline {
+    font-size: 19px;
+    line-height: 1.4;
+    margin: 0 0 2px;
+    font-weight: 500;
+    text-wrap: pretty;
+  }
+  .state-label {
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .card[data-waiting="true"] .state-label { color: var(--green); }
+
+  .ask {
+    font-size: 19px;
+    line-height: 1.4;
+    margin: 10px 0 0;
+    padding-left: 12px;
+    border-left: 2px solid var(--green);
+    text-wrap: pretty;
+  }
+  /* When the question is all it said, the headline would just repeat it. */
+  .headline + .ask[data-echo="true"] { display: none; }
+
+  /* --- the dinosaur, currently a box ------------------------------- */
+
+  .creature-slot { display: flex; align-items: flex-start; justify-content: center; padding-top: 4px; }
+
+  /* SWAP POINT: replace this block with the dinosaur sprite. Keep the
+     [data-state] hook — every posture below is driven off it. */
+  .creature {
+    width: 68px; height: 68px;
+    border-radius: 16px;
+    background: var(--green-dim);
+    position: relative;
+    transition: background .4s ease, transform .4s ease;
+  }
+  .creature::before,
+  .creature::after {
+    content: "";
+    position: absolute; top: 24px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #0d1210;
+    transition: height .12s ease, top .12s ease;
+  }
+  .creature::before { left: 17px; }
+  .creature::after  { right: 17px; }
+
+  /* Nothing running: dozing. */
+  .creature[data-state="idle"] { opacity: .45; }
+  .creature[data-state="idle"]::before,
+  .creature[data-state="idle"]::after { height: 2px; top: 27px; }
+
+  /* Busy: a slow breath, so "still going" reads without a spinner. */
+  .creature[data-state="working"] {
+    background: var(--green-dim);
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { transform: translateY(0)   scale(1); }
+    50%      { transform: translateY(-4px) scale(1.03); }
+  }
+
+  /* Your turn: bright, awake, holding still so it doesn't nag. */
+  .creature[data-state="waiting"],
+  .creature[data-state="asking"] { background: var(--green); transform: scale(1.06); }
+  .creature[data-state="blocked"] { background: var(--amber); transform: scale(1.06); }
+
+  .creature[data-state="done"] { background: var(--green-dim); opacity: .8; }
+  .creature[data-state="done"]::before,
+  .creature[data-state="done"]::after { height: 2px; top: 27px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .creature { animation: none !important; }
+  }
+
+  /* --- what it did -------------------------------------------------- */
+
+  details { margin-top: 14px; }
+  summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--muted);
+    list-style: none;
+    user-select: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸ "; }
+  details[open] summary::before { content: "▾ "; }
+  summary:hover { color: var(--text); }
+
+  .trail {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    max-height: 260px;
+    overflow-y: auto;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .trail li { padding: 3px 0; display: flex; gap: 10px; }
+  .trail time { color: #5d6b63; font-variant-numeric: tabular-nums; flex: none; }
+  .trail li[data-kind="you"] { color: var(--green); }
+
+  /* --- actions ------------------------------------------------------ */
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+
+  button {
+    font: inherit;
+    font-size: 14px;
+    padding: 9px 16px;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, opacity .2s ease;
+  }
+  button:hover:not(:disabled) { background: var(--card-hi); border-color: var(--green-dim); }
+  button:disabled { opacity: .3; cursor: default; }
+  button.primary {
+    background: var(--green);
+    border-color: var(--green);
+    color: #06120b;
+    font-weight: 600;
+  }
+  button.primary:hover:not(:disabled) { background: #6ee79a; border-color: #6ee79a; }
+  button.primary:disabled {
+    background: transparent;
+    border-color: var(--line);
+    color: var(--text);
+    opacity: .35;
+  }
+
+  .hint { font-size: 12px; color: #5d6b63; align-self: center; margin-left: 2px; }
+
+  .composer { display: flex; gap: 8px; margin-top: 10px; }
+  .composer input {
+    flex: 1;
+    font: inherit;
+    font-size: 14px;
+    padding: 9px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .composer input:focus { outline: none; border-color: var(--green-dim); }
+  .composer[hidden] { display: none; }
+
+  /* --- empty state --------------------------------------------------- */
+
+  .empty {
+    text-align: center;
+    padding: 70px 20px;
+    color: var(--muted);
+  }
+  .empty .creature { margin: 0 auto 22px; }
+  .empty code {
+    background: var(--card);
+    border: 1px solid var(--line);
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <span class="wordmark">dino</span>
+    <span class="link-status" id="link">connecting…</span>
+  </header>
+  <main id="sessions"></main>
+</div>
+
+<script type="module">
+  const sessionsEl = document.getElementById('sessions');
+  const linkEl = document.getElementById('link');
+
+  /** What the state machine is called in English. */
+  const STATE_LABEL = {
+    idle: 'Idle',
+    working: 'Working',
+    waiting: 'Waiting on you',
+    asking: 'It asked you something',
+    blocked: 'It needs your go-ahead',
+    done: 'Done',
+  };
+
+  const clock = (ms) =>
+    new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  /** Which composer is currently open, so a re-render doesn't close it. */
+  let openComposer = null;
+  /** Which detail drawers are open, for the same reason. */
+  const openDrawers = new Set();
+
+  async function decide(sessionId, action, reason) {
+    openComposer = null;
+    await fetch('/api/decide', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, action, reason }),
+    });
+  }
+
+  function trail(session) {
+    const items = session.events
+      .slice(-60)
+      .reverse()
+      .map(
+        (e) =>
+          `<li data-kind="${e.kind}"><time>${clock(e.at)}</time><span>${escapeHtml(e.text)}</span></li>`,
+      )
+      .join('');
+    const open = openDrawers.has(session.id) ? ' open' : '';
+    return `
+      <details data-session="${session.id}"${open}>
+        <summary>What it did (${session.events.length})</summary>
+        <ul class="trail">${items || '<li>Nothing yet.</li>'}</ul>
+      </details>`;
+  }
+
+  function card(session) {
+    const waiting = session.waiting;
+    const headline = session.summary?.headline
+      || session.lastActivity?.text
+      || 'Nothing going on';
+    const ask = session.summary?.ask || '';
+
+    return `
+      <section class="card" data-waiting="${waiting}" data-session="${session.id}">
+        <div class="creature-slot">
+          <div class="creature" data-state="${session.state}"></div>
+        </div>
+        <div>
+          <div class="project">${escapeHtml(session.label)}</div>
+          <div class="state-label">${STATE_LABEL[session.state] || session.state}</div>
+          <p class="headline">${escapeHtml(headline)}</p>
+          ${ask ? `<p class="ask" data-echo="${ask === headline}">${escapeHtml(ask)}</p>` : ''}
+
+          <div class="actions">
+            <button class="primary" data-act="go"  ${waiting ? '' : 'disabled'}>Keep going</button>
+            <button              data-act="stop"   ${waiting ? '' : 'disabled'}>All good, stop</button>
+            <button              data-act="say"    ${waiting ? '' : 'disabled'}>Say something…</button>
+            ${waiting ? '<span class="hint">or just hit Enter</span>' : ''}
+          </div>
+
+          <form class="composer" data-session="${session.id}" ${openComposer === session.id ? '' : 'hidden'}>
+            <input name="reason" placeholder="Tell it what to do next…" autocomplete="off" />
+            <button type="submit">Send</button>
+          </form>
+
+          ${trail(session)}
+        </div>
+      </section>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+    );
+  }
+
+  function render(sessions) {
+    if (sessions.length === 0) {
+      sessionsEl.innerHTML = `
+        <div class="empty">
+          <div class="creature" data-state="idle"></div>
+          <p>No agents running.</p>
+          <p>Start one in a terminal and it will show up here.</p>
+          <p style="margin-top:20px"><code>dino install</code> if you haven't wired up the hooks yet.</p>
+        </div>`;
+      return;
+    }
+
+    sessionsEl.innerHTML = sessions.map(card).join('');
+
+    const composer = sessionsEl.querySelector('.composer:not([hidden]) input');
+    if (composer) composer.focus();
+  }
+
+  // --- events ---------------------------------------------------------
+
+  sessionsEl.addEventListener('click', (event) => {
+    const drawer = event.target.closest('summary')?.parentElement;
+    if (drawer) {
+      const id = drawer.dataset.session;
+      // `open` still reflects the pre-click state at this point.
+      if (drawer.open) openDrawers.delete(id);
+      else openDrawers.add(id);
+      return;
+    }
+
+    const button = event.target.closest('button[data-act]');
+    if (!button) return;
+    const id = button.closest('.card').dataset.session;
+
+    if (button.dataset.act === 'go') decide(id, 'go', 'Keep going.');
+    if (button.dataset.act === 'stop') decide(id, 'stop');
+    if (button.dataset.act === 'say') {
+      openComposer = id;
+      render(latest);
+    }
+  });
+
+  sessionsEl.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const text = form.reason.value.trim();
+    if (text) decide(form.dataset.session, 'go', text);
+  });
+
+  // The reason this exists at all: answering should cost one keystroke.
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && openComposer) {
+      openComposer = null;
+      render(latest);
+      return;
+    }
+    if (event.key !== 'Enter' || event.target.tagName === 'INPUT') return;
+    const next = latest.find((s) => s.waiting);
+    if (next) decide(next.id, 'go', 'Keep going.');
+  });
+
+  // --- live state -------------------------------------------------------
+
+  let latest = [];
+  let stream;
+
+  function connect() {
+    stream = new EventSource('/api/stream');
+
+    stream.onopen = () => {
+      linkEl.textContent = 'connected';
+      linkEl.dataset.live = 'true';
+    };
+
+    stream.onmessage = (event) => {
+      latest = JSON.parse(event.data).sessions;
+      render(latest);
+    };
+
+    stream.onerror = () => {
+      linkEl.textContent = 'reconnecting…';
+      linkEl.dataset.live = 'false';
+      stream.close();
+      // EventSource retries on its own, but not after an explicit close —
+      // and closing is what stops a dead socket from spinning.
+      setTimeout(connect, 2000);
+    };
+  }
+
+  connect();
+</script>
+</body>
+</html>
