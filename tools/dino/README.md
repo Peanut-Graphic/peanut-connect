@@ -11,14 +11,37 @@ It is meant to be left open in the corner of a screen. Most of the time it is
 doing nothing much, which is the point — you should be able to tell how things
 are going from the corner of your eye, without reading.
 
-| working | wants you |
+| work stacking up | one of them wants you |
 | --- | --- |
-| ![breathing quietly](docs/working.png) | ![awake and lit](docs/waiting.png) |
+| ![three projects, three colours](docs/working.png) | ![the dino looks at you](docs/waiting.png) |
 
-Nothing flashes and nothing jumps position. What changes is colour and posture:
-dozing when nothing runs, a slow breath while it works, upright and lit when it
-needs you. The words underneath are a caption, not a readout — if you have to
-read them to know how it is going, the box above them has failed.
+The dino is the one fixed thing on screen — it never changes colour. Work drops
+in from the top as coloured blocks and stacks up beside it, and the dino
+reacts: it watches the pile while things are running, looks at you when
+something is asking, gets bored when nothing is happening, and does a pleased
+little hop when you decide something.
+
+**Colour means project, not agent.** That is the whole point of it: green means
+the same repo today as it did last week, so you can recognise past work at a
+glance. You set the colour and the name in the Projects panel, and every piece
+of work reads as `{project}: {title}`.
+
+### Three tabs
+
+| tab | what's in it |
+| --- | --- |
+| **Active** | work still in flight |
+| **Review** | finished or asking — the queue that wants you |
+| **Archived** | what you've fed to the dino |
+
+When a piece of work is done, **Feed it to the dino**: the block slides across
+the floor, the dino eats it, and it lands in Archived. That is the whole
+ceremony, and it is the only way things leave Review.
+
+Nothing flashes and nothing jumps position, and every animation is stepped
+rather than eased — 8-bit things move in whole frames. The words under the
+scene are a caption, not a readout: if you have to read them to know how it is
+going, the picture above them has failed.
 
 ## Try it without wiring anything up
 
@@ -81,27 +104,46 @@ leave installed, and `test/loop.test.mjs` covers it.
 | `src/server.mjs` | loopback daemon: takes hook events, serves the UI, holds turns open |
 | `src/state.mjs` | what each session is doing, and the gate a parked turn waits on |
 | `src/narrate.mjs` | tool calls → English. `Bash: composer run test` → "Running the tests" |
+| `src/projects.mjs` | the colour and name you gave each project |
+| `src/store.mjs` | the small amount of disk this touches: projects and the archive |
 | `src/transcript.mjs` | reads the tail of a session transcript for its closing words |
 | `src/hook.mjs` | the shim the hooks run. Fails open, always |
 | `src/install.mjs` | idempotent hook wiring, with a backup of your settings |
 | `ui/index.html` | the window. One file, no build step, no dependencies |
 
-Zero dependencies, Node stdlib only. Nothing is written to disk except the hook
-entries in your settings file — if the daemon restarts, the next event
-repopulates it.
+Zero dependencies, Node stdlib only.
+
+Live sessions stay in memory: the daemon is a companion window, not a record of
+anything, and the next hook event repopulates it after a restart. Two things do
+persist, under `~/.dino/` (override with `DINO_HOME`): the colours and names you
+gave your projects, and the archive. A colour that reset on restart would be
+useless for recognising past work, and an archive that emptied would not be an
+archive.
 
 ## The dinosaur
 
-It's a green box. That's on purpose — it's the placeholder.
+It's a sprite on a 20×18 grid, drawn as a character map at the top of the script
+in `ui/index.html` and marked `SWAP POINT`:
 
-The swap point is marked `SWAP POINT` in `ui/index.html`. Everything that gives
-it life hangs off one attribute, `data-state`, which is one of `idle`,
-`working`, `waiting`, `asking`, `blocked`, `done`. Drop in a sprite that honours
-those six values and the postures, the glow, the floor shadow and the warming
-room all come along for free.
+```
+'.BEBBBB..............',
+'.BBBBBB..............',
+'.BMBBBB.........BB...',
+```
 
-Worth keeping if you do swap it: the floor line and the shadow. Without them the
-creature floats in a void and reads as a logo rather than something alive.
+`.` empty, `B` body, `b` darker underside, `E` eye, `M` mouth. Redrawing it means
+editing that map — no asset pipeline, no build step.
+
+Two attributes drive the whole performance: `data-mood` (`bored` / `watching` /
+`alert` / `pleased`) and `data-look` (`stack` / `you` / `away`). Looking is one
+pixel of eye movement, which at this resolution is plenty and is how the real
+thing was done.
+
+It renders as SVG rects with `shape-rendering: crispEdges` and
+`image-rendering: pixelated`, so a pixel really is a square. If you extend it,
+keep the two rules that hold the look together: **hard shadows, never blurs**
+(the alert state is a hard outline exactly one sprite-pixel out, not a halo),
+and **stepped animation, never eased**.
 
 ## Tests
 

@@ -16,6 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as state from './state.mjs';
+import * as projects from './projects.mjs';
 import { narrateTool, summarize } from './narrate.mjs';
 import { lastAssistantMessage } from './transcript.mjs';
 
@@ -68,10 +69,17 @@ async function handleEvent(event, gateMs) {
       state.update(id, { cwd, state: 'idle', summary: null, events: [] });
       return null;
 
-    case 'UserPromptSubmit':
+    case 'UserPromptSubmit': {
+      const session = state.ensure(id, cwd);
+      // Seed the title from what you asked for — a name you can recognise
+      // beats "untitled", and it stays yours to change in the window.
+      if (!session.title && typeof event.prompt === 'string') {
+        state.retitle(id, event.prompt.replace(/\s+/g, ' ').trim().slice(0, 80));
+      }
       state.update(id, { cwd, state: 'working', summary: null });
       state.record(id, { text: 'Picking up your message', kind: 'look' });
       return null;
+    }
 
     case 'PreToolUse': {
       state.update(id, { cwd, state: 'working' });
@@ -115,6 +123,10 @@ async function handleEvent(event, gateMs) {
 
       const decision = await state.openGate(id, gateMs);
 
+      // Fed to the dino while the turn was parked. The session is gone and
+      // must stay gone, so let the turn end without touching state.
+      if (decision?.action === 'archived') return {};
+
       if (!decision || decision.action === 'stop') {
         // Nobody answered, or they said it's finished. Let the turn end.
         state.update(id, { state: 'done' });
@@ -142,7 +154,12 @@ function streamState(res) {
     connection: 'keep-alive',
   });
 
-  const send = () => res.write(`data: ${JSON.stringify({ sessions: state.list() })}\n\n`);
+  const send = () => res.write(`data: ${JSON.stringify({
+    sessions: state.list(),
+    archived: state.archiveList(),
+    projects: projects.list(),
+    palette: projects.PALETTE,
+  })}\n\n`);
   send();
 
   state.bus.on('change', send);
@@ -173,7 +190,29 @@ export function createServer({ gateMs = DEFAULT_GATE_MS } = {}) {
       }
 
       if (req.method === 'GET' && url.pathname === '/api/state') {
-        return json(res, 200, { sessions: state.list() });
+        return json(res, 200, {
+          sessions: state.list(),
+          archived: state.archiveList(),
+          projects: projects.list(),
+          palette: projects.PALETTE,
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/project') {
+        const { id: projectId, name, color } = await readBody(req);
+        return json(res, 200, { project: projects.update(projectId, { name, color }) });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/title') {
+        const { session_id: sessionId, title } = await readBody(req);
+        const session = state.retitle(sessionId, title);
+        return json(res, session ? 200 : 404, { session });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/archive') {
+        const { session_id: sessionId } = await readBody(req);
+        const entry = state.archive(sessionId);
+        return json(res, entry ? 200 : 404, { archived: entry });
       }
 
       if (req.method === 'GET' && url.pathname === '/api/stream') {

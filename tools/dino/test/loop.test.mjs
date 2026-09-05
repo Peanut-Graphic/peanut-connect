@@ -3,6 +3,7 @@
  * hook as an instruction the agent will act on. Everything else is cosmetics.
  */
 
+import './setup.mjs';
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
@@ -53,7 +54,9 @@ test('activity arrives as English, not tool names', async () => {
   });
 
   const [session] = await currentState();
-  assert.equal(session.label, 'peanut-connect');
+  // The label composes the project with this piece of work's own title.
+  assert.equal(session.project.name, 'peanut-connect');
+  assert.equal(session.label, 'peanut-connect: untitled');
   assert.equal(session.state, 'working');
   assert.equal(session.lastActivity.text, 'Running the tests');
 });
@@ -183,4 +186,45 @@ test('a helper finishing cannot cancel the gate the real turn waits on', async (
 
   await post('/api/decide', { session_id: 's9', action: 'go', reason: 'Keep going.' });
   assert.deepEqual(JSON.parse(await parent), { decision: 'block', reason: 'Keep going.' });
+});
+
+test('an event without a cwd does not detach a session from its project', async () => {
+  await post('/api/event', {
+    session_id: 's10',
+    hook_event_name: 'SessionStart',
+    cwd: '/home/you/peanut-connect',
+  });
+
+  // Stop carries no cwd. Before the fix this blanked it, and the session lost
+  // its project — so its name and colour changed the moment it finished.
+  const hook = runHookProcess('Stop', { session_id: 's10', demo_closing: 'Done.' });
+  await waitFor(() => state.isWaiting('s10'));
+
+  const session = (await currentState()).find((s) => s.id === 's10');
+  assert.equal(session.project.name, 'peanut-connect');
+  assert.notEqual(session.project.name, 'unknown');
+
+  await post('/api/decide', { session_id: 's10', action: 'stop' });
+  await hook;
+});
+
+test('feeding a session archives it and releases any parked turn', async () => {
+  const hook = runHookProcess('Stop', {
+    session_id: 's11',
+    demo_closing: 'Shipped the thing.',
+  });
+  await waitFor(() => state.isWaiting('s11'));
+
+  await post('/api/archive', { session_id: 's11' });
+
+  // Archiving is an unambiguous "I am done with this", so the agent must not
+  // be left blocked on a window that no longer shows it.
+  assert.equal(await hook, '');
+  const live = await currentState();
+  assert.equal(live.some((s) => s.id === 's11'), false, 'gone from the live list');
+
+  const archived = await fetch(`${base}/api/state`).then((r) => r.json());
+  const entry = archived.archived.find((a) => a.id === 's11');
+  assert.ok(entry, 'and present in the archive');
+  assert.equal(entry.headline, 'Shipped the thing.');
 });

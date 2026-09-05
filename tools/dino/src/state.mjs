@@ -1,13 +1,17 @@
 /**
  * state.mjs — what every watched agent session is currently doing.
  *
- * Deliberately in-memory only. The daemon is a companion window, not a record
- * of anything; if it restarts, the next hook event repopulates it. Persisting
- * this would mean owning stale sessions forever for no benefit.
+ * Live sessions are in memory only: the daemon is a companion window, not a
+ * record of anything, and the next hook event repopulates it after a restart.
+ * The archive is the exception — work you fed to the dino is meant to still be
+ * there tomorrow, so it goes through the store.
  */
 
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
+
+import * as projects from './projects.mjs';
+import { load, save } from './store.mjs';
 
 /** Ring-buffer size for the "what actually happened" drawer. */
 const MAX_EVENTS = 200;
@@ -15,8 +19,37 @@ const MAX_EVENTS = 200;
 /** Sessions with no traffic for this long are dropped from the list. */
 const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
+const ARCHIVE_FILE = 'archive.json';
+
+/** Newest first. Bounded so the file cannot grow without limit. */
+const MAX_ARCHIVED = 200;
+
 /** @type {Map<string, Session>} */
 const sessions = new Map();
+
+/** @type {Array<object>} */
+let archived = load(ARCHIVE_FILE, []);
+
+/**
+ * Recently archived ids, so a straggling event cannot resurrect work you just
+ * fed to the dino. The window is short on purpose: archiving means "done with
+ * this", not "ignore this session forever", so genuinely new activity later is
+ * allowed to start a fresh card.
+ *
+ * @type {Map<string, number>}
+ */
+const tombstones = new Map();
+const TOMBSTONE_MS = 8000;
+
+function buried(id) {
+  const at = tombstones.get(id);
+  if (at === undefined) return false;
+  if (Date.now() - at > TOMBSTONE_MS) {
+    tombstones.delete(id);
+    return false;
+  }
+  return true;
+}
 
 /** Emits 'change' whenever the UI would render differently. */
 export const bus = new EventEmitter();
@@ -44,14 +77,29 @@ bus.setMaxListeners(0);
 function blank(id, cwd = '') {
   return {
     id,
-    label: cwd ? path.basename(cwd) : 'session',
     cwd,
+    // The title names this piece of work; the project names where it happens.
+    // Together they read as "peanut-connect: auth token refresh". The title is
+    // seeded from your first message and stays yours to change.
+    title: '',
     state: 'idle',
     events: [],
     summary: null,
     lastActivity: null,
+    startedAt: Date.now(),
     updatedAt: Date.now(),
     gate: null,
+  };
+}
+
+/** Attach the project's current name and colour for rendering. */
+function decorate(session) {
+  const project = projects.ensure(session.cwd);
+  return {
+    ...session,
+    project: { id: project.id, name: project.name, color: project.color },
+    title: session.title || 'untitled',
+    label: `${project.name}: ${session.title || 'untitled'}`,
   };
 }
 
@@ -68,21 +116,42 @@ export function ensure(id, cwd) {
   }
   if (cwd && s.cwd !== cwd) {
     s.cwd = cwd;
-    s.label = path.basename(cwd) || s.label;
+    projects.ensure(cwd);
   }
   return s;
 }
 
-/** Apply a patch and notify listeners. */
+/** Name this piece of work. Empty input clears it back to the default. */
+export function retitle(id, title) {
+  const s = sessions.get(id);
+  if (!s) return null;
+  s.title = String(title ?? '').trim().slice(0, 80);
+  s.updatedAt = Date.now();
+  changed();
+  return decorate(s);
+}
+
+/**
+ * Apply a patch and notify listeners.
+ *
+ * An absent or empty `cwd` never overwrites a directory we already know. Not
+ * every hook event carries one — `Stop` in particular — and letting a blank
+ * through would detach a live session from its project, so it would lose its
+ * name and colour halfway through the work.
+ */
 export function update(id, patch) {
+  if (buried(id)) return null;
   const s = ensure(id, patch.cwd);
-  Object.assign(s, patch, { updatedAt: Date.now() });
+  const { cwd, ...rest } = patch;
+  Object.assign(s, rest, { updatedAt: Date.now() });
+  if (cwd) s.cwd = cwd;
   changed();
   return s;
 }
 
 /** Append a narrated activity line. */
 export function record(id, entry) {
+  if (buried(id)) return null;
   const s = ensure(id);
   s.events.push({ at: Date.now(), ...entry });
   if (s.events.length > MAX_EVENTS) s.events.splice(0, s.events.length - MAX_EVENTS);
@@ -132,6 +201,54 @@ function isStale(s) {
 }
 
 /**
+ * Feed a finished session to the dino: it leaves the live list and joins the
+ * archive. Any turn still parked is released first — archiving something is a
+ * clear "I am done with this", so leaving its agent blocked would be wrong.
+ */
+export function archive(id) {
+  const s = sessions.get(id);
+  if (!s) return null;
+
+  // Tell the parked turn *why* it is being released, so its handler returns
+  // without writing state — otherwise its state.update() would call ensure()
+  // and resurrect the session we are archiving, straight back into Review.
+  closeGate(id, { action: 'archived' });
+  sessions.delete(id);
+  tombstones.set(id, Date.now());
+
+  const project = projects.ensure(s.cwd);
+  const entry = {
+    id: s.id,
+    cwd: s.cwd,
+    title: s.title || 'untitled',
+    projectId: project.id,
+    headline: s.summary?.headline || s.lastActivity?.text || '',
+    steps: s.events.length,
+    startedAt: s.startedAt,
+    archivedAt: Date.now(),
+  };
+
+  archived.unshift(entry);
+  if (archived.length > MAX_ARCHIVED) archived.length = MAX_ARCHIVED;
+  save(ARCHIVE_FILE, () => archived);
+
+  changed();
+  return entry;
+}
+
+/** The archive, newest first, decorated with each project's current colour. */
+export function archiveList() {
+  return archived.map((entry) => {
+    const project = projects.ensure(entry.projectId || entry.cwd);
+    return {
+      ...entry,
+      project: { id: project.id, name: project.name, color: project.color },
+      label: `${project.name}: ${entry.title}`,
+    };
+  });
+}
+
+/**
  * The view the UI renders: anything needing a human first, then most recent.
  * Gates are stripped — they hold a live promise and must not be serialised.
  */
@@ -144,11 +261,16 @@ export function list() {
 
   return [...sessions.values()]
     .sort((a, b) => needsYou(a) - needsYou(b) || b.updatedAt - a.updatedAt)
-    .map(({ gate, ...rest }) => ({ ...rest, waiting: Boolean(gate) }));
+    .map((s) => {
+      const { gate, ...rest } = decorate(s);
+      return { ...rest, waiting: Boolean(s.gate) };
+    });
 }
 
-/** Test seam — drop everything. */
+/** Test seam — drop everything, disk included. */
 export function reset() {
   for (const id of sessions.keys()) closeGate(id, null);
   sessions.clear();
+  archived = [];
+  save(ARCHIVE_FILE, () => archived);
 }

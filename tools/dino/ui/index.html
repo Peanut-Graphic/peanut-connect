@@ -6,385 +6,482 @@
 <title>dino</title>
 <style>
   /* ---------------------------------------------------------------
-     This is a thing to look at, not a thing to operate.
+     A thing to look at, not a thing to operate.
 
-     So: the creature is the whole picture and the words are a caption.
-     Nothing moves quickly, nothing flashes, nothing changes position
-     when the state changes — a layout that jumps is a layout you have
-     to keep re-reading. What changes is colour and posture, which the
-     corner of your eye can read without you turning your head.
+     The creature is the picture and the words are a caption. Nothing
+     moves quickly and nothing changes position between states — what
+     changes is colour and posture, which the corner of your eye can
+     read without you turning your head.
+
+     Colour belongs to the *project*, not the agent. That is what makes
+     it worth anything: green means the same repo today as last week.
      --------------------------------------------------------------- */
   :root {
     --bg: #0b0f0d;
-    --sky-top: #121a16;
-    --sky-bottom: #0b0f0d;
+    --panel: #101512;
     --line: #1f2a24;
+    --line-soft: #18211c;
     --text: #dfe9e3;
     --muted: #7c8b83;
     --faint: #4a574f;
-    --green: #4ade80;
-    --green-deep: #2f7a4d;
-    --green-dark: #24503a;
-    --amber: #f5b942;
+
+    /* The dino never changes colour: it is the one fixed thing on screen. */
+    --dino: #4d9e68;
+    --dino-dark: #33754c;
+    --dino-ink: #080c0a;
+
+    /* Set from the focused task's project colour. */
+    --accent: #4ade80;
+    --accent-deep: #2f7a4d;
+    --accent-dark: #24503a;
   }
 
   * { box-sizing: border-box; }
-
-  /* 100vh, not 100%: a percentage min-height on body resolves against html's
-     auto height and collapses to nothing, which leaves the stage stuck at the
-     top instead of centred. */
   html { min-height: 100%; }
 
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 15px/1.6 ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+    /* A monospace stack rather than a pixel webfont: this is a local tool and
+       it should look right offline, with no outbound request for a typeface. */
+    font: 14px/1.6 ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 24px;
+    padding: 0 24px 40px;
   }
 
-  .stage { width: 100%; max-width: 520px; margin: auto 0; }
+  .stage { width: 100%; max-width: 540px; margin: auto 0; }
 
-  /* --- the scene ---------------------------------------------------
-     A lit box with a floor. The creature lives here. Everything else
-     on the page is subordinate to it.
-     ------------------------------------------------------------------ */
+  /* --- toolbar ------------------------------------------------------- */
+
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    width: 100%;
+    max-width: 540px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 0 12px;
+    background: linear-gradient(var(--bg) 72%, transparent);
+  }
+
+  .tabs { display: flex; gap: 2px; }
+
+  .tab {
+    border: 0;
+    background: transparent;
+    color: var(--faint);
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 11px;
+    border-radius: 0;
+    cursor: pointer;
+  }
+  .tab:hover { color: var(--muted); }
+  .tab[aria-selected="true"] { color: var(--text); background: var(--panel); }
+  .tab .count { color: var(--faint); margin-left: 5px; font-variant-numeric: tabular-nums; }
+  .tab[aria-selected="true"] .count { color: var(--muted); }
+  /* Only the queue that wants you earns a coloured count. */
+  .tab[data-tab="review"] .count[data-any="true"] { color: var(--accent); }
+
+  .toolbar-right { display: flex; align-items: center; gap: 10px; }
+
+  .ghost {
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 0;
+    cursor: pointer;
+  }
+  .ghost:hover { color: var(--text); border-color: var(--line); background: var(--panel); }
+
+  .link { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: transparent; }
+  .link[data-live="false"] { color: #f5b942; }
+
+  /* --- the scene -----------------------------------------------------
+     A constant dino on a floor, and the work stacking up beside it.
+
+     The creature never changes colour — it is the one fixed thing on
+     screen. Colour belongs to the tasks, because colour means project.
+     The dino's job is to react: it watches work drop in, looks at you
+     when something wants you, and gets bored when nothing is happening.
+     -------------------------------------------------------------------- */
 
   .scene {
     position: relative;
     aspect-ratio: 16 / 10;
-    border-radius: 22px;
+    border-radius: 0;
+    /* Scanlines. Two device pixels so they survive a retina screen instead of
+       blurring into a flat wash. */
+    background-image: repeating-linear-gradient(
+      to bottom, rgba(0,0,0,.34) 0 2px, transparent 2px 4px);
     border: 1px solid var(--line);
     overflow: hidden;
-    background:
-      radial-gradient(120% 80% at 50% 0%, var(--sky-top) 0%, var(--sky-bottom) 70%);
+    background: radial-gradient(120% 80% at 50% 0%, #121a16 0%, var(--bg) 70%);
     transition: border-color 1.2s ease, background 1.2s ease;
   }
+  .scene[data-mood="alert"] { border-color: var(--accent-deep); }
 
-  /* When it wants you, the room warms up. This is the signal — not a
-     badge, not a flash. Visible from across the desk, ignorable up close. */
-  .scene[data-attention="true"] {
-    border-color: var(--green-deep);
-    background:
-      radial-gradient(120% 80% at 50% 0%, #16261d 0%, var(--sky-bottom) 72%);
-  }
-  .scene[data-attention="true"][data-blocked="true"] {
-    border-color: #6b5320;
-    background:
-      radial-gradient(120% 80% at 50% 0%, #241d10 0%, var(--sky-bottom) 72%);
-  }
-
-  /* The floor the creature stands on. Barely there, but without it the
-     creature is floating in a void and reads as a logo, not an animal. */
   .horizon {
     position: absolute;
-    left: 12%; right: 12%;
-    bottom: 27%;
+    left: 8%; right: 8%; bottom: 26%;
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--line) 25%, var(--line) 75%, transparent);
+    background: linear-gradient(90deg, transparent, var(--line) 22%, var(--line) 78%, transparent);
   }
 
-  .shadow {
+  /* --- the dinosaur, currently a box ----------------------------------
+
+     SWAP POINT. Replace `.dino` with the sprite. Two attributes drive
+     everything: `data-mood` (bored / watching / alert / pleased) and
+     `data-look` (stack / you / away). A sprite honouring those inherits
+     the whole performance.
+     ---------------------------------------------------------------------- */
+
+  .dino-anchor {
     position: absolute;
-    left: 50%; bottom: calc(27% - 6px);
-    width: 112px; height: 14px;
+    left: 68%; bottom: 26%;
     transform: translateX(-50%);
-    border-radius: 50%;
-    background: #000;
-    opacity: .35;
-    filter: blur(5px);
-    transition: opacity 1s ease;
+    line-height: 0;
   }
 
-  .anchor {
-    position: absolute;
-    left: 50%; bottom: 27%;
-    transform: translateX(-50%);
+  /* The sprite is drawn on a 20x18 grid and scaled up, with crisp edges and
+     no smoothing, so a "pixel" really is a square. Motion is stepped rather
+     than eased for the same reason: 8-bit things move in whole frames. */
+  .dino {
+    width: 132px;
+    display: block;
+    image-rendering: pixelated;
+    shape-rendering: crispEdges;
+    filter: drop-shadow(3px 3px 0 rgba(0, 0, 0, .55));
+    transition: filter 1s ease;
   }
 
-  /* --- the dinosaur, currently a box --------------------------------
-
-     SWAP POINT. Replace `.creature` with the sprite when there is one.
-     Every posture below hangs off the single `data-state` attribute, so
-     a sprite that honours those six values inherits all of this for free.
-     ------------------------------------------------------------------ */
-
-  .creature {
-    width: 132px; height: 132px;
-    border-radius: 32px;
-    background: var(--green-dark);
-    position: relative;
-    transition: background 1.2s ease, box-shadow 1.2s ease;
-  }
-
-  .creature::before,
-  .creature::after {
-    content: "";
-    position: absolute;
-    top: 52px;
-    width: 14px; height: 14px;
-    border-radius: 50%;
-    background: #080c0a;
-    transition: height .14s ease, top .14s ease, opacity 1s ease;
-  }
-  .creature::before { left: 34px; }
-  .creature::after  { right: 34px; }
-
-  /* Eyes closed: a sleeping box is two short lines, not two dots. */
-  .creature[data-state="idle"]::before,
-  .creature[data-state="idle"]::after,
-  .creature[data-state="done"]::before,
-  .creature[data-state="done"]::after {
-    height: 3px;
-    top: 58px;
-    border-radius: 2px;
-  }
-
-  /* Nothing running — dozing, and pleasant to have on screen. */
-  .creature[data-state="idle"] {
-    background: var(--green-dark);
-    opacity: .5;
-    animation: doze 6s ease-in-out infinite;
+  .dino[data-mood="bored"] {
+    opacity: .7;
+    animation: doze 4.8s steps(2, jump-none) infinite;
   }
   @keyframes doze {
-    0%, 100% { transform: translateY(0)    scaleY(1);    }
-    50%      { transform: translateY(1px)  scaleY(.985); }
+    0%, 100% { transform: translateY(0);   }
+    50%      { transform: translateY(3px); }
   }
 
-  /* Busy — a slow breath. This is what "still going" looks like when you
-     glance over, and it is the reason there is no spinner anywhere. */
-  .creature[data-state="working"] {
-    background: var(--green-deep);
-    animation: breathe 3.4s ease-in-out infinite;
-  }
+  .dino[data-mood="watching"] { animation: breathe 2.4s steps(2, jump-none) infinite; }
   @keyframes breathe {
-    0%, 100% { transform: translateY(0)    scale(1);     }
-    50%      { transform: translateY(-6px) scale(1.025); }
-  }
-  .scene[data-state="working"] .shadow { animation: shadow-breathe 3.4s ease-in-out infinite; }
-  @keyframes shadow-breathe {
-    0%, 100% { opacity: .35; transform: translateX(-50%) scaleX(1);   }
-    50%      { opacity: .22; transform: translateX(-50%) scaleX(.88); }
+    0%, 100% { transform: translateY(0);    }
+    50%      { transform: translateY(-5px); }
   }
 
-  /* Your turn — awake, upright, faintly lit. It holds still on purpose:
-     something that jiggles at you is something you end up resenting. */
-  .creature[data-state="waiting"],
-  .creature[data-state="asking"] {
-    background: var(--green);
-    transform: translateY(-4px);
-    box-shadow: 0 0 44px -6px rgba(74, 222, 128, .38);
-    animation: alert 4.5s ease-in-out infinite;
-  }
-  .creature[data-state="blocked"] {
-    background: var(--amber);
-    transform: translateY(-4px);
-    box-shadow: 0 0 44px -6px rgba(245, 185, 66, .34);
-    animation: alert 4.5s ease-in-out infinite;
-  }
+  /* Something wants you: lit in the colour of whatever is asking. */
+  .dino[data-mood="alert"] { animation: alert 1.6s steps(2, jump-none) infinite; }
   @keyframes alert {
-    0%, 100% { box-shadow: 0 0 40px -8px rgba(74, 222, 128, .30); }
-    50%      { box-shadow: 0 0 52px -4px rgba(74, 222, 128, .46); }
+    0%, 100% {
+      transform: translateY(0);
+      filter: drop-shadow(3px 3px 0 rgba(0,0,0,.55));
+    }
+    50% {
+      transform: translateY(-6px);
+      /* A hard outline exactly one sprite-pixel out, in the colour of whatever
+         is asking. Chained hard shadows, never a blur — a blurred glow is the
+         one thing that would give the pixel art away. */
+      filter: drop-shadow(3px 3px 0 rgba(0,0,0,.55))
+              drop-shadow(6px 0 0 var(--accent))
+              drop-shadow(-6px 0 0 var(--accent))
+              drop-shadow(0 6px 0 var(--accent))
+              drop-shadow(0 -6px 0 var(--accent));
+    }
   }
 
-  /* Finished and content. */
-  .creature[data-state="done"] {
-    background: var(--green-deep);
-    opacity: .68;
+  /* Just ate, or you just decided something. Three frames, then still. */
+  .dino[data-mood="pleased"] { animation: pleased .72s steps(3, jump-none) 1; }
+  @keyframes pleased {
+    0%   { transform: translateY(0);    }
+    50%  { transform: translateY(-11px); }
+    100% { transform: translateY(0);    }
+  }
+
+  /* --- the work, stacking up ------------------------------------------- */
+
+  .stack {
+    position: absolute;
+    left: 30%; bottom: 26%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column-reverse;  /* newest on top of the pile */
+    align-items: center;
+    gap: 5px;
+    padding-bottom: 2px;
+  }
+
+  .task {
+    width: 84px; height: 18px;
+    border-radius: 0;
+    background: var(--task);
+    border: 0; padding: 0;
+    cursor: pointer;
+    opacity: .82;
+    /* Hard offset shadow, no blur — a sprite sitting on a surface, not a card. */
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, .55);
+    transition: opacity .2s steps(2), box-shadow .2s steps(2);
+  }
+  .task:hover { opacity: 1; }
+  .task[data-selected="true"] {
+    opacity: 1;
+    box-shadow: 3px 3px 0 rgba(0,0,0,.55), 0 0 0 3px var(--bg), 0 0 0 6px var(--task);
+  }
+  /* Same rule for the work itself: a hard ring, not a halo. */
+  .task[data-attention="true"] {
+    opacity: 1;
+    box-shadow: 3px 3px 0 rgba(0,0,0,.55), 0 0 0 3px color-mix(in srgb, var(--task) 45%, transparent);
+  }
+  .task[data-state="done"] { opacity: .45; }
+
+  /* Dropping in, in whole frames rather than a smooth arc. */
+  .task[data-dropping="true"] { animation: drop .5s steps(7, jump-none); }
+  @keyframes drop {
+    0%   { transform: translateY(-260px); opacity: 0;   }
+    99%  { transform: translateY(0);      opacity: .82; }
+    100% { transform: translateY(0);      opacity: .82; }
+  }
+
+  /* Fed to the dino: across the floor and gone. */
+  .task[data-feeding="true"] {
+    animation: feed .42s steps(6, jump-none) forwards;
+  }
+  @keyframes feed {
+    0%   { transform: translateX(0);                          opacity: 1; }
+    99%  { transform: translateX(var(--feed-dx, 150px)) scaleX(.1); opacity: 1; }
+    100% { transform: translateX(var(--feed-dx, 150px)) scaleX(.1); opacity: 0; }
+  }
+
+  .stack-more {
+    font-size: 11px; color: var(--faint);
+    margin-top: 3px; font-variant-numeric: tabular-nums;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .creature, .shadow { animation: none !important; }
+    .dino, .task { animation: none !important; }
   }
 
-  /* --- the caption ---------------------------------------------------
-     Small, centred, quiet. If you have to read this to know how things
-     are going, the creature above it has failed at its job.
-     ------------------------------------------------------------------ */
+  /* --- caption -------------------------------------------------------- */
 
   .caption { text-align: center; padding: 22px 8px 0; }
 
-  .project {
+  .title-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; margin-bottom: 10px;
+  }
+  .swatch { width: 9px; height: 9px; border-radius: 0; background: var(--accent); flex: none; }
+
+  .title {
     font-size: 12px;
-    letter-spacing: .14em;
+    letter-spacing: .1em;
     text-transform: uppercase;
     color: var(--faint);
-    margin-bottom: 10px;
+    background: none; border: 0; padding: 2px 4px;
+    font-family: inherit;
+    cursor: text;
+    border-radius: 5px;
+    max-width: 100%;
   }
+  .title:hover { color: var(--muted); background: var(--panel); }
+
+  .title-input {
+    font: inherit; font-size: 12px; letter-spacing: .1em;
+    text-align: center;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--accent-dark); border-radius: 6px;
+    padding: 3px 8px; width: 100%; max-width: 380px;
+  }
+  .title-input:focus { outline: none; }
 
   .status {
-    font-size: 17px;
-    line-height: 1.45;
-    color: var(--muted);
-    margin: 0;
-    text-wrap: pretty;
-    transition: color 1s ease;
+    font-size: 17px; line-height: 1.45; color: var(--muted);
+    margin: 0; text-wrap: pretty;
   }
   .scene-wrap[data-attention="true"] .status { color: var(--text); }
 
-  /* The question it asked. The only thing on the page allowed to be loud. */
   .ask {
-    font-size: 19px;
-    line-height: 1.45;
-    color: var(--text);
-    margin: 10px 0 0;
-    text-wrap: pretty;
+    font-size: 19px; line-height: 1.45; color: var(--text);
+    margin: 10px 0 0; text-wrap: pretty;
   }
   .ask[data-echo="true"] { display: none; }
 
-  /* --- answering -------------------------------------------------------
-     Absent until there is something to answer. A row of dead buttons is
-     furniture, and furniture is what makes a window feel like a console.
-     ---------------------------------------------------------------------- */
+  /* --- answering -------------------------------------------------------- */
 
-  .actions {
-    display: flex;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 20px;
-    flex-wrap: wrap;
-  }
+  .actions { display: flex; justify-content: center; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
   .actions[hidden] { display: none; }
 
-  button {
-    font: inherit;
-    font-size: 14px;
-    padding: 9px 18px;
-    border-radius: 10px;
+  button.act {
+    font: inherit; font-size: 14px;
+    padding: 9px 18px; border-radius: 0;
     border: 1px solid var(--line);
-    background: transparent;
-    color: var(--muted);
+    background: transparent; color: var(--muted);
     cursor: pointer;
     transition: background .18s ease, border-color .18s ease, color .18s ease;
   }
-  button:hover { color: var(--text); border-color: var(--green-dark); }
-  button.primary {
-    background: var(--green);
-    border-color: var(--green);
-    color: #06120b;
-    font-weight: 600;
+  button.act:hover { color: var(--text); border-color: var(--accent-dark); }
+  button.act.primary {
+    background: var(--accent); border-color: var(--accent);
+    color: #06120b; font-weight: 600;
   }
-  button.primary:hover { background: #6ae899; border-color: #6ae899; color: #06120b; }
+  button.act.primary:hover { filter: brightness(1.12); color: #06120b; }
 
-  .hint {
-    text-align: center;
-    font-size: 12px;
-    color: var(--faint);
-    margin-top: 12px;
-    min-height: 18px;
+  .feed {
+    display: block; margin: 14px auto 0;
+    border: 1px dashed var(--line);
+    background: transparent; color: var(--faint);
+    font: inherit; font-size: 13px;
+    padding: 8px 16px; border-radius: 0; cursor: pointer;
   }
+  .feed:hover { color: var(--accent); border-color: var(--accent-dark); }
+  .feed[hidden] { display: none; }
+
+  .hint { text-align: center; font-size: 12px; color: var(--faint); margin-top: 12px; min-height: 18px; }
 
   .composer { display: flex; gap: 8px; margin-top: 14px; }
   .composer[hidden] { display: none; }
   .composer input {
-    flex: 1;
-    font: inherit;
-    font-size: 14px;
-    padding: 10px 14px;
-    border-radius: 10px;
-    border: 1px solid var(--line);
-    background: #0e1411;
-    color: var(--text);
+    flex: 1; font: inherit; font-size: 14px;
+    padding: 10px 14px; border-radius: 0;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
   }
-  .composer input::placeholder { color: var(--faint); }
-  .composer input:focus { outline: none; border-color: var(--green-dark); }
+  .composer input:focus { outline: none; border-color: var(--accent-dark); }
 
-  /* --- the other agents -------------------------------------------------
-     Only appears when there is more than one. A single terminal is the
-     common case and should not pay for the crowded one.
-     ---------------------------------------------------------------------- */
+  /* --- the rest of the tab ------------------------------------------------ */
 
-  .others { display: flex; justify-content: center; gap: 8px; margin-top: 24px; flex-wrap: wrap; }
-  .others[hidden] { display: none; }
+  .roster { margin-top: 26px; border-top: 1px solid var(--line-soft); }
+  .roster[hidden] { display: none; }
 
-  .chip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px 6px 8px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--faint);
-    font-size: 12px;
-    cursor: pointer;
+  .row {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%;
+    padding: 12px 6px;
+    border: 0; border-bottom: 1px solid var(--line-soft);
+    background: transparent; color: var(--muted);
+    font: inherit; font-size: 14px;
+    text-align: left; cursor: pointer;
   }
-  .chip:hover { color: var(--muted); }
-  .chip[data-current="true"] { border-color: var(--line); color: var(--muted); }
-  .chip .pip {
-    width: 10px; height: 10px;
-    border-radius: 3px;
-    background: var(--green-dark);
-    flex: none;
-  }
-  .chip[data-state="working"] .pip { background: var(--green-deep); }
-  .chip[data-state="waiting"] .pip,
-  .chip[data-state="asking"]  .pip { background: var(--green); }
-  .chip[data-state="blocked"] .pip { background: var(--amber); }
+  .row:hover { color: var(--text); }
+  .row .pip { width: 10px; height: 10px; border-radius: 0; flex: none; }
+  .row .who { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .when { color: var(--faint); font-size: 12px; flex: none; }
+  .row[data-static="true"] { cursor: default; }
+  .row[data-static="true"]:hover { color: var(--muted); }
 
-  /* --- what it did ------------------------------------------------------
-     Tucked right down. It is for the moment you decide to dive in, which
-     is not most moments.
-     ---------------------------------------------------------------------- */
+  .empty { text-align: center; color: var(--faint); padding: 48px 20px; font-size: 14px; }
+
+  /* --- trail --------------------------------------------------------------- */
 
   .trail-toggle {
-    display: block;
-    margin: 28px auto 0;
-    border: 0;
-    padding: 4px;
-    color: var(--faint);
-    font-size: 12px;
+    display: block; margin: 26px auto 0;
+    border: 0; background: transparent; padding: 4px;
+    color: var(--faint); font: inherit; font-size: 12px; cursor: pointer;
   }
-  .trail-toggle:hover { color: var(--muted); border-color: transparent; }
+  .trail-toggle:hover { color: var(--muted); }
 
   .trail {
-    margin: 14px 0 0;
-    padding: 16px 18px;
-    list-style: none;
-    border-top: 1px solid var(--line);
-    max-height: 240px;
-    overflow-y: auto;
-    font-size: 13px;
-    color: var(--faint);
+    margin: 14px 0 0; padding: 16px 18px; list-style: none;
+    border-top: 1px solid var(--line-soft);
+    max-height: 240px; overflow-y: auto;
+    font-size: 13px; color: var(--faint);
   }
   .trail[hidden] { display: none; }
   .trail li { display: flex; gap: 12px; padding: 3px 0; }
   .trail time { color: #3b463f; font-variant-numeric: tabular-nums; flex: none; }
-  .trail li[data-kind="you"] { color: var(--green-deep); }
+  .trail li[data-kind="you"] { color: var(--accent-deep); }
 
-  /* --- link state --------------------------------------------------------- */
+  /* --- projects modal -------------------------------------------------------- */
 
-  .link {
-    position: fixed;
-    top: 16px; right: 18px;
-    font-size: 11px;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: transparent;
-    transition: color .4s ease;
+  .scrim {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(4, 7, 6, .72);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
   }
-  /* Only worth saying when it is not true. */
-  .link[data-live="false"] { color: var(--amber); }
+  .scrim[hidden] { display: none; }
+
+  .modal {
+    width: 100%; max-width: 520px;
+    max-height: 80vh; overflow-y: auto;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    padding: 22px;
+  }
+
+  .modal header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .modal h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .modal .note { color: var(--faint); font-size: 12px; margin: 0 0 18px; }
+
+  .project { padding: 14px 0; border-top: 1px solid var(--line-soft); }
+  .project:first-of-type { border-top: 0; }
+
+  .project-name {
+    font: inherit; font-size: 14px;
+    width: 100%; padding: 8px 12px;
+    border-radius: 0; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text);
+  }
+  .project-name:focus { outline: none; border-color: var(--line); }
+
+  .project-dir {
+    display: block; font-size: 11px; color: var(--faint);
+    margin: 6px 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    direction: rtl; text-align: left;
+  }
+
+  .swatches { display: flex; gap: 7px; flex-wrap: wrap; }
+  .swatch-pick {
+    width: 24px; height: 24px; border-radius: 0;
+    border: 2px solid transparent; cursor: pointer; padding: 0;
+  }
+  .swatch-pick[aria-pressed="true"] { border-color: var(--text); }
 </style>
 </head>
 <body>
-  <span class="link" id="link" data-live="true">reconnecting</span>
+  <div class="toolbar">
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="toolbar-right">
+      <span class="link" id="link" data-live="true">reconnecting</span>
+      <button class="ghost" id="open-projects">Projects</button>
+    </div>
+  </div>
 
   <div class="stage" id="stage"></div>
 
+  <div class="scrim" id="scrim" hidden>
+    <div class="modal" role="dialog" aria-label="Projects">
+      <header>
+        <h2>Projects</h2>
+        <button class="ghost" id="close-projects">Done</button>
+      </header>
+      <p class="note">Name each project and give it a colour. The colour is how you
+        recognise past work, so it stays with the project rather than the agent.</p>
+      <div id="project-list"></div>
+    </div>
+  </div>
+
 <script type="module">
   const stage = document.getElementById('stage');
+  const tabsEl = document.getElementById('tabs');
   const linkEl = document.getElementById('link');
+  const scrim = document.getElementById('scrim');
+  const projectListEl = document.getElementById('project-list');
 
-  /**
-   * The caption under the creature. Short by design — the picture is doing
-   * the work, this is only confirming what it already told you.
-   */
   const RESTING_LINE = {
     idle: 'Nothing running',
     working: 'Working',
@@ -394,128 +491,357 @@
     done: 'Done',
   };
 
-  const ATTENTION = new Set(['waiting', 'asking', 'blocked']);
+  /**
+   * Which tab a session belongs in. Review is the queue that wants you:
+   * anything finished or asking, waiting on your call to answer or to feed it
+   * to the dino. Active is only work still in flight.
+   */
+  const REVIEW_STATES = new Set(['waiting', 'asking', 'blocked', 'done']);
+  const tabOf = (s) => (REVIEW_STATES.has(s.state) ? 'review' : 'active');
 
-  const clock = (ms) =>
-    new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const TABS = [
+    { id: 'active', label: 'Active' },
+    { id: 'review', label: 'Review' },
+    { id: 'archived', label: 'Archived' },
+  ];
 
-  const escapeHtml = (value) =>
-    String(value).replace(/[&<>"']/g, (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const escapeHtml = (v) => String(v).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-  // --- what the user is currently looking at ----------------------------
+  const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const day = (ms) => new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' });
 
-  let sessions = [];
-  /** Explicit pick via a chip. Cleared once that session stops needing you. */
-  let pinnedId = null;
+  // --- view state ---------------------------------------------------------
+
+  let data = { sessions: [], archived: [], projects: [], palette: [] };
+  let tab = 'review';
+  /** Explicit pick in the current tab; cleared when it leaves. */
+  let focusId = null;
   let composerOpen = false;
   let trailOpen = false;
+  let editingTitle = false;
+  /** Session mid-gulp, so the animation finishes before the row vanishes. */
+  let feedingId = null;
+  /** Sessions already on screen, so only genuinely new work drops in. */
+  const seen = new Set();
+  /** Sessions dropping right now. */
+  let dropping = new Set();
+  /** A short-lived reaction that outranks the ambient mood. */
+  let reactionUntil = 0;
 
-  function current() {
-    return sessions.find((s) => s.id === pinnedId) || sessions[0] || null;
-  }
-
-  async function decide(sessionId, action, reason) {
-    composerOpen = false;
-    await fetch('/api/decide', {
+  const post = (route, body) =>
+    fetch(route, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, action, reason }),
+      body: JSON.stringify(body),
     });
+
+  const inTab = () => data.sessions.filter((s) => tabOf(s) === tab);
+  const focused = () => {
+    const rows = inTab();
+    return rows.find((s) => s.id === focusId) || rows[0] || null;
+  };
+
+  const colorOf = (session) =>
+    (data.palette.find((c) => c.id === session?.project?.color) || data.palette[0])?.hex || '#4ade80';
+
+  /** Paint the page in the focused session's project colour. */
+  function applyAccent(session) {
+    const hex = colorOf(session);
+    const root = document.documentElement.style;
+    root.setProperty('--accent', hex);
+    // Two dimmer steps of the same hue, so working and idle stay legible.
+    root.setProperty('--accent-deep', `color-mix(in srgb, ${hex} 62%, #0b0f0d)`);
+    root.setProperty('--accent-dark', `color-mix(in srgb, ${hex} 34%, #0b0f0d)`);
   }
 
-  // --- rendering ---------------------------------------------------------
+  // --- rendering -----------------------------------------------------------
 
-  function emptyStage() {
+  function renderTabs() {
+    const counts = {
+      active: data.sessions.filter((s) => tabOf(s) === 'active').length,
+      review: data.sessions.filter((s) => tabOf(s) === 'review').length,
+      archived: data.archived.length,
+    };
+    tabsEl.innerHTML = TABS.map(({ id, label }) => `
+      <button class="tab" role="tab" data-tab="${id}" aria-selected="${id === tab}">
+        ${label}<span class="count" data-any="${counts[id] > 0}">${counts[id]}</span>
+      </button>`).join('');
+  }
+
+  function trailFor(session) {
+    const items = session.events.slice(-60).reverse().map((e) => `
+      <li data-kind="${e.kind}"><time>${clock(e.at)}</time><span>${escapeHtml(e.text)}</span></li>`).join('');
     return `
-      <div class="scene-wrap" data-attention="false">
-        <div class="scene" data-state="idle" data-attention="false">
-          <div class="horizon"></div>
-          <div class="shadow"></div>
-          <div class="anchor"><div class="creature" data-state="idle"></div></div>
+      <button class="trail-toggle">${trailOpen ? '▾' : '▸'} what it did (${session.events.length})</button>
+      <ul class="trail" ${trailOpen ? '' : 'hidden'}>${items || '<li>Nothing yet.</li>'}</ul>`;
+  }
+
+  /**
+   * The dinosaur, drawn on a 20x18 grid.
+   *
+   * SWAP POINT — but a friendlier one than before: this *is* pixel art now, so
+   * editing it means editing the map below. `.` is empty, `B` body, `b` a
+   * darker underside, `E` the eye, `M` the mouth line. Everything else about
+   * the creature (mood, shadow, motion) is CSS and stays as it is.
+   *
+   * It faces left because that is where the work stacks up.
+   */
+  const DINO = [
+    '.....................',
+    '..BBBB...............',
+    '.BBBBBB..............',
+    '.BEBBBB..............',
+    '.BBBBBB..............',
+    '.BMBBBB.........BB...',
+    '.BBBBBB........BBB...',
+    '..BBBBB.......BBBB...',
+    '...BBBBBBBBBBBBBBB...',
+    '..BBBBBBBBBBBBBBBB...',
+    '.BBBBBBBBBBBBBBBB....',
+    'BBBBBBBBBBBBBBBB.....',
+    'bBBBBBBBBBBBBBB......',
+    '.bbBBBBBBBBBBb.......',
+    '...BBB...BBBB........',
+    '...BB....BBB.........',
+    '...BB.....BB.........',
+    '..BBBB...BBBB........',
+  ];
+
+  /**
+   * Where the eye sits, per look direction. Moving one pixel is the whole
+   * animation — at this resolution that is plenty, and it is how the real
+   * thing was done.
+   */
+  const EYE = { stack: [1, 3], you: [2, 3], away: [2, 3] };
+
+  /** Render the sprite as SVG rects: one rect per filled cell, no smoothing. */
+  function dinoSprite(mood, lookAt) {
+    const w = DINO[0].length;
+    const h = DINO.length;
+    const [eyeX, eyeY] = EYE[lookAt] || EYE.away;
+    const cells = [];
+
+    DINO.forEach((row, y) => {
+      [...row].forEach((cell, x) => {
+        if (cell === '.') return;
+        // The eye and mouth are body pixels that get overpainted below, so the
+        // silhouette stays solid whatever the creature is looking at.
+        const fill = cell === 'b' ? 'var(--dino-dark)' : 'var(--dino)';
+        cells.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="${fill}"/>`);
+      });
+    });
+
+    // Bored means half-lidded: the eye becomes a lid one row lower.
+    const eye = mood === 'bored'
+      ? `<rect x="${eyeX}" y="${eyeY + 1}" width="2" height="1" fill="var(--dino-ink)"/>`
+      : `<rect x="${eyeX}" y="${eyeY}" width="1" height="1" fill="var(--dino-ink)"/>`;
+
+    // A wider mouth when it is pleased — the closest thing a box has to a grin.
+    const mouth = mood === 'pleased'
+      ? `<rect x="1" y="5" width="3" height="1" fill="var(--dino-ink)"/>`
+      : `<rect x="1" y="5" width="1" height="1" fill="var(--dino-ink)"/>`;
+
+    return `<svg class="dino" viewBox="0 0 ${w} ${h}"
+                 data-mood="${mood}" data-look="${lookAt}"
+                 preserveAspectRatio="xMidYMax meet" aria-hidden="true"
+              >${cells.join('')}${eye}${mouth}</svg>`;
+  }
+
+  /** Work that is asking for you, as opposed to work merely finished. */
+  const wantsYou = (s) => s.state === 'waiting' || s.state === 'asking' || s.state === 'blocked';
+
+  /**
+   * What the dino is doing, from the work in view. Deliberately aggregate:
+   * one creature cannot represent five sessions, but it can tell you at a
+   * glance whether any of them needs you.
+   */
+  function mood(rows) {
+    if (Date.now() < reactionUntil) return 'pleased';
+    if (rows.some(wantsYou)) return 'alert';
+    if (rows.length > 0) return 'watching';
+    return 'bored';
+  }
+
+  /** Eyes front when something wants you; on the pile when work is happening. */
+  function look(rows, currentMood) {
+    if (currentMood === 'alert') return 'you';
+    if (rows.length > 0) return 'stack';
+    return 'away';
+  }
+
+  /** How many rectangles fit before the pile would run off the top. */
+  const MAX_VISIBLE = 7;
+
+  function sceneFor(rows, session) {
+    const currentMood = mood(rows);
+    // Oldest at the bottom of the pile: the stack renders column-reverse.
+    const shown = rows.slice(0, MAX_VISIBLE).reverse();
+    const hidden = rows.length - shown.length;
+
+    return `
+      <div class="scene" data-mood="${currentMood}">
+        <div class="horizon"></div>
+
+        <div class="stack">
+          ${hidden > 0 ? `<span class="stack-more">+${hidden} more</span>` : ''}
+          ${shown.map((s) => `
+            <button class="task"
+                    data-focus="${s.id}"
+                    data-state="${s.state}"
+                    data-attention="${wantsYou(s)}"
+                    data-selected="${session && s.id === session.id}"
+                    data-dropping="${dropping.has(s.id)}"
+                    data-feeding="${feedingId === s.id}"
+                    style="--task:${colorOf(s)}"
+                    title="${escapeHtml(s.label)}"></button>`).join('')}
         </div>
-        <div class="caption">
-          <p class="status">Nothing running</p>
-          <p class="hint">Start an agent in a terminal and it shows up here.</p>
+
+        <div class="dino-anchor">
+          ${dinoSprite(currentMood, look(rows, currentMood))}
         </div>
       </div>`;
   }
 
-  function view(session) {
-    const attention = ATTENTION.has(session.state);
+  function archivedView() {
+    if (data.archived.length === 0) {
+      return `${sceneFor([], null)}<p class="empty">Nothing fed to the dino yet.</p>`;
+    }
+    return `
+      <div class="roster">
+        ${data.archived.map((entry) => `
+          <div class="row" data-static="true">
+            <span class="pip" style="background:${
+              (data.palette.find((c) => c.id === entry.project.color) || {}).hex || '#4ade80'}"></span>
+            <span class="who">${escapeHtml(entry.label)}</span>
+            <span class="when">${day(entry.archivedAt)}</span>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  function sessionView(rows, session) {
+    const attention = wantsYou(session);
     const ask = session.summary?.ask || '';
-    const status = session.summary?.headline
-      || session.lastActivity?.text
-      || RESTING_LINE[session.state]
-      || '';
-
-    const others = sessions.length > 1 ? `
-      <div class="others">
-        ${sessions.map((s) => `
-          <button class="chip" data-chip="${s.id}" data-state="${s.state}"
-                  data-current="${s.id === session.id}">
-            <span class="pip"></span>${escapeHtml(s.label)}
-          </button>`).join('')}
-      </div>` : '';
-
-    const trail = `
-      <button class="trail-toggle">${trailOpen ? '▾' : '▸'} what it did (${session.events.length})</button>
-      <ul class="trail" ${trailOpen ? '' : 'hidden'}>
-        ${session.events.slice(-60).reverse().map((e) => `
-          <li data-kind="${e.kind}"><time>${clock(e.at)}</time><span>${escapeHtml(e.text)}</span></li>`,
-        ).join('') || '<li>Nothing yet.</li>'}
-      </ul>`;
+    const status = session.summary?.headline || session.lastActivity?.text
+      || RESTING_LINE[session.state] || '';
 
     return `
       <div class="scene-wrap" data-attention="${attention}">
-        <div class="scene" data-state="${session.state}"
-             data-attention="${attention}"
-             data-blocked="${session.state === 'blocked'}">
-          <div class="horizon"></div>
-          <div class="shadow"></div>
-          <div class="anchor"><div class="creature" data-state="${session.state}"></div></div>
-        </div>
+        ${sceneFor(rows, session)}
 
         <div class="caption">
-          <div class="project">${escapeHtml(session.label)}</div>
+          <div class="title-row">
+            <span class="swatch"></span>
+            ${editingTitle
+              ? `<form class="title-form"><input class="title-input" name="title"
+                   value="${escapeHtml(session.title)}" autocomplete="off" /></form>`
+              : `<button class="title" title="Click to rename this work">${escapeHtml(session.label)}</button>`}
+          </div>
+
           <p class="status">${escapeHtml(status)}</p>
           ${ask ? `<p class="ask" data-echo="${ask === status}">${escapeHtml(ask)}</p>` : ''}
 
           <div class="actions" ${session.waiting ? '' : 'hidden'}>
-            <button class="primary" data-act="go">Keep going</button>
-            <button data-act="stop">All good</button>
-            <button data-act="say">Say something…</button>
+            <button class="act primary" data-act="go">Keep going</button>
+            <button class="act" data-act="stop">All good</button>
+            <button class="act" data-act="say">Say something…</button>
           </div>
 
           <form class="composer" ${composerOpen && session.waiting ? '' : 'hidden'}>
             <input name="reason" placeholder="Tell it what to do next…" autocomplete="off" />
-            <button type="submit">Send</button>
+            <button class="act" type="submit">Send</button>
           </form>
 
           <p class="hint">${session.waiting ? 'or just hit Enter' : ''}</p>
+
+          <button class="feed" data-act="feed"
+                  ${tabOf(session) === 'review' ? '' : 'hidden'}>Feed it to the dino</button>
         </div>
 
-        ${others}
-        ${trail}
+        ${trailFor(session)}
       </div>`;
   }
 
-  function render() {
-    const session = current();
-    stage.innerHTML = session ? view(session) : emptyStage();
-    if (composerOpen) stage.querySelector('.composer input')?.focus();
+  function emptyView() {
+    return `
+      ${sceneFor([], null)}
+      <p class="empty">${tab === 'active'
+        ? 'Nothing running. Start an agent in a terminal and it shows up here.'
+        : 'Nothing waiting on you.'}</p>`;
   }
 
-  // --- interaction --------------------------------------------------------
+  function render() {
+    renderTabs();
+
+    if (tab === 'archived') {
+      applyAccent(null);
+      stage.innerHTML = archivedView();
+      return;
+    }
+
+    const rows = inTab();
+    const session = focused();
+    applyAccent(session);
+    stage.innerHTML = session ? sessionView(rows, session) : emptyView();
+
+    if (editingTitle) stage.querySelector('.title-input')?.focus();
+    else if (composerOpen) stage.querySelector('.composer input')?.focus();
+  }
+
+  function renderProjects() {
+    if (data.projects.length === 0) {
+      projectListEl.innerHTML = '<p class="empty">No projects seen yet.</p>';
+      return;
+    }
+    projectListEl.innerHTML = data.projects.map((p) => `
+      <div class="project" data-project="${escapeHtml(p.id)}">
+        <input class="project-name" value="${escapeHtml(p.name)}" autocomplete="off" />
+        <span class="project-dir">${escapeHtml(p.id)}</span>
+        <div class="swatches">
+          ${data.palette.map((c) => `
+            <button class="swatch-pick" data-color="${c.id}"
+                    aria-pressed="${c.id === p.color}"
+                    style="background:${c.hex}" title="${c.id}"></button>`).join('')}
+        </div>
+      </div>`).join('');
+  }
+
+  // --- interaction ----------------------------------------------------------
+
+  tabsEl.addEventListener('click', (event) => {
+    const next = event.target.closest('[data-tab]')?.dataset.tab;
+    if (!next || next === tab) return;
+    tab = next;
+    focusId = null;
+    composerOpen = editingTitle = false;
+    render();
+  });
+
+  document.getElementById('open-projects').addEventListener('click', () => {
+    renderProjects();
+    scrim.hidden = false;
+  });
+  document.getElementById('close-projects').addEventListener('click', () => { scrim.hidden = true; });
+  scrim.addEventListener('click', (e) => { if (e.target === scrim) scrim.hidden = true; });
+
+  projectListEl.addEventListener('click', (event) => {
+    const pick = event.target.closest('[data-color]');
+    if (!pick) return;
+    const id = pick.closest('[data-project]').dataset.project;
+    post('/api/project', { id, color: pick.dataset.color });
+  });
+
+  projectListEl.addEventListener('change', (event) => {
+    const field = event.target.closest('.project-name');
+    if (!field) return;
+    post('/api/project', { id: field.closest('[data-project]').dataset.project, name: field.value });
+  });
 
   stage.addEventListener('click', (event) => {
-    const session = current();
-    if (!session) return;
-
-    const chip = event.target.closest('[data-chip]');
-    if (chip) {
-      pinnedId = chip.dataset.chip;
-      composerOpen = false;
+    const jump = event.target.closest('[data-focus]');
+    if (jump) {
+      focusId = jump.dataset.focus;
+      composerOpen = editingTitle = false;
       return render();
     }
 
@@ -524,57 +850,122 @@
       return render();
     }
 
-    const act = event.target.closest('button[data-act]')?.dataset.act;
+    if (event.target.closest('.title')) {
+      editingTitle = true;
+      return render();
+    }
+
+    const session = focused();
+    const act = event.target.closest('[data-act]')?.dataset.act;
+    if (!session || !act) return;
+
     if (act === 'go') decide(session.id, 'go', 'Keep going.');
     if (act === 'stop') decide(session.id, 'stop');
     if (act === 'say') { composerOpen = true; render(); }
+    if (act === 'feed') feed(session.id);
   });
 
   stage.addEventListener('submit', (event) => {
     event.preventDefault();
-    const session = current();
+    const session = focused();
+    if (!session) return;
+
+    if (event.target.classList.contains('title-form')) {
+      editingTitle = false;
+      return void post('/api/title', { session_id: session.id, title: event.target.title.value });
+    }
+
     const text = event.target.reason.value.trim();
-    if (session && text) decide(session.id, 'go', text);
+    if (text) decide(session.id, 'go', text);
   });
 
-  // The reason this window exists: answering should cost one keystroke.
+  /** A brief pleased bob, so a decision visibly lands rather than just happening. */
+  function react() {
+    reactionUntil = Date.now() + 900;
+    setTimeout(render, 950);
+  }
+
+  async function decide(sessionId, action, reason) {
+    composerOpen = false;
+    react();
+    await post('/api/decide', { session_id: sessionId, action, reason });
+  }
+
+  /**
+   * Send the rectangle across the floor into the dino, then archive it.
+   *
+   * The distance is measured rather than hard-coded: the stack and the dino
+   * are both positioned as percentages of the scene, so on a narrower window
+   * a fixed offset would land the task short of the dino or past it.
+   */
+  function feed(sessionId) {
+    const task = stage.querySelector(`.task[data-focus="${sessionId}"]`);
+    const dino = stage.querySelector('.dino');
+
+    if (task && dino) {
+      const from = task.getBoundingClientRect();
+      const to = dino.getBoundingClientRect();
+      const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
+      task.style.setProperty('--feed-dx', `${Math.round(dx)}px`);
+      task.dataset.feeding = 'true';
+    }
+
+    feedingId = sessionId;
+    setTimeout(() => {
+      feedingId = null;
+      react();
+      post('/api/archive', { session_id: sessionId });
+    }, 460);
+  }
+
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && composerOpen) {
-      composerOpen = false;
-      return render();
+    if (event.key === 'Escape') {
+      if (!scrim.hidden) return void (scrim.hidden = true);
+      if (editingTitle || composerOpen) { editingTitle = composerOpen = false; return render(); }
     }
     if (event.key !== 'Enter' || event.target.tagName === 'INPUT') return;
-    const session = current();
+    const session = focused();
     if (session?.waiting) decide(session.id, 'go', 'Keep going.');
   });
 
-  // --- live state ----------------------------------------------------------
+  // --- live state -------------------------------------------------------------
 
   function adopt(next) {
-    sessions = next;
+    const first = data.sessions.length === 0 && seen.size === 0;
+    data = next;
 
-    // Anything that needs you wins the stage, unless you deliberately
-    // pinned something else and that pin is still meaningful.
-    const pinned = sessions.find((s) => s.id === pinnedId);
-    if (!pinned || !ATTENTION.has(pinned.state)) pinnedId = null;
+    // Only genuinely new work drops in. Without this, every state update would
+    // re-run the animation and the pile would twitch constantly.
+    const arrivals = data.sessions.filter((s) => !seen.has(s.id));
+    for (const s of data.sessions) seen.add(s.id);
 
-    if (!sessions.some((s) => s.id === (pinnedId ?? sessions[0]?.id) && s.waiting)) {
-      composerOpen = false;
+    // The very first payload after connecting is the existing world, not new
+    // arrivals — dropping all of it at once would be a lie about what happened.
+    if (!first && arrivals.length > 0) {
+      dropping = new Set(arrivals.map((s) => s.id));
+      setTimeout(() => {
+        dropping = new Set();
+        render();
+      }, 640);
     }
+
+    // A focus you set is only meaningful while that session is still in view.
+    if (focusId && !inTab().some((s) => s.id === focusId)) focusId = null;
+
+    const session = focused();
+    if (!session?.waiting) composerOpen = false;
+
     render();
+    if (!scrim.hidden) renderProjects();
   }
 
   function connect() {
     const stream = new EventSource('/api/stream');
-
     stream.onopen = () => { linkEl.dataset.live = 'true'; };
-    stream.onmessage = (event) => adopt(JSON.parse(event.data).sessions);
-
+    stream.onmessage = (event) => adopt(JSON.parse(event.data));
     stream.onerror = () => {
       linkEl.dataset.live = 'false';
       stream.close();
-      // EventSource retries on its own, but not after an explicit close —
-      // and closing is what stops a dead socket from spinning.
       setTimeout(connect, 2000);
     };
   }
