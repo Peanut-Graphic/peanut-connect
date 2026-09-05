@@ -1,12 +1,24 @@
 # dino
 
-A calmer window onto whatever your terminal agents are doing.
+A skin for the terminal. Something to look at while the work happens.
 
-The terminal is accurate and exhausting. This is the other trade: one box per
-agent, one sentence about where it got to, and a **Keep going** button so
-answering costs a click instead of a typed sentence.
+The terminal is accurate and exhausting, and you spend all day in it anyway.
+This is the other half of the desk: a green box that gets on with things, a
+caption in English, and a **Keep going** button so answering costs a click
+instead of a typed sentence.
 
-![the window, waiting on you](docs/waiting.png)
+It is meant to be left open in the corner of a screen. Most of the time it is
+doing nothing much, which is the point — you should be able to tell how things
+are going from the corner of your eye, without reading.
+
+| working | wants you |
+| --- | --- |
+| ![breathing quietly](docs/working.png) | ![awake and lit](docs/waiting.png) |
+
+Nothing flashes and nothing jumps position. What changes is colour and posture:
+dozing when nothing runs, a slow breath while it works, upright and lit when it
+needs you. The words underneath are a caption, not a readout — if you have to
+read them to know how it is going, the box above them has failed.
 
 ## Try it without wiring anything up
 
@@ -83,9 +95,13 @@ repopulates it.
 It's a green box. That's on purpose — it's the placeholder.
 
 The swap point is marked `SWAP POINT` in `ui/index.html`. Everything that gives
-it life is driven off one attribute, `data-state`, which is one of `idle`,
-`working`, `waiting`, `asking`, `blocked`, `done`. Replace the box with a sprite
-and keep the attribute, and the postures come along for free.
+it life hangs off one attribute, `data-state`, which is one of `idle`,
+`working`, `waiting`, `asking`, `blocked`, `done`. Drop in a sprite that honours
+those six values and the postures, the glow, the floor shadow and the warming
+room all come along for free.
+
+Worth keeping if you do swap it: the floor line and the shadow. Without them the
+creature floats in a void and reads as a logo rather than something alive.
 
 ## Tests
 
