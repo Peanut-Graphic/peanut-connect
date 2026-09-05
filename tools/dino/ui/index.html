@@ -53,7 +53,20 @@
     padding: 0 24px 40px;
   }
 
-  .stage { width: 100%; max-width: 540px; margin: auto 0; }
+  /**
+   * Pinned below the toolbar, never vertically centred.
+   *
+   * Centring made the scene move: the caption is a different height on every
+   * tab and every state — one line or three, buttons or none — and with the
+   * stage centred, growing the caption by a line slid the whole scene up half
+   * a line. The creature is supposed to be the one thing that stays put, so
+   * the free space goes underneath and the scene keeps its position.
+   */
+  .stage {
+    width: 100%;
+    max-width: 540px;
+    margin: clamp(10px, 3vh, 34px) 0 auto;
+  }
 
   /* --- toolbar ------------------------------------------------------- */
 
