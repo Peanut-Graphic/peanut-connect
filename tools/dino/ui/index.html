@@ -234,6 +234,38 @@
     100% { transform: translateY(0)     scaleX(1);    }
   }
 
+  /* Sleeping. Three z's drifting up and to the right of his head, each
+     fading out as it rises. Only while he is bored — a dozing creature is
+     the one state that benefits from a little motion, because otherwise
+     "asleep" and "switched off" look identical. */
+  .zzz {
+    position: absolute;
+    left: 100%; top: 2px;
+    width: 0; height: 0;
+    pointer-events: none;
+    display: none;
+  }
+  .dino[data-mood="bored"] ~ .zzz { display: block; }
+
+  .z {
+    position: absolute;
+    left: 0; top: 0;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--dino);
+    opacity: 0;
+    animation: drift 4.2s ease-out infinite;
+  }
+  /* Staggered so there is always one in the air, never a gap or a clump. */
+  .z:nth-child(2) { animation-delay: 1.4s; }
+  .z:nth-child(3) { animation-delay: 2.8s; }
+
+  @keyframes drift {
+    0%   { transform: translate(0, 0)        scale(.55); opacity: 0;   }
+    18%  {                                               opacity: .85; }
+    100% { transform: translate(34px, -56px) scale(1.4); opacity: 0;   }
+  }
+
   .dino-shadow {
     position: absolute;
     left: 68%; bottom: calc(26% - 5px);
@@ -304,6 +336,9 @@
 
   @media (prefers-reduced-motion: reduce) {
     .dino, .dino::before, .dino::after, .task { animation: none !important; }
+    /* A z frozen mid-drift looks broken, so show one steady one instead. */
+    .z { animation: none !important; opacity: .55; }
+    .z:nth-child(2), .z:nth-child(3) { display: none; }
   }
 
   /* --- caption -------------------------------------------------------- */
@@ -686,6 +721,7 @@
         <div class="dino-shadow"></div>
         <div class="dino-anchor">
           <div class="dino" data-mood="${currentMood}" data-look="${look(rows, currentMood)}"></div>
+          <div class="zzz" aria-hidden="true"><span class="z">z</span><span class="z">z</span><span class="z">z</span></div>
         </div>
       </div>`;
   }

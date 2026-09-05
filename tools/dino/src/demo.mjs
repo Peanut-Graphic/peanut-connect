@@ -8,7 +8,9 @@
 
 const script = [
   [0, { hook_event_name: 'SessionStart', cwd: '/Users/you/projects/peanut-connect' }],
-  [600, { hook_event_name: 'UserPromptSubmit' }],
+  // Carries a prompt so the demo shows a real title rather than "untitled" —
+  // that is where a title comes from in ordinary use.
+  [600, { hook_event_name: 'UserPromptSubmit', prompt: 'fix the token refresh on expired sessions' }],
   [1400, { hook_event_name: 'PreToolUse', tool_name: 'Grep', tool_input: {} }],
   [1200, { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/p/includes/class-connect-auth.php' } }],
   [1600, { hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: '/p/includes/class-connect-auth.php' } }],
