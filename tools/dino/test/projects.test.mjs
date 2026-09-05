@@ -1,7 +1,7 @@
 import './setup.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -71,4 +71,26 @@ test('the same directory always gets the same auto colour', () => {
   const first = projects.ensure(root).color;
   projects.reset();
   assert.equal(projects.ensure(root).color, first, 'colour is stable across restarts');
+});
+
+test('a symlinked path is the same project as the real one', () => {
+  // ~/Documents/Peanut pointing at ~/peanut is an ordinary way to arrange a
+  // machine. Both spellings have to land on one project, or the same directory
+  // shows up twice with two names and two colours.
+  const real = fakeRepo();
+  const link = path.join(mkdtempSync(path.join(tmpdir(), 'dino-link-')), 'via-link');
+  symlinkSync(real, link);
+
+  const viaReal = projects.ensure(real);
+  const viaLink = projects.ensure(link);
+  assert.equal(viaLink.id, viaReal.id);
+  assert.equal(viaLink.color, viaReal.color);
+
+  // And from inside it, which is how an agent would usually be started.
+  assert.equal(projects.rootFor(path.join(link, 'includes')), projects.rootFor(real));
+});
+
+test('a path that does not exist still resolves rather than throwing', () => {
+  const gone = path.join(tmpdir(), 'dino-never-existed-xyz', 'deep');
+  assert.equal(projects.rootFor(gone), path.resolve(gone));
 });

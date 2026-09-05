@@ -8,7 +8,7 @@
  */
 
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 
 import { load, save, flush } from './store.mjs';
 
@@ -49,6 +49,11 @@ const roots = new Map();
  * `.git` is checked with existsSync rather than isDirectory because in a
  * worktree or a submodule it is a *file* pointing elsewhere, and those are
  * still the same project.
+ *
+ * Symlinks are resolved first. `~/Documents/Peanut` pointing at `~/peanut` is
+ * an ordinary way to arrange a machine, and without this an agent started
+ * through one spelling would be a different project from one started through
+ * the other — same directory, two names, two colours.
  */
 export function rootFor(cwd) {
   if (!cwd) return UNASSIGNED;
@@ -56,7 +61,16 @@ export function rootFor(cwd) {
   const cached = roots.get(cwd);
   if (cached) return cached;
 
-  let dir = path.resolve(cwd);
+  // realpath throws for a path that does not exist, which is fine and expected
+  // in tests and for a directory that has since been removed; the lexical path
+  // is the right answer then.
+  let dir;
+  try {
+    dir = realpathSync(path.resolve(cwd));
+  } catch {
+    dir = path.resolve(cwd);
+  }
+
   let found = dir;
   // Bounded so a pathological path cannot spin, and stop at the filesystem root.
   for (let i = 0; i < 64; i += 1) {
