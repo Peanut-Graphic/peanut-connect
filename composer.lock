@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1220655a88d619515f26a36778b4d4d1",
+    "content-hash": "74036936f689df17ab33469176365235",
     "packages": [
         {
             "name": "peanut/formflow-core",
-            "version": "v0.2.0",
+            "version": "v0.5.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Peanut-Graphic/formflow-core.git",
-                "reference": "1da54b9e5573ecc4156fab3d0b0df856840853fa"
+                "reference": "f168a8c05e829d36994a731bdf144689da73cf4e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Peanut-Graphic/formflow-core/zipball/1da54b9e5573ecc4156fab3d0b0df856840853fa",
-                "reference": "1da54b9e5573ecc4156fab3d0b0df856840853fa",
+                "url": "https://api.github.com/repos/Peanut-Graphic/formflow-core/zipball/f168a8c05e829d36994a731bdf144689da73cf4e",
+                "reference": "f168a8c05e829d36994a731bdf144689da73cf4e",
                 "shasum": ""
             },
             "require": {
@@ -42,10 +42,10 @@
             ],
             "description": "Shared form-engine + API/connector core for FormFlow Pro and Lite (extracted from the duplicated isf/fffl code).",
             "support": {
-                "source": "https://github.com/Peanut-Graphic/formflow-core/tree/v0.2.0",
+                "source": "https://github.com/Peanut-Graphic/formflow-core/tree/v0.5.0",
                 "issues": "https://github.com/Peanut-Graphic/formflow-core/issues"
             },
-            "time": "2026-07-19T04:24:44+00:00"
+            "time": "2026-07-19T13:52:59+00:00"
         }
     ],
     "packages-dev": [
