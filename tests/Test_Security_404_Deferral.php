@@ -67,10 +67,15 @@ class Test_Security_404_Deferral extends PHPUnit\Framework\TestCase {
     }
 
     private function callShow404(): void {
-        // No setAccessible(): it is a no-op since PHP 8.1 and emits a
-        // deprecation on 8.5 that would land inside the output buffer below
-        // and masquerade as inline rendering.
-        (new ReflectionMethod('Peanut_Connect_Security', 'show_404'))->invoke(null);
+        $m = new ReflectionMethod('Peanut_Connect_Security', 'show_404');
+        // Required below 8.1 to reach a private method; from 8.1 it is a no-op
+        // that emits a deprecation on 8.5, which would land inside the output
+        // buffer below and masquerade as inline rendering. So call it only
+        // where it still does something.
+        if (PHP_VERSION_ID < 80100) {
+            $m->setAccessible(true);
+        }
+        $m->invoke(null);
     }
 
     /**
