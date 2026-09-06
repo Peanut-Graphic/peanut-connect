@@ -338,28 +338,49 @@ class Peanut_Connect_Security {
      * Show 404 page
      */
     private static function show_404(): void {
+        // Decide early, render late.
+        //
+        // The block itself is detected on `init` priority 1 so we get in front
+        // of anything that might leak the custom login slug. The *render* can
+        // not happen there: themes register their template classes during
+        // `init` itself -- Enfold loads class-font-manager.php on `init`
+        // priority 5 -- so including 404.php at priority 1 fatals on
+        // `avia_font_manager` before the theme has had a chance to define it.
+        //
+        // `wp_loaded` fires after the whole of `init` has run, and it fires in
+        // every entry point we block: wp-login.php and wp-admin/ both reach it
+        // while bootstrapping, before either authenticates or redirects. So the
+        // slug stays hidden and the theme is fully loaded by the time we render.
+        add_action('wp_loaded', [__CLASS__, 'render_404'], 0);
+    }
+
+    /**
+     * Render the 404 deferred from show_404(). Public only so it can be used
+     * as a hook callback; treat it as internal.
+     */
+    public static function render_404(): void {
         global $wp_query;
 
         status_header(404);
         nocache_headers();
 
-        if ($wp_query) {
+        if ($wp_query instanceof \WP_Query) {
             $wp_query->set_404();
         }
 
         // Try to load theme's 404 template
         $template = get_404_template();
-        if ($template) {
+        if ($template && is_readable($template)) {
             include($template);
-        } else {
-            // Fallback
-            wp_die(
-                __('Page not found.', 'peanut-connect'),
-                __('404 Not Found', 'peanut-connect'),
-                ['response' => 404]
-            );
+            exit;
         }
-        exit;
+
+        // Fallback
+        wp_die(
+            __('Page not found.', 'peanut-connect'),
+            __('404 Not Found', 'peanut-connect'),
+            ['response' => 404]
+        );
     }
 
     /**
