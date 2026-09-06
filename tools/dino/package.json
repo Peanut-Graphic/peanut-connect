@@ -1,0 +1,17 @@
+{
+  "name": "dino",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A skin for the terminal — a calm window onto whatever your agents are doing",
+  "type": "module",
+  "bin": { "dino": "./bin/dino.mjs" },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node bin/dino.mjs",
+    "demo": "node bin/dino.mjs demo",
+    "install-hooks": "node bin/dino.mjs install",
+    "uninstall-hooks": "node bin/dino.mjs uninstall",
+    "test": "node --test 'test/*.test.mjs'"
+  },
+  "license": "MIT"
+}
