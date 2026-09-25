@@ -10,6 +10,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
+
+def dependency_lock_path() -> Path:
+    """Return the dependency lock for the source or synced consumer layout."""
+    script_path = Path(__file__).resolve()
+    consumer_lock = script_path.with_name("requirements.lock")
+    if consumer_lock.is_file():
+        return consumer_lock
+    return script_path.parents[1] / "requirements-platform-validator.lock"
+
+
 try:
     import yaml
     from jsonschema import Draft202012Validator
@@ -17,7 +27,8 @@ try:
 except ImportError as exc:  # pragma: no cover - exercised by installation failures
     print(
         "platform manifest validator dependencies are missing; run "
-        "python3 -m pip install -r requirements-platform-validator.txt",
+        "python3 -m pip install --require-hashes --no-deps -r "
+        + str(dependency_lock_path()),
         file=sys.stderr,
     )
     raise SystemExit(2) from exc
