@@ -43,13 +43,22 @@ jobs:
             exit 0
           fi
 
-          CHANGED="$(git diff --name-only "$BASE".."$HEAD")"
+          # Deleted files are left out: removing a test guards nothing, and a
+          # bugfix PR that only deleted tests used to pass this gate.
+          CHANGED="$(git diff --name-only --diff-filter=ACMR "$BASE".."$HEAD")"
           # A test change = anything under tests/, or a recognised test file.
-          if printf '%s\n' "$CHANGED" | grep -qE '(^|/)tests?/|\.test\.[jt]sx?$|\.spec\.[jt]sx?$|Test\.php$|_test\.py$|test_.*\.py$'; then
+          TEST_RE='(^|/)tests?/|\.test\.[jt]sx?$|\.spec\.[jt]sx?$|Test\.php$|_test\.py$|test_.*\.py$'
+          # grep without -q reads all its input: -q can exit early and SIGPIPE the
+          # printf, which pipefail would read as "no test" on a very large diff.
+          if printf '%s\n' "$CHANGED" | grep -E "$TEST_RE" >/dev/null; then
             echo "✓ Bugfix PR includes a regression test."
             exit 0
           fi
 
+          DELETED="$(git diff --name-only --diff-filter=D "$BASE".."$HEAD")"
+          if printf '%s\n' "$DELETED" | grep -E "$TEST_RE" >/dev/null; then
+            echo "::error title=regression-gate::Bugfix PR \"$TITLE\" only deletes test files. A deleted test is not a regression test."
+          fi
           echo "::error title=regression-gate::Bugfix PR \"$TITLE\" has no regression test."
           cat <<'MSG'
 
