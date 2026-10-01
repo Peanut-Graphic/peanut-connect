@@ -3,7 +3,7 @@ import { Layout } from '@/components/layout';
 import { Card, Alert } from '@/components/common';
 import { useToast } from '@/components/common/Toast';
 import { useConfirm } from '@/hooks/useConfirm';
-import { marketingApi, type Link as ShortLink } from '@/api';
+import { marketingApi, preferredShortUrl, type Link as ShortLink } from '@/api';
 import { Power, PowerOff, Trash2, ExternalLink, Copy, Link2 } from 'lucide-react';
 
 export default function Links() {
@@ -99,7 +99,7 @@ function LinkRow({
   onToggle: () => void;
   onDelete: () => void;
 }) {
-  const shortUrl = link.short_url ?? `/${link.slug}`;
+  const shortUrl = preferredShortUrl(link);
 
   async function copyShort() {
     try {
@@ -171,9 +171,9 @@ function LinkRow({
           >
             <Link2 className="w-4 h-4" />
           </button>
-          {link.short_url && (
+          {(link.branded_url || link.short_url) && (
             <a
-              href={link.short_url}
+              href={shortUrl}
               target="_blank"
               rel="noreferrer noopener"
               className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700"

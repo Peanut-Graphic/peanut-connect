@@ -57,6 +57,8 @@ export interface Link {
   click_count: number;
   expires_at: string | null;
   short_url?: string;
+  /** https://this-site/{slug}, added by the plugin; null when a real page owns that path. */
+  branded_url?: string | null;
   utm?: Pick<Utm, 'id' | 'name' | 'utm_campaign' | 'utm_source' | 'utm_medium'>;
   created_at: string;
   updated_at: string;
@@ -88,8 +90,21 @@ export interface CampaignResult {
   utm: Utm;
   link: Link;
   short_url: string;
+  /** https://this-site/{slug}, added by the plugin; null when a real page owns that path. */
+  branded_url?: string | null;
   full_url: string;
 }
+
+/**
+ * The short URL to hand out: the client's own domain when the plugin could
+ * brand it (its 404 handler forwards /{slug} to Hub for tracking), else Hub's
+ * /go/{slug}, else the bare slug.
+ */
+export const preferredShortUrl = (link: {
+  slug: string;
+  short_url?: string;
+  branded_url?: string | null;
+}): string => link.branded_url || link.short_url || `/${link.slug}`;
 
 export interface FunnelStage {
   stage: string;

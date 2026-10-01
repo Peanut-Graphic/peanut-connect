@@ -69,31 +69,80 @@ class Peanut_Connect_Short_Links {
 
         $path = (string) parse_url($request_uri, PHP_URL_PATH);
         $path = trim($path, '/');
+
+        return self::is_servable_slug($path) ? $path : null;
+    }
+
+    /**
+     * Whether maybe_redirect() would consider this path segment a short link.
+     */
+    private static function is_servable_slug(string $path): bool {
         if ($path === '') {
-            return null;
+            return false;
         }
 
         // Single segment only.
         if (strpos($path, '/') !== false) {
-            return null;
+            return false;
         }
 
         // Skip WP paths and obvious file requests.
         foreach (self::SKIP_PREFIXES as $prefix) {
             if (strpos($path, $prefix) === 0) {
-                return null;
+                return false;
             }
         }
         if (strpos($path, '.') !== false) {
-            return null;
+            return false;
         }
 
         // Slugs are alnum + dash + underscore.
-        if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $path)) {
+        return (bool) preg_match('/^[a-zA-Z0-9_\-]+$/', $path);
+    }
+
+    /**
+     * The site-branded form of a Hub short link — https://this-site/{slug} —
+     * or null when maybe_redirect() could never serve it here.
+     *
+     * The redirect only fires on a 404, so a slug that a real post or page
+     * already answers would land on that content instead of Hub. Those keep
+     * Hub's /go/{slug} URL.
+     */
+    public static function branded_url(string $slug): ?string {
+        if (!self::is_servable_slug($slug)) {
             return null;
         }
 
-        return $path;
+        $url = home_url('/' . $slug);
+        if (url_to_postid($url) !== 0) {
+            return null;
+        }
+
+        return $url;
+    }
+
+    /**
+     * Attach `branded_url` to the link(s) in a Hub marketing response: the
+     * campaign builder's `campaign` envelope and the paginated links list.
+     * Hub's own `short_url` is left untouched as the fallback.
+     *
+     * @param array<string, mixed> $data Decoded Hub response body.
+     * @return array<string, mixed>
+     */
+    public static function brand_response(array $data): array {
+        if (isset($data['campaign']['link']['slug']) && is_string($data['campaign']['link']['slug'])) {
+            $data['campaign']['branded_url'] = self::branded_url($data['campaign']['link']['slug']);
+        }
+
+        if (isset($data['data']['data']) && is_array($data['data']['data'])) {
+            foreach ($data['data']['data'] as $i => $row) {
+                if (is_array($row) && isset($row['slug']) && is_string($row['slug'])) {
+                    $data['data']['data'][$i]['branded_url'] = self::branded_url($row['slug']);
+                }
+            }
+        }
+
+        return $data;
     }
 
     /**

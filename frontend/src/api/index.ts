@@ -10,7 +10,7 @@ export {
   permissionsApi,
   trackingApi,
 } from './endpoints';
-export { marketingApi } from './marketing';
+export { marketingApi, preferredShortUrl } from './marketing';
 export type {
   Utm,
   UtmUpdateInput,
