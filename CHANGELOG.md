@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Hub validation failures now say what was wrong.** Hub answers a rejected request with a 422
+  whose body lists per-field `errors` but no top-level `message`, and the SPA only ever read
+  `message` — so the campaign builder showed a bare "Request failed with status code 422" when,
+  for example, the chosen short-link slug was already taken. The API client now falls back to the
+  field errors ("The custom slug has already been taken."), for every screen that talks to Hub.
+
 ### Added
 - **Unauthenticated user enumeration is now blocked by default.** Stock WordPress publishes
   the exact login name of any user with content through three public vectors: `/wp-json/wp/v2/users`
