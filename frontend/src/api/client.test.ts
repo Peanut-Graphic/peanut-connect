@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import api, { isWordPressAdmin, getVersion, flattenApiResponse } from './client';
+import api, { isWordPressAdmin, getVersion, flattenApiResponse, extractApiErrorMessage } from './client';
 
 describe('flattenApiResponse', () => {
   it('preserves top-level resource keys from mutation responses (campaign/utm/link)', () => {
@@ -41,6 +41,44 @@ describe('flattenApiResponse', () => {
     });
     expect(result.utm).toEqual({ id: 7 });
     expect(result.message).toBe('Campaign created');
+  });
+});
+
+describe('extractApiErrorMessage', () => {
+  it('surfaces Hub validation errors, which carry `errors` but no `message`', () => {
+    // Hub's CampaignController 422 shape for a slug collision.
+    const message = extractApiErrorMessage(
+      { success: false, errors: { custom_slug: ['The custom slug has already been taken.'] } },
+      'Request failed with status code 422'
+    );
+    expect(message).toBe('The custom slug has already been taken.');
+  });
+
+  it('joins messages across multiple invalid fields', () => {
+    const message = extractApiErrorMessage(
+      {
+        success: false,
+        errors: {
+          utm_source: ['The utm source field is required.'],
+          base_url: ['The base url must be a valid URL.'],
+        },
+      },
+      'fallback'
+    );
+    expect(message).toBe('The utm source field is required. The base url must be a valid URL.');
+  });
+
+  it('prefers an explicit message over field errors', () => {
+    expect(
+      extractApiErrorMessage({ message: 'Site is not associated with an agency.', errors: { x: ['y'] } }, 'fallback')
+    ).toBe('Site is not associated with an agency.');
+  });
+
+  it('falls back when the body has neither message nor errors', () => {
+    expect(extractApiErrorMessage({ raw: '<html>' }, 'Request failed with status code 502')).toBe(
+      'Request failed with status code 502'
+    );
+    expect(extractApiErrorMessage(undefined, 'fallback')).toBe('fallback');
   });
 });
 

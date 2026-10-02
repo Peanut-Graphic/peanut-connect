@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Short links are handed out on the client's own domain.** The campaign builder (link field and
+  QR code) and the Short Links list showed Hub's `https://hub.peanutgraphic.com/go/{slug}`, even
+  though the plugin's 404 handler already serves `https://client-site/{slug}` by forwarding to that
+  Hub route for tracking. The plugin now adds a `branded_url` to campaign and link responses and the
+  SPA prefers it. A slug that a real post or page already answers keeps Hub's URL, since the 404
+  redirect could never reach it there. Old Hub-domain links and QR codes keep working.
+- **Hub validation failures now say what was wrong.** Hub answers a rejected request with a 422
+  whose body lists per-field `errors` but no top-level `message`, and the SPA only ever read
+  `message` — so the campaign builder showed a bare "Request failed with status code 422" when,
+  for example, the chosen short-link slug was already taken. The API client now falls back to the
+  field errors ("The custom slug has already been taken."), for every screen that talks to Hub.
+
 ### Added
 - **Unauthenticated user enumeration is now blocked by default.** Stock WordPress publishes
   the exact login name of any user with content through three public vectors: `/wp-json/wp/v2/users`

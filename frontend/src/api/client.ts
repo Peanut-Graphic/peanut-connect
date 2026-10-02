@@ -97,6 +97,33 @@ export const flattenApiResponse = (
   };
 };
 
+/**
+ * Pull a human-readable reason out of a failed API response body.
+ *
+ * Hub validation failures (422) return `{ success: false, errors: { field:
+ * [msg] } }` with no top-level `message`, so reading `message` alone left the
+ * SPA showing axios's bare "Request failed with status code 422" — e.g. the
+ * campaign builder hid "The custom slug has already been taken."
+ */
+export const extractApiErrorMessage = (body: unknown, fallback: string): string => {
+  if (!body || typeof body !== 'object') {
+    return fallback;
+  }
+  const { message, errors } = body as { message?: unknown; errors?: unknown };
+  if (typeof message === 'string' && message.trim() !== '') {
+    return message;
+  }
+  if (errors && typeof errors === 'object') {
+    const messages = Object.values(errors as Record<string, unknown>)
+      .flatMap((value) => (Array.isArray(value) ? value : [value]))
+      .filter((value): value is string => typeof value === 'string' && value.trim() !== '');
+    if (messages.length > 0) {
+      return messages.join(' ');
+    }
+  }
+  return fallback;
+};
+
 // Response interceptor
 api.interceptors.response.use(
   (response) => {
@@ -104,7 +131,7 @@ api.interceptors.response.use(
     const data = response.data;
     if (data && typeof data === 'object' && 'success' in data) {
       if (!data.success) {
-        return Promise.reject(new Error(data.message || 'Request failed'));
+        return Promise.reject(new Error(extractApiErrorMessage(data, 'Request failed')));
       }
       return {
         ...response,
@@ -114,7 +141,7 @@ api.interceptors.response.use(
     return response;
   },
   (error: AxiosError<ApiResponse<unknown>>) => {
-    const message = error.response?.data?.message || error.message || 'An error occurred';
+    const message = extractApiErrorMessage(error.response?.data, error.message || 'An error occurred');
     return Promise.reject(new Error(message));
   }
 );
