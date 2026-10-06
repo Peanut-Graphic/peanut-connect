@@ -6,6 +6,7 @@ import { useToast } from '@/components/common/Toast';
 import { useConfirm } from '@/hooks/useConfirm';
 import { videosApi, type Video, type VideoInput } from '@/api';
 import { VideoAnalyticsPanel } from '@/components/videos/VideoAnalyticsPanel';
+import { VideoCard } from '@/components/videos/VideoCard';
 
 declare global {
   interface Window {
@@ -81,6 +82,7 @@ export default function Videos() {
   });
 
   const videos: Video[] = data ?? [];
+  const expandedVideo = videos.find((v) => v.id === expanded) ?? null;
 
   return (
     <Layout
@@ -170,61 +172,52 @@ export default function Videos() {
         </button>
       </Card>
 
-      <Card padding="none" className="mt-4">
-        {isLoading && <div className="p-4 text-sm text-slate-500">Loading…</div>}
-        {!isLoading && !error && videos.length === 0 && (
-          <div className="p-4 text-sm text-slate-500">No videos yet.</div>
-        )}
-        {videos.map((v) => (
-          <div key={v.id} className="border-b last:border-0">
-            <div className="flex items-center justify-between p-3">
-              <div>
-                <div className="text-sm font-medium">{v.title}</div>
-                <code className="text-xs text-slate-500">
-                  [peanut_video slug="{v.slug}"]
-                </code>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  className="text-xs px-2 py-1 border rounded"
-                  onClick={() => {
-                    navigator.clipboard.writeText(`[peanut_video slug="${v.slug}"]`);
-                    toast.success('Shortcode copied.');
-                  }}
-                >
-                  Copy
-                </button>
-                <button
-                  className="text-xs px-2 py-1 border rounded"
-                  onClick={() => setExpanded(expanded === v.id ? null : v.id)}
-                >
-                  {expanded === v.id ? 'Hide analytics' : 'Analytics'}
-                </button>
-                <button
-                  className="text-xs px-2 py-1 border rounded text-red-600"
-                  onClick={async () => {
-                    const ok = await confirm({
-                      title: 'Remove video?',
-                      message:
-                        'It will stop rendering and disappear from this list.',
-                      confirmText: 'Remove',
-                      variant: 'danger',
-                    });
-                    if (ok) remove.mutate(v.id);
-                  }}
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-            {expanded === v.id && (
-              <div className="p-3 bg-slate-50">
-                <VideoAnalyticsPanel videoId={v.id} hubEmbedUrl={v.embed_url} />
-              </div>
-            )}
+      {isLoading && <div className="mt-4 text-sm text-slate-500">Loading…</div>}
+      {!isLoading && !error && videos.length === 0 && (
+        <Card className="mt-4">
+          <div className="text-sm text-slate-500">No videos yet.</div>
+        </Card>
+      )}
+      {videos.length > 0 && (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {videos.map((v) => (
+            <VideoCard
+              key={v.id}
+              video={v}
+              analyticsOpen={expanded === v.id}
+              onCopy={() => {
+                navigator.clipboard.writeText(`[peanut_video slug="${v.slug}"]`);
+                toast.success('Shortcode copied.');
+              }}
+              onAnalytics={() => setExpanded(expanded === v.id ? null : v.id)}
+              onRemove={async () => {
+                const ok = await confirm({
+                  title: 'Remove video?',
+                  message: 'It will stop rendering and disappear from this list.',
+                  confirmText: 'Remove',
+                  variant: 'danger',
+                });
+                if (ok) remove.mutate(v.id);
+              }}
+            />
+          ))}
+        </div>
+      )}
+      {expandedVideo && (
+        <Card className="mt-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">{expandedVideo.title} analytics</h3>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 border rounded"
+              onClick={() => setExpanded(null)}
+            >
+              Close
+            </button>
           </div>
-        ))}
-      </Card>
+          <VideoAnalyticsPanel videoId={expandedVideo.id} hubEmbedUrl={expandedVideo.embed_url} />
+        </Card>
+      )}
       {confirmDialog}
     </Layout>
   );
