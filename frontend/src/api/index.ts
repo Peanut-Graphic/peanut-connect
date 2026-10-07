@@ -39,4 +39,4 @@ export type {
   DominionFunnelParams,
 } from './marketing';
 export { videosApi } from './videos';
-export type { Video, VideoInput, VideoAnalytics } from './videos';
+export type { Video, VideoInput, VideoAnalytics, VideoListStats, VideoPage } from './videos';

@@ -6,7 +6,29 @@ import { useToast } from '@/components/common/Toast';
 import { useConfirm } from '@/hooks/useConfirm';
 import { videosApi, type Video, type VideoInput } from '@/api';
 import { VideoAnalyticsPanel } from '@/components/videos/VideoAnalyticsPanel';
-import { VideoCard } from '@/components/videos/VideoCard';
+import { VideoCard, type VideoActionHandlers } from '@/components/videos/VideoCard';
+import { VideoList } from '@/components/videos/VideoList';
+import { embedCodeFor, shortcodeFor } from '@/components/videos/videoFormat';
+
+type ViewMode = 'grid' | 'list';
+const VIEW_KEY = 'peanut-connect.videos.view';
+
+// A per-browser convenience only: storage can be blocked, so fall back quietly.
+function readView(): ViewMode {
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid';
+  } catch {
+    return 'grid';
+  }
+}
+
+function saveView(view: ViewMode): void {
+  try {
+    window.localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // ignore
+  }
+}
 
 declare global {
   interface Window {
@@ -44,6 +66,7 @@ export default function Videos() {
   const [poster, setPoster] = useState('');
   const [caption, setCaption] = useState('');
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [view, setView] = useState<ViewMode>(readView);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['videos'],
@@ -80,6 +103,53 @@ export default function Videos() {
     onError: (err: Error) =>
       toast.error(`Could not remove video: ${err.message || 'unknown error'}`),
   });
+
+  const page = useMutation({
+    mutationFn: (id: number) => videosApi.createPage(id),
+    onSuccess: (p) => {
+      invalidate();
+      toast.success(p.created ? 'Draft page created. Opening the editor.' : 'This video already has a page. Opening it.');
+      window.open(p.edit_url, '_blank', 'noopener');
+    },
+    onError: (err: Error) =>
+      toast.error(`Could not create the page: ${err.message || 'unknown error'}`),
+  });
+
+  const copy = async (text: string, what: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${what} copied.`);
+    } catch {
+      toast.error(`Could not copy the ${what.toLowerCase()}. Select it and copy manually.`);
+    }
+  };
+
+  const handlersFor = (v: Video): VideoActionHandlers => ({
+    onCopy: () => copy(shortcodeFor(v), 'Shortcode'),
+    onCopyEmbed: () => copy(embedCodeFor(v), 'Embed code'),
+    onAnalytics: () => setExpanded(expanded === v.id ? null : v.id),
+    onPage: () => {
+      if (v.page) {
+        window.open(v.page.edit_url, '_blank', 'noopener');
+      } else {
+        page.mutate(v.id);
+      }
+    },
+    onRemove: async () => {
+      const ok = await confirm({
+        title: 'Remove video?',
+        message: 'It will stop rendering and disappear from this list.',
+        confirmText: 'Remove',
+        variant: 'danger',
+      });
+      if (ok) remove.mutate(v.id);
+    },
+  });
+
+  const chooseView = (next: ViewMode) => {
+    setView(next);
+    saveView(next);
+  };
 
   const videos: Video[] = data ?? [];
   const expandedVideo = videos.find((v) => v.id === expanded) ?? null;
@@ -179,29 +249,45 @@ export default function Videos() {
         </Card>
       )}
       {videos.length > 0 && (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-4 mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold">
+            {videos.length} {videos.length === 1 ? 'video' : 'videos'}
+          </h3>
+          <div role="group" aria-label="Layout" className="inline-flex overflow-hidden rounded border bg-white text-xs">
+            {(['grid', 'list'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={view === mode}
+                onClick={() => chooseView(mode)}
+                className={`px-3 py-1.5 capitalize ${view === mode ? 'bg-slate-900 text-white' : 'text-slate-700'}`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {videos.length > 0 && view === 'grid' && (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {videos.map((v) => (
             <VideoCard
               key={v.id}
               video={v}
               analyticsOpen={expanded === v.id}
-              onCopy={() => {
-                navigator.clipboard.writeText(`[peanut_video slug="${v.slug}"]`);
-                toast.success('Shortcode copied.');
-              }}
-              onAnalytics={() => setExpanded(expanded === v.id ? null : v.id)}
-              onRemove={async () => {
-                const ok = await confirm({
-                  title: 'Remove video?',
-                  message: 'It will stop rendering and disappear from this list.',
-                  confirmText: 'Remove',
-                  variant: 'danger',
-                });
-                if (ok) remove.mutate(v.id);
-              }}
+              pageBusy={page.isPending && page.variables === v.id}
+              {...handlersFor(v)}
             />
           ))}
         </div>
+      )}
+      {videos.length > 0 && view === 'list' && (
+        <VideoList
+          videos={videos}
+          expanded={expanded}
+          pageBusyId={page.isPending ? (page.variables ?? null) : null}
+          handlersFor={handlersFor}
+        />
       )}
       {expandedVideo && (
         <Card className="mt-4">
