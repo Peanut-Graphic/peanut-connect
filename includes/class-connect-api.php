@@ -2402,6 +2402,20 @@ class Peanut_Connect_API {
             'settings' => $settings,
         ]);
 
+        // Episode topics -> WP post tags. Hullabaloo sends `tags` as a JSON
+        // array of strings; anything else (absent, scalar, object) is ignored.
+        // An empty result means "leave existing tags alone" — older Hullabaloo
+        // releases don't send the field, same rule as slug/excerpt/meta below.
+        $tags = [];
+        if (isset($p['tags']) && is_array($p['tags'])) {
+            foreach ($p['tags'] as $tag) {
+                $tag = is_scalar($tag) ? sanitize_text_field((string) $tag) : '';
+                if ($tag !== '' && ! in_array($tag, $tags, true)) {
+                    $tags[] = $tag;
+                }
+            }
+        }
+
         if ($dry_run) {
             return new WP_REST_Response(['success' => true, 'dry_run' => true, 'data' => [
                 'action' => $action,
@@ -2409,6 +2423,7 @@ class Peanut_Connect_API {
                 'guid' => $guid,
                 'enclosure_meta' => $enclosure_meta,
                 'settings' => $settings,
+                'tags' => $tags,
             ]], 200);
         }
 
@@ -2450,6 +2465,12 @@ class Peanut_Connect_API {
         // Yoast focus keyphrase — only when provided.
         if (! empty($p['focus_keyphrase'])) {
             update_post_meta($post_id, '_yoast_wpseo_focuskw', sanitize_text_field($p['focus_keyphrase']));
+        }
+        // Tags — replace (append=false) so a republish reflects the current
+        // topics. Only when non-empty: never wipe hand-typed tags because the
+        // payload omitted the field.
+        if (! empty($tags)) {
+            wp_set_post_tags($post_id, $tags, false);
         }
         // Featured image — sideload the episode/podcast artwork and set it as
         // the post thumbnail, but only when the post doesn't already have one,

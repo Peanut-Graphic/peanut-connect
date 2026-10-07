@@ -1016,8 +1016,9 @@ if (!function_exists('esc_html__')) {
 if (!function_exists('wp_strip_all_tags')) {
     function wp_strip_all_tags(string $s): string { return trim(strip_tags($s)); }
 }
-// Minimal page store for the videos "Create page" tests: $mock_pages is a
-// list of ['ID'=>int,'status'=>string,'meta'=>[key=>value]].
+// Minimal page/post store for the videos "Create page" and podcast publish
+// tests: $mock_pages is a list of ['ID'=>int,'status'=>string,
+// 'meta'=>[key=>value], optional 'post_type'=>string, 'tags'=>string[]].
 if (!function_exists('get_posts')) {
     function get_posts(array $args = []): array {
         global $mock_pages;
@@ -1029,10 +1030,92 @@ if (!function_exists('get_posts')) {
                     continue 2;
                 }
             }
-            $out[] = (object) ['ID' => $p['ID']];
+            if (isset($args['meta_key'], $args['meta_value'])
+                && ($p['meta'][$args['meta_key']] ?? null) !== $args['meta_value']) {
+                continue;
+            }
+            $out[] = ($args['fields'] ?? '') === 'ids' ? $p['ID'] : (object) ['ID' => $p['ID']];
         }
         return $out;
     }
+}
+if (!function_exists('get_post')) {
+    function get_post($id) {
+        global $mock_pages;
+        foreach ((array) $mock_pages as $p) {
+            if ($p['ID'] === (int) $id) {
+                return (object) ['ID' => $p['ID'], 'post_type' => $p['post_type'] ?? 'page'];
+            }
+        }
+        return null;
+    }
+}
+if (!function_exists('wp_insert_post')) {
+    function wp_insert_post(array $postarr, bool $wp_error = false) {
+        global $mock_pages;
+        $id = 100;
+        foreach ((array) $mock_pages as $p) {
+            $id = max($id, $p['ID'] + 1);
+        }
+        $mock_pages[] = [
+            'ID' => $id,
+            'status' => $postarr['post_status'] ?? 'draft',
+            'post_type' => $postarr['post_type'] ?? 'post',
+            'meta' => [],
+            'tags' => [],
+        ];
+        return $id;
+    }
+}
+if (!function_exists('wp_update_post')) {
+    function wp_update_post(array $postarr, bool $wp_error = false) {
+        global $mock_pages;
+        foreach ((array) $mock_pages as $i => $p) {
+            if ($p['ID'] === (int) ($postarr['ID'] ?? 0)) {
+                if (isset($postarr['post_status'])) {
+                    $mock_pages[$i]['status'] = $postarr['post_status'];
+                }
+                return $p['ID'];
+            }
+        }
+        return 0;
+    }
+}
+if (!function_exists('update_post_meta')) {
+    function update_post_meta(int $id, string $key, $value) {
+        global $mock_pages;
+        foreach ((array) $mock_pages as $i => $p) {
+            if ($p['ID'] === $id) {
+                $mock_pages[$i]['meta'][$key] = $value;
+                return true;
+            }
+        }
+        return false;
+    }
+}
+if (!function_exists('wp_set_post_tags')) {
+    function wp_set_post_tags(int $id, $tags = '', bool $append = false) {
+        global $mock_pages;
+        $tags = is_array($tags) ? $tags : array_map('trim', explode(',', (string) $tags));
+        foreach ((array) $mock_pages as $i => $p) {
+            if ($p['ID'] === $id) {
+                $mock_pages[$i]['tags'] = $append
+                    ? array_values(array_unique(array_merge($p['tags'] ?? [], $tags)))
+                    : array_values($tags);
+                return $mock_pages[$i]['tags'];
+            }
+        }
+        return false;
+    }
+}
+if (!function_exists('has_post_thumbnail')) {
+    function has_post_thumbnail($id = null): bool { return false; }
+}
+if (!function_exists('wp_kses_post')) {
+    function wp_kses_post($s): string { return (string) $s; }
+}
+if (!function_exists('sanitize_textarea_field')) {
+    function sanitize_textarea_field($s): string { return trim(strip_tags((string) $s)); }
 }
 if (!function_exists('get_post_meta')) {
     function get_post_meta(int $id, string $key = '', bool $single = false) {
