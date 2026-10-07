@@ -28,7 +28,8 @@ if (! function_exists('pc_apply_transcript_block')) {
 
         if (strpos($content, $start) !== false && strpos($content, $end) !== false) {
             $pattern = '/' . preg_quote($start, '/') . '.*?' . preg_quote($end, '/') . '/s';
-            return (string) preg_replace($pattern, $wrapped, $content, 1);
+            // Transcript text is literal HTML, not a regex replacement template.
+            return (string) preg_replace_callback($pattern, static fn(): string => $wrapped, $content, 1);
         }
 
         return rtrim($content) . "\n\n" . $wrapped . "\n";
