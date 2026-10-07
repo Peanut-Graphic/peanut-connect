@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   field errors ("The custom slug has already been taken."), for every screen that talks to Hub.
 
 ### Added
+- **Podcast publish applies episode topics as post tags (3.40.0).** `POST /podcast/publish` now
+  reads an optional `tags` array (episode topics sent by Hullabaloo), sanitizes each entry, drops
+  blanks/duplicates, and replaces the post's tags with that list, so a republish reflects the
+  current topics. An absent, empty, or non-array `tags` leaves existing tags untouched, so older
+  Hullabaloo releases never wipe hand-typed tags. The `dry_run` preview now includes the `tags`
+  list it would apply.
 - **Unauthenticated user enumeration is now blocked by default.** Stock WordPress publishes
   the exact login name of any user with content through three public vectors: `/wp-json/wp/v2/users`
   returns it in the `slug` field, `/?author=<id>` 301-redirects to `/author/<login-name>/`, and
