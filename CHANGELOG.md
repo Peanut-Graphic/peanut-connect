@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Transcript backfills preserve literal dollar amounts and backslashes when replacing an existing transcript block; repeated updates no longer interpret transcript text as regular-expression replacement references.
 - **Short links are handed out on the client's own domain.** The campaign builder (link field and
   QR code) and the Short Links list showed Hub's `https://hub.peanutgraphic.com/go/{slug}`, even
   though the plugin's 404 handler already serves `https://client-site/{slug}` by forwarding to that
