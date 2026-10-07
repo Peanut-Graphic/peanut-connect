@@ -17,7 +17,7 @@ const base: Video = {
 };
 
 function renderCard(video: Video = base) {
-  const handlers = { onCopy: vi.fn(), onAnalytics: vi.fn(), onRemove: vi.fn() };
+  const handlers = { onCopy: vi.fn(), onCopyEmbed: vi.fn(), onAnalytics: vi.fn(), onPage: vi.fn(), onRemove: vi.fn() };
   render(<VideoCard video={video} analyticsOpen={false} {...handlers} />);
   return handlers;
 }
@@ -57,12 +57,41 @@ describe('VideoCard', () => {
 
   it('wires the action buttons', () => {
     const h = renderCard();
-    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy shortcode for PTR Cooking' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy embed code for PTR Cooking' }));
     fireEvent.click(screen.getByRole('button', { name: 'Analytics' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create page' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(h.onCopy).toHaveBeenCalledOnce();
+    expect(h.onCopyEmbed).toHaveBeenCalledOnce();
     expect(h.onAnalytics).toHaveBeenCalledOnce();
+    expect(h.onPage).toHaveBeenCalledOnce();
     expect(h.onRemove).toHaveBeenCalledOnce();
+  });
+
+  it('shows duration and 30-day plays when Hub sends them', () => {
+    renderCard({
+      ...base,
+      duration_seconds: 75,
+      stats: { plays_30d: 412, total_plays: 900, avg_watch_seconds_30d: 11, completion_rate_30d: 78 },
+    });
+    expect(screen.getByLabelText('Duration 1:15')).toBeInTheDocument();
+    expect(screen.getByText('412 plays')).toBeInTheDocument();
+  });
+
+  it('omits duration and plays for an older Hub that does not send them', () => {
+    renderCard();
+    expect(screen.queryByLabelText(/^Duration/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/plays?$/)).not.toBeInTheDocument();
+  });
+
+  it('offers Edit page and a preview link once a draft page exists', () => {
+    renderCard({
+      ...base,
+      page: { id: 9, status: 'draft', edit_url: 'https://s/wp-admin/post.php?post=9&action=edit', view_url: 'https://s/?page_id=9&preview=true' },
+    });
+    expect(screen.getByRole('button', { name: 'Edit page' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Preview draft page' })).toHaveAttribute('href', 'https://s/?page_id=9&preview=true');
   });
 });
 

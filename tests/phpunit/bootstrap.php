@@ -1010,6 +1010,61 @@ if (!function_exists('esc_attr')) {
 if (!function_exists('esc_html')) {
     function esc_html(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
 }
+if (!function_exists('esc_html__')) {
+    function esc_html__(string $s, string $domain = 'default'): string { return htmlspecialchars($s, ENT_QUOTES); }
+}
+if (!function_exists('wp_strip_all_tags')) {
+    function wp_strip_all_tags(string $s): string { return trim(strip_tags($s)); }
+}
+// Minimal page store for the videos "Create page" tests: $mock_pages is a
+// list of ['ID'=>int,'status'=>string,'meta'=>[key=>value]].
+if (!function_exists('get_posts')) {
+    function get_posts(array $args = []): array {
+        global $mock_pages;
+        $out = [];
+        foreach ((array) $mock_pages as $p) {
+            foreach ((array) ($args['meta_query'] ?? []) as $q) {
+                $v = $p['meta'][$q['key']] ?? null;
+                if (!in_array($v, (array) $q['value'], true)) {
+                    continue 2;
+                }
+            }
+            $out[] = (object) ['ID' => $p['ID']];
+        }
+        return $out;
+    }
+}
+if (!function_exists('get_post_meta')) {
+    function get_post_meta(int $id, string $key = '', bool $single = false) {
+        global $mock_pages;
+        foreach ((array) $mock_pages as $p) {
+            if ($p['ID'] === $id) {
+                return $p['meta'][$key] ?? '';
+            }
+        }
+        return '';
+    }
+}
+if (!function_exists('get_post_status')) {
+    function get_post_status($id) {
+        global $mock_pages;
+        foreach ((array) $mock_pages as $p) {
+            if ($p['ID'] === (int) $id) {
+                return $p['status'];
+            }
+        }
+        return false;
+    }
+}
+if (!function_exists('get_edit_post_link')) {
+    function get_edit_post_link($id, string $context = 'display'): string { return 'https://site.test/wp-admin/post.php?post=' . (int) $id . '&action=edit'; }
+}
+if (!function_exists('get_permalink')) {
+    function get_permalink($id) { return 'https://site.test/?page_id=' . (int) $id; }
+}
+if (!function_exists('get_preview_post_link')) {
+    function get_preview_post_link($id): string { return 'https://site.test/?page_id=' . (int) $id . '&preview=true'; }
+}
 if (!function_exists('shortcode_atts')) {
     function shortcode_atts(array $defaults, $atts, string $shortcode = ''): array {
         $atts = (array) $atts;
