@@ -37,6 +37,13 @@ class Peanut_Connect_API {
                     'type' => 'string',
                     'sanitize_callback' => 'esc_url_raw',
                 ],
+                // One-time token an operator issues in Hub ("Pair site").
+                // Shape-checked in auto_connect_to_hub(); never stored or logged.
+                'pairing_token' => [
+                    'required' => false,
+                    'type' => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
             ],
         ]);
 
@@ -1018,9 +1025,17 @@ class Peanut_Connect_API {
      * 3. Hub finds the site by URL (must already exist in Hub)
      * 4. Hub stores the key hash and activates the site
      * 5. WordPress saves both Hub URL and API key locally
+     *
+     * Pairing token (peanut-hub#1756): Hub refuses to bind a new key unless
+     * the request carries a one-time `pairing_token` an operator issued for
+     * this site (Hub → site → "Pair site"; 30-minute expiry, single use). The
+     * token is optional here so older Hubs, which ignore unknown fields, keep
+     * working. It is only ever forwarded in the request body: it is never
+     * saved, logged, or echoed back.
      */
     public function auto_connect_to_hub(WP_REST_Request $request): WP_REST_Response {
         $hub_url = $request->get_param('hub_url');
+        $pairing_token = trim((string) $request->get_param('pairing_token'));
 
         if (empty($hub_url)) {
             return new WP_REST_Response([
@@ -1050,11 +1065,32 @@ class Peanut_Connect_API {
             ], 400);
         }
 
+        // Reject a mistyped/mis-pasted token before it leaves the site. The
+        // message never repeats the token.
+        if ($pairing_token !== '' && !self::is_well_formed_pairing_token($pairing_token)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'code' => 'peanut_connect_pairing_token_malformed',
+                'message' => __('That does not look like a Hub pairing token. Copy the whole token from Hub (it starts with "hubpair_").', 'peanut-connect'),
+            ], 400);
+        }
+
         // Generate a random 64-character API key
         $api_key = wp_generate_password(64, false, false);
 
         // Build the connect endpoint URL
         $endpoint = rtrim($hub_url, '/') . '/api/v1/sites/connect';
+
+        $payload = [
+            'site_url' => get_site_url(),
+            'api_key' => $api_key,
+            'connect_version' => PEANUT_CONNECT_VERSION,
+            'wp_version' => get_bloginfo('version'),
+            'php_version' => PHP_VERSION,
+        ];
+        if ($pairing_token !== '') {
+            $payload['pairing_token'] = $pairing_token;
+        }
 
         // Send the key to Hub
         $response = wp_remote_post($endpoint, [
@@ -1062,15 +1098,11 @@ class Peanut_Connect_API {
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
             ],
-            'body' => wp_json_encode([
-                'site_url' => get_site_url(),
-                'api_key' => $api_key,
-                'connect_version' => PEANUT_CONNECT_VERSION,
-                'wp_version' => get_bloginfo('version'),
-                'php_version' => PHP_VERSION,
-            ]),
+            'body' => wp_json_encode($payload),
             'timeout' => 30,
         ]);
+        // The token is single-use and spent (or refused) now; drop every copy.
+        unset($payload, $pairing_token);
 
         if (is_wp_error($response)) {
             return new WP_REST_Response([
@@ -1094,7 +1126,13 @@ class Peanut_Connect_API {
                     $error_message = __('This site is not registered in Hub. Please ask your agency to add this site first.', 'peanut-connect');
                     break;
                 case 'ALREADY_CONNECTED':
-                    $error_message = __('This site is already connected to Hub. Disconnect from Hub first to reconnect.', 'peanut-connect');
+                    $error_message = __('This site is already connected to Hub with a different key. Open this site in Hub and click Pair site, then paste the token here to reconnect.', 'peanut-connect');
+                    break;
+                case 'PAIRING_TOKEN_REQUIRED':
+                    $error_message = __('Open this site in Hub and click Pair site, then paste the token.', 'peanut-connect');
+                    break;
+                case 'PAIRING_TOKEN_INVALID':
+                    $error_message = __('That pairing token is invalid or expired. Create a new one in Hub.', 'peanut-connect');
                     break;
             }
 
@@ -1117,11 +1155,13 @@ class Peanut_Connect_API {
                 Peanut_Connect_Key_Rotation::clear_pending();
             }
 
-            // Log activity
+            // Log activity. Client/agency names are optional in the connect
+            // reply (Hub withholds them until pairing succeeds; older Hubs
+            // always sent them), so never require them.
             Peanut_Connect_Activity_Log::log('hub_connected', 'success', 'Connected to Hub', [
                 'hub_url' => $hub_url,
-                'site_name' => $body['site']['name'] ?? '',
-                'agency' => $body['agency']['name'] ?? '',
+                'site_name' => (string) ($body['site']['name'] ?? ''),
+                'agency' => (string) ($body['agency']['name'] ?? ''),
             ]);
 
             // Send initial heartbeat
@@ -1131,9 +1171,9 @@ class Peanut_Connect_API {
                 'success' => true,
                 'message' => __('Successfully connected to Hub!', 'peanut-connect'),
                 'data' => [
-                    'site' => $body['site'] ?? [],
-                    'client' => $body['client'] ?? [],
-                    'agency' => $body['agency'] ?? [],
+                    'site' => is_array($body['site'] ?? null) ? $body['site'] : [],
+                    'client' => is_array($body['client'] ?? null) ? $body['client'] : [],
+                    'agency' => is_array($body['agency'] ?? null) ? $body['agency'] : [],
                 ],
             ], 200);
         }
@@ -1143,6 +1183,14 @@ class Peanut_Connect_API {
             'success' => false,
             'message' => $body['message'] ?? __('Failed to connect to Hub.', 'peanut-connect'),
         ], $status_code ?: 400);
+    }
+
+    /**
+     * Whether $token has the shape of a Hub pairing token: "hubpair_" plus
+     * 56 alphanumerics (Hub: 'hubpair_' . Str::random(56)).
+     */
+    public static function is_well_formed_pairing_token(string $token): bool {
+        return (bool) preg_match('/^hubpair_[A-Za-z0-9]{56}$/D', $token);
     }
 
     /**

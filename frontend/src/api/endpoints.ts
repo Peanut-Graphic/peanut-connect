@@ -19,18 +19,25 @@ export const settingsApi = {
     return response.data;
   },
 
-  // Hub settings - auto-connect (generates key locally and sends to Hub)
-  autoConnectToHub: async (hubUrl: string): Promise<{
+  // Hub settings - auto-connect (generates key locally and sends to Hub).
+  // `pairingToken` is the one-time token from Hub → site → "Pair site"; it is
+  // omitted when blank so older Hubs (which never asked for one) still work.
+  // Hubs withhold client/agency until pairing succeeds, so treat them as optional.
+  autoConnectToHub: async (hubUrl: string, pairingToken = ''): Promise<{
     success: boolean;
     message: string;
     code?: string;
     data?: {
-      site: Record<string, unknown>;
-      client: Record<string, unknown>;
-      agency: Record<string, unknown>;
+      site?: Record<string, unknown>;
+      client?: Record<string, unknown>;
+      agency?: Record<string, unknown>;
     };
   }> => {
-    const response = await api.post('/settings/hub/connect', { hub_url: hubUrl });
+    const token = pairingToken.trim();
+    const response = await api.post('/settings/hub/connect', {
+      hub_url: hubUrl,
+      ...(token !== '' ? { pairing_token: token } : {}),
+    });
     return response.data;
   },
 
