@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Bundle the Hub form renderer and styles in Connect instead of loading missing Hub assets.
+  Render synchronized public field definitions, including multi-step forms; keep private settings
+  out of HTML. Refresh the browser's WordPress nonce at submit time so cached pages do not retain
+  expired or another user's tokens. Visitor identity remains exclusively request-cookie-derived.
+- Preserve Hub's `type` when synchronizing forms. Specialized enrollment/scheduler, file/signature,
+  and conditional field flows show an unavailable message rather than submit partial data.
+
+
 ### Upgrade notes
 - **Approvers need new personal links.** A sign-off vote now has to come from the approver's own
   link (`?pp_review=…&pp_as=<id>&pp_ak=<key>`) or from a logged-in agency user. Re-send each approver

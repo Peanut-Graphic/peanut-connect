@@ -200,6 +200,28 @@ class Test_Hub_Forms_Auth extends Peanut_Connect_TestCase {
         $this->assertArrayHasKey('X-Peanut-Signature', $headers);
     }
 
+    public function test_renderer_embeds_public_schema_without_private_settings_or_executable_html(): void {
+        $render = new ReflectionMethod('Peanut_Connect_Forms', 'render_hub_form');
+        if (PHP_VERSION_ID < 80100) { $render->setAccessible(true); }
+        $html = $render->invoke(null, [
+            'slug' => 'contact-us',
+            'fields' => [['type' => 'text', 'name' => 'name', 'label' => '</script><script>alert(1)</script>']],
+            'settings' => [
+                'general' => ['submit_button_text' => 'Send'],
+                'notifications' => ['admin_email' => ['recipients' => ['private@example.test']]],
+                'api' => ['secret' => 'secret-value'],
+            ],
+        ]);
+        $this->assertStringContainsString('peanut-form-schema', $html);
+        $this->assertStringNotContainsString('private@example.test', $html);
+        $this->assertStringNotContainsString('secret-value', $html);
+        $this->assertStringNotContainsString('</script><script>', $html);
+        preg_match('/class="peanut-form-schema">(.*?)<\/script>/s', $html, $matches);
+        $schema = json_decode($matches[1], true);
+        $this->assertSame('Send', $schema['button']);
+        $this->assertSame('name', $schema['fields'][0]['name']);
+    }
+
     public function test_sync_from_hub_authenticates_with_bearer(): void {
         $result = Peanut_Connect_Forms::sync_from_hub();
 

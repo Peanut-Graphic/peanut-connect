@@ -1,0 +1,7 @@
+.peanut-form-container form { display: grid; gap: 1rem; max-width: 42rem; }
+.peanut-form-field { display: grid; gap: .35rem; }
+.peanut-form-field input:not([type=checkbox]):not([type=radio]), .peanut-form-field select, .peanut-form-field textarea { width: 100%; box-sizing: border-box; padding: .65rem; border: 1px solid #888; border-radius: .25rem; font: inherit; }
+.peanut-form-field fieldset { display: flex; flex-wrap: wrap; gap: .6rem; }
+.peanut-form-container button { padding: .75rem 1rem; background: var(--peanut-form-primary, #2457a7); color: #fff; border: 0; border-radius: .25rem; font: inherit; cursor: pointer; }
+.peanut-form-container button:disabled { opacity: .7; cursor: wait; }
+.peanut-form-honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
