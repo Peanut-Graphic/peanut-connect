@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Auto-connect accepts a one-time Hub pairing token.** Hub (peanut-hub#1756) no longer binds a
+  new site key on a first-come basis: a site with no active key, or a request with a different
+  key, needs a token an operator creates in Hub (open the site → **Pair site**; 30-minute expiry,
+  single use). Settings → Hub Connection → Auto-connect has a new "Pairing token from Hub" field
+  next to the Hub URL; `POST /peanut-connect/v1/settings/hub/connect` takes an optional
+  `pairing_token`, rejects one that isn't `hubpair_` + 56 letters/digits before contacting Hub,
+  and forwards it as `pairing_token` to `/api/v1/sites/connect`. The token is never stored,
+  logged or echoed back, and the field clears after every attempt. Hub's `PAIRING_TOKEN_REQUIRED`,
+  `PAIRING_TOKEN_INVALID` and `ALREADY_CONNECTED` replies now explain the next step. The connect
+  reply's client/agency names are treated as optional. Hubs without pairing tokens ignore the
+  extra field, so connecting without a token keeps working against them.
+
 ### Fixed
 - **A lost key-rotation reply no longer locks the site out of Hub.** Hub promotes a rotated key
   the moment the confirm request authenticates, retiring the old key. If that reply was lost
