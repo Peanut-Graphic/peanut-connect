@@ -18,22 +18,9 @@ use PHPUnit\Framework\TestCase;
 require_once dirname(__DIR__) . '/includes/class-connect-secret.php';
 require_once dirname(__DIR__) . '/includes/class-connect-auth.php';
 
-// Recording Activity_Log stub. Shares its shape and storage with the stub in
-// Test_Revocation_Detection.php so whichever file loads first, entries land in
-// $GLOBALS['mock_activity_log'] and can be scanned for key material.
-if (!class_exists('Peanut_Connect_Activity_Log')) {
-    class Peanut_Connect_Activity_Log {
-        public static function log(string $type, string $status, $message = '', array $meta = []): void {
-            $GLOBALS['mock_activity_log'][] = compact('type', 'status', 'message', 'meta');
-        }
-        public static function log_disconnect(string $source): void {}
-    }
-}
-if (!class_exists('Peanut_Connect_Health')) {
-    class Peanut_Connect_Health {
-        public function get_health_data(): array { return []; }
-    }
-}
+// Peanut_Connect_Activity_Log is the real class (composer classmap autoload);
+// it writes JSON lines under WP_CONTENT_DIR/peanut-logs, which the leak test
+// scans directly.
 if (!class_exists('Peanut_Connect_Database')) {
     class Peanut_Connect_Database {
         public static function table(string $name): string { return $name; }
@@ -209,10 +196,13 @@ class Test_Key_Rotation_Recovery extends TestCase {
         global $mock_options, $mock_transients, $mock_wp_remote_post, $mock_wp_remote_get;
         $mock_options = [];
         $mock_transients = [];
-        $GLOBALS['mock_activity_log'] = [];
+        @unlink(self::activity_log_file());
         $GLOBALS['mock_wp_salt'] = 'rotation-recovery-salt';
 
         update_option('peanut_connect_hub_url', 'https://hub.example');
+        // Heartbeat builds its payload from the (real, classmap-autoloaded)
+        // Peanut_Connect_Health, which serves this cached snapshot.
+        set_transient('peanut_connect_health', ['cached' => true], 3600);
         Peanut_Connect_Auth::set_hub_api_key(self::OLD_KEY);
 
         $this->hub = new Rotation_Fake_Hub(self::OLD_KEY);
@@ -241,8 +231,12 @@ class Test_Key_Rotation_Recovery extends TestCase {
         }
         ini_set('error_log', (string) $this->previous_error_log);
         @unlink($this->error_log_file);
-        unset($GLOBALS['mock_wp_salt'], $GLOBALS['mock_activity_log']);
+        unset($GLOBALS['mock_wp_salt']);
         parent::tearDown();
+    }
+
+    private static function activity_log_file(): string {
+        return WP_CONTENT_DIR . '/peanut-logs/activity-log.json';
     }
 
     private function stored_key(): string {
@@ -390,9 +384,26 @@ class Test_Key_Rotation_Recovery extends TestCase {
         $this->assertNotNull($this->pending_raw());
     }
 
+    public function test_rotate_completes_an_earlier_unresolved_rotation_instead_of_stacking(): void {
+        $this->hub->confirm_mode = 'timeout_after_commit';
+        $this->hub->gets_down = true;
+        Peanut_Connect_Key_Rotation::rotate(); // HUB holds the new key; plugin unresolved.
+        $proposals = $this->hub->count_calls('POST', '/api/v1/sites/rotate');
+        $this->hub->gets_down = false;
+
+        $r = Peanut_Connect_Key_Rotation::rotate();
+
+        $this->assertTrue($r['success']);
+        $this->assertInSyncWithHub();
+        $this->assertSame($proposals, $this->hub->count_calls('POST', '/api/v1/sites/rotate'));
+        $this->assertNull($this->pending_raw());
+    }
+
     public function test_admin_notice_renders_for_unresolved_rotation(): void {
         $this->assertTrue(method_exists('Peanut_Connect_Key_Rotation', 'render_unresolved_notice'));
-        update_option('peanut_connect_key_rotation_unresolved', time());
+        $this->hub->confirm_mode = 'timeout_after_commit';
+        $this->hub->gets_down = true;
+        Peanut_Connect_Key_Rotation::rotate(); // unresolved
         $GLOBALS['pp_test_user_caps']['manage_options'] = true;
 
         ob_start();
@@ -402,6 +413,11 @@ class Test_Key_Rotation_Recovery extends TestCase {
 
         $this->assertStringContainsString('notice-warning', $html);
         $this->assertStringContainsString('key rotation', $html);
+
+        // Not shown to users who cannot manage options.
+        ob_start();
+        Peanut_Connect_Key_Rotation::render_unresolved_notice();
+        $this->assertSame('', (string) ob_get_clean());
     }
 
     // ------------------------------------------------------------------
@@ -480,13 +496,14 @@ class Test_Key_Rotation_Recovery extends TestCase {
         $this->assertNotSame($new_key, $newest_key);
 
         $haystacks = [
-            'activity log'    => json_encode($GLOBALS['mock_activity_log']),
+            'activity log'    => (string) @file_get_contents(self::activity_log_file()),
             'php error log'   => (string) file_get_contents($this->error_log_file),
             'options (mid)'   => $mid_flight_options,
             'options (final)' => json_encode($GLOBALS['mock_options']),
             'return messages' => json_encode($results),
         ];
-        $this->assertNotEmpty($GLOBALS['mock_activity_log'], 'Rotation outcomes are logged (without keys).');
+        $this->assertStringContainsString('hub_key_rotation_unresolved', $haystacks['activity log'], 'Rotation outcomes are logged (without keys).');
+        $this->assertStringContainsString('hub_key_rotated', $haystacks['activity log']);
         foreach ($haystacks as $where => $text) {
             foreach (['old' => self::OLD_KEY, 'new' => $new_key, 'newest' => $newest_key] as $label => $key) {
                 $this->assertStringNotContainsString($key, (string) $text, "$label key leaked into $where");

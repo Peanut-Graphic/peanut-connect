@@ -200,6 +200,7 @@ final class Peanut_Connect {
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('admin_head', [$this, 'hide_admin_notices_on_react_page']);
         add_action('admin_notices', [$this, 'maybe_show_rekey_notice']);
+        add_action('admin_notices', [Peanut_Connect_Key_Rotation::class, 'render_unresolved_notice']);
 
         // Add settings link to plugins page
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [$this, 'add_settings_link']);

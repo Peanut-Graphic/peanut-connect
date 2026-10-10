@@ -1112,6 +1112,10 @@ class Peanut_Connect_API {
             // Save the Hub URL and API key locally
             $url_saved = update_option('peanut_connect_hub_url', $hub_url);
             $key_saved = Peanut_Connect_Auth::set_hub_api_key($api_key);
+            if ($key_saved && class_exists('Peanut_Connect_Key_Rotation')) {
+                // A fresh pairing supersedes any unresolved rotation.
+                Peanut_Connect_Key_Rotation::clear_pending();
+            }
 
             // Log activity
             Peanut_Connect_Activity_Log::log('hub_connected', 'success', 'Connected to Hub', [
@@ -1207,7 +1211,10 @@ class Peanut_Connect_API {
 
         if ($body_says_success) {
             update_option('peanut_connect_hub_url', $hub_url);
-            Peanut_Connect_Auth::set_hub_api_key($api_key);
+            if (Peanut_Connect_Auth::set_hub_api_key($api_key) && class_exists('Peanut_Connect_Key_Rotation')) {
+                // A fresh pairing supersedes any unresolved rotation.
+                Peanut_Connect_Key_Rotation::clear_pending();
+            }
 
             return new WP_REST_Response([
                 'success' => true,
@@ -2253,7 +2260,10 @@ class Peanut_Connect_API {
 
         // Save API key (only if provided, don't clear existing)
         if (!empty($api_key)) {
-            Peanut_Connect_Auth::set_hub_api_key(sanitize_text_field($api_key));
+            if (Peanut_Connect_Auth::set_hub_api_key(sanitize_text_field($api_key)) && class_exists('Peanut_Connect_Key_Rotation')) {
+                // An admin-entered key supersedes any unresolved rotation.
+                Peanut_Connect_Key_Rotation::clear_pending();
+            }
         }
 
         // Save tracking enabled setting

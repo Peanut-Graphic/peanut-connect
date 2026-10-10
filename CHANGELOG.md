@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **A lost key-rotation reply no longer locks the site out of Hub.** Hub promotes a rotated key
+  the moment the confirm request authenticates, retiring the old key. If that reply was lost
+  (timeout, dropped connection, 5xx after commit) the plugin used to throw the new key away and
+  keep the retired one, so every later Hub request 401'd and the site needed a re-pair. The new
+  key is now stored encrypted as *pending* before it is proposed; a failed confirm is retried
+  (3 attempts, 1 s / 2 s backoff, 45 s budget), then both keys are probed against
+  `GET /api/v1/popups/active` to see which one Hub accepts. If Hub can't be reached, the pending
+  key is kept, an admin notice explains the state, and the next heartbeat retries; a heartbeat
+  401 also tries the pending key once before counting a revocation strike. Key material never
+  reaches logs, plaintext options or messages. If the key can't be stored encrypted, the rotation
+  is aborted before anything is sent to Hub.
 - Transcript backfills preserve literal dollar amounts and backslashes when replacing an existing transcript block; repeated updates no longer interpret transcript text as regular-expression replacement references.
 - **Short links are handed out on the client's own domain.** The campaign builder (link field and
   QR code) and the Short Links list showed Hub's `https://hub.peanutgraphic.com/go/{slug}`, even
