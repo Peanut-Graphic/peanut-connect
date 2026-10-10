@@ -292,8 +292,28 @@ class Peanut_Connect_Feedback {
      * (or re-bootstrapped) independently of the REST route registration.
      */
     public static function boot_frontend(): void {
+        add_action('template_redirect', [self::class, 'disable_page_cache_in_review'], 0);
         add_action('wp_enqueue_scripts', [self::class, 'enqueue']);
         add_action('wp_footer', [self::class, 'render_root']);
+    }
+
+    /**
+     * A page rendered in review mode carries the widget (and, for agency
+     * users, agency-only config). It must never be stored by a page cache
+     * and replayed to the next, non-reviewing visitor: send no-cache headers
+     * and the DONOTCACHEPAGE flag page-cache plugins honor. Runs on
+     * template_redirect, before any output.
+     */
+    public static function disable_page_cache_in_review(): void {
+        if (! self::review_active()) {
+            return;
+        }
+        if (! defined('DONOTCACHEPAGE')) {
+            define('DONOTCACHEPAGE', true);
+        }
+        if (! headers_sent()) {
+            nocache_headers();
+        }
     }
 
     /**
@@ -400,28 +420,19 @@ class Peanut_Connect_Feedback {
             'before'
         );
 
-        // The widget needs the token for its REST calls (X-Peanut-Review-Token).
-        // It can arrive on this request's URL, or — for every page the reviewer
-        // visits after the first — from the pp_review cookie set by
-        // maybe_set_review_cookie(). The cookie is HttpOnly (the widget JS can
-        // never read document.cookie), so it MUST be re-emitted here server-side;
-        // before 3.19.2 cookie-borne reviewers got an empty token and every
-        // note POST after the first page failed with a 401.
-        $token = isset($_GET['pp_review']) ? sanitize_text_field(wp_unslash($_GET['pp_review'])) : '';
-        if ($token === '' && isset($_COOKIE[self::REVIEW_COOKIE])) {
-            $cookie_token = sanitize_text_field(wp_unslash($_COOKIE[self::REVIEW_COOKIE]));
-            $expected     = (string) get_option('peanut_connect_feedback_review_token', '');
-            if ($expected !== '' && $cookie_token !== '' && hash_equals($expected, $cookie_token)) {
-                $token = $cookie_token;
-            }
-        }
+        // The review token is NOT printed into the page. It used to be (from
+        // the URL, or copied out of the HttpOnly pp_review cookie), so a page
+        // cache that stored a reviewer's page handed the token to every later
+        // visitor. The widget now sends the token from its own URL
+        // (?pp_review=) when present, and otherwise marks its requests with
+        // X-Peanut-Review so can_review() reads the HttpOnly cookie itself.
+        // The approver identity (?pp_as / ?pp_ak) is likewise read by the
+        // widget from its own URL.
         wp_localize_script('peanut-connect-feedback', 'peanutConnectFeedback', [
             'restUrl'     => esc_url_raw(rest_url('peanut-connect/v1/feedback')),
             'nonce'       => wp_create_nonce('wp_rest'),
             'isAgency'    => self::is_agency(),
-            'reviewToken' => $token,
             'approvers'   => class_exists('Peanut_Connect_Approvals') ? Peanut_Connect_Approvals::approvers() : [],
-            'youApproverId' => class_exists('Peanut_Connect_Approvals') ? Peanut_Connect_Approvals::you_approver_id() : '',
         ]);
     }
 
@@ -476,7 +487,23 @@ class Peanut_Connect_Feedback {
         $token = (string) $request->get_header('X-Peanut-Review-Token');
         $expected = (string) get_option('peanut_connect_feedback_review_token', '');
 
-        return $expected !== '' && $token !== '' && hash_equals($expected, $token);
+        if (self::token_matches($expected, $token)) {
+            return true;
+        }
+
+        // Cookie-borne reviewer: the HttpOnly pp_review cookie set when they
+        // opened their review link. Honored only on requests carrying the
+        // X-Peanut-Review header the widget adds: a custom header cannot be
+        // sent cross-origin without a CORS preflight that WordPress does not
+        // grant for it, so another site cannot ride the reviewer's cookie.
+        if ((string) $request->get_header('X-Peanut-Review') !== '1') {
+            return false;
+        }
+        $cookie_token = isset($_COOKIE[self::REVIEW_COOKIE]) && is_string($_COOKIE[self::REVIEW_COOKIE])
+            ? sanitize_text_field(wp_unslash($_COOKIE[self::REVIEW_COOKIE]))
+            : '';
+
+        return self::token_matches($expected, $cookie_token);
     }
 
     /**

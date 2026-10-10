@@ -7,18 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **Auto-connect accepts a one-time Hub pairing token.** Hub (peanut-hub#1756) no longer binds a
-  new site key on a first-come basis: a site with no active key, or a request with a different
-  key, needs a token an operator creates in Hub (open the site → **Pair site**; 30-minute expiry,
-  single use). Settings → Hub Connection → Auto-connect has a new "Pairing token from Hub" field
-  next to the Hub URL; `POST /peanut-connect/v1/settings/hub/connect` takes an optional
-  `pairing_token`, rejects one that isn't `hubpair_` + 56 letters/digits before contacting Hub,
-  and forwards it as `pairing_token` to `/api/v1/sites/connect`. The token is never stored,
-  logged or echoed back, and the field clears after every attempt. Hub's `PAIRING_TOKEN_REQUIRED`,
-  `PAIRING_TOKEN_INVALID` and `ALREADY_CONNECTED` replies now explain the next step. The connect
-  reply's client/agency names are treated as optional. Hubs without pairing tokens ignore the
-  extra field, so connecting without a token keeps working against them.
+### Upgrade notes
+- **Approvers need new personal links.** A sign-off vote now has to come from the approver's own
+  link (`?pp_review=…&pp_as=<id>&pp_ak=<key>`) or from a logged-in agency user. Re-send each approver
+  the "Personal review link" shown under End to End > Mark It Up > Approvers. Old links still open
+  review mode and still take notes, but they cannot vote. Rotating the review token revokes every
+  personal link.
+
+### Security
+- **No per-visitor ids or review tokens in cacheable HTML.** The tracker config printed the visitor
+  id and Hub click id into the page, and `tracker.js` preferred those values to the browser's cookie
+  and then wrote them into the cookie. Behind a page cache, every visitor after the first was
+  attached to the first visitor's journey, and `/identify` from any of them relabelled that
+  visitor. The popups config had the same visitor-id leak. `tracker.js` now reads the visitor id
+  from its own `peanut_vid` cookie, or mints a 128-bit id in the browser, and takes the click id
+  only from the URL or its cookie. `popups.js` reads the cookie too. The server no longer prints
+  either id. The feedback widget config also printed the review token, copied out of the HttpOnly
+  `pp_review` cookie, so a cached review page gave the token to anyone. The widget now reads the
+  token from its own URL. Without one, it sends `X-Peanut-Review: 1`, and the REST gate reads the
+  HttpOnly cookie itself. A custom header cannot be sent cross-site without a preflight, so the
+  cookie cannot be ridden from another site. Review-mode pages now send `nocache_headers()` and set
+  `DONOTCACHEPAGE`.
+- **`/identify` is fill-only.** `POST /identify` and `POST /conversion` (with an email) overwrote the
+  visitor's email and name. They now fill a blank email, and a blank name only when the email on
+  record matches. One visitor's identity can no longer be replaced by another's.
+- **`/track` validates `click_id`.** A `click_id` in the request body was stored as sent and shipped
+  to Hub. It must now be a canonical UUID, otherwise the validated URL/cookie value is used. The
+  URL/cookie check is also stricter (8-4-4-4-12), and the `peanut_vid` cookie must be 32 hex characters.
+- **Approver votes are bound to the approver.** `POST /approvals/vote` took `approver_id` from the
+  request body, so anyone with the shared review link could sign off as any approver. A token
+  reviewer must now send that approver's personal key (`X-Peanut-Approver-Key`). The key is
+  HMAC-SHA256 under the auth salt over the approver id and the review token, so it cannot be derived
+  from the shared token. Logged-in agency users can still record any approver's sign-off. The widget
+  takes the identity from `?pp_as`/`?pp_ak` and remembers it.
 
 ### Fixed
 - **A lost key-rotation reply no longer locks the site out of Hub.** Hub promotes a rotated key
@@ -46,6 +67,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   field errors ("The custom slug has already been taken."), for every screen that talks to Hub.
 
 ### Added
+- **Auto-connect accepts a one-time Hub pairing token.** Hub (peanut-hub#1756) no longer binds a
+  new site key on a first-come basis: a site with no active key, or a request with a different
+  key, needs a token an operator creates in Hub (open the site → **Pair site**; 30-minute expiry,
+  single use). Settings → Hub Connection → Auto-connect has a new "Pairing token from Hub" field
+  next to the Hub URL; `POST /peanut-connect/v1/settings/hub/connect` takes an optional
+  `pairing_token`, rejects one that isn't `hubpair_` + 56 letters/digits before contacting Hub,
+  and forwards it as `pairing_token` to `/api/v1/sites/connect`. The token is never stored,
+  logged or echoed back, and the field clears after every attempt. Hub's `PAIRING_TOKEN_REQUIRED`,
+  `PAIRING_TOKEN_INVALID` and `ALREADY_CONNECTED` replies now explain the next step. The connect
+  reply's client/agency names are treated as optional. Hubs without pairing tokens ignore the
+  extra field, so connecting without a token keeps working against them.
 - **Podcast publish applies episode topics as post tags (3.40.0).** `POST /podcast/publish` now
   reads an optional `tags` array (episode topics sent by Hullabaloo), sanitizes each entry, drops
   blanks/duplicates, and replaces the post's tags with that list, so a republish reflects the
