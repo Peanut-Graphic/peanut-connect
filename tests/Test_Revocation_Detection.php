@@ -12,7 +12,12 @@ if (!class_exists('Peanut_Connect_Health')) {
 }
 if (!class_exists('Peanut_Connect_Activity_Log')) {
     class Peanut_Connect_Activity_Log {
-        public static function log(string $type, string $status, int $count, array $ctx = []): void {}
+        // Same shape as the recording stub in Test_Key_Rotation_Recovery.php:
+        // the real signature takes a string message, and entries are kept so
+        // tests can scan them for leaked key material.
+        public static function log(string $type, string $status, $message = '', array $meta = []): void {
+            $GLOBALS['mock_activity_log'][] = compact('type', 'status', 'message', 'meta');
+        }
         public static function log_disconnect(string $source): void {}
     }
 }
