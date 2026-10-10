@@ -18,6 +18,12 @@ if (!defined('ABSPATH')) {
 class Peanut_Connect_Forms {
 
     /**
+     * Body keys the public submit proxy forwards to Hub (Hub's
+     * POST /api/v1/forms/submit contract). Anything else is dropped.
+     */
+    private const SUBMIT_KEYS = ['form_slug', 'data', 'visitor_id', 'session_id', 'metadata'];
+
+    /**
      * Initialize forms functionality
      */
     public static function init(): void {
@@ -65,8 +71,9 @@ class Peanut_Connect_Forms {
 
     /**
      * Public form submission proxy: validate the same-origin nonce, rate-limit,
-     * then forward the submission to Hub server-side with the site key. The key
-     * is read from options here and never leaves the server.
+     * check the slug is a Hub form synced to this site, then forward the
+     * submission to Hub server-side with the site key. The key is read from
+     * options here and never leaves the server.
      */
     public static function handle_public_submit(WP_REST_Request $request): WP_REST_Response {
         // Same-origin nonce (best-effort CSRF guard for an anonymous form).
@@ -94,18 +101,26 @@ class Peanut_Connect_Forms {
         if (!is_array($payload)) {
             $payload = $request->get_params();
         }
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+
+        // Anonymous callers may only submit to a form Hub synced to THIS site.
+        // The site key can reach every agency-wide Hub form, so without this
+        // the proxy would relay any slug a visitor guesses.
+        $slug = $payload['form_slug'] ?? null;
+        if (!is_string($slug) || $slug === '' || !self::is_synced_hub_form($slug)) {
+            return new WP_REST_Response(['success' => false, 'message' => __('Form not found.', 'peanut-connect')], 404);
+        }
+
+        // Forward only Hub's submit contract; Hub derives site and agency from
+        // the key, never from the body.
+        $forward = array_intersect_key($payload, array_flip(self::SUBMIT_KEYS));
 
         $forms_endpoint = trailingslashit($hub_url) . 'api/v1/forms/submit';
-        $forms_body = wp_json_encode($payload);
+        $forms_body = wp_json_encode($forward);
         $response = wp_remote_post($forms_endpoint, [
-            'headers' => array_merge(
-                [
-                    'X-Site-Api-Key' => $api_key,
-                    'Accept' => 'application/json',
-                    'Content-Type' => 'application/json',
-                ],
-                Peanut_Connect_Auth::outbound_signature_headers('POST', $forms_endpoint, $forms_body)
-            ),
+            'headers' => self::hub_headers($api_key, 'POST', $forms_endpoint, $forms_body),
             'body' => $forms_body,
             'timeout' => 15,
         ]);
@@ -121,6 +136,43 @@ class Peanut_Connect_Forms {
             is_array($body) ? $body : ['success' => $code >= 200 && $code < 300],
             ($code >= 200 && $code < 600) ? $code : 502
         );
+    }
+
+    /**
+     * Headers for a request to Hub's site-key API: the same
+     * `Authorization: Bearer` + D-11 signature contract every other outbound
+     * Hub call uses. Hub's ValidateSiteApiKey reads only Bearer / X-Api-Key;
+     * the previous `X-Site-Api-Key` header was ignored, so forms got 401.
+     *
+     * @return array<string,string>
+     */
+    protected static function hub_headers(string $api_key, string $method, string $url, string $body): array {
+        $headers = [
+            'Authorization' => 'Bearer ' . $api_key,
+            'Accept' => 'application/json',
+        ];
+        if ($body !== '') {
+            $headers['Content-Type'] = 'application/json';
+        }
+
+        return array_merge(
+            $headers,
+            Peanut_Connect_Auth::outbound_signature_headers($method, $url, $body)
+        );
+    }
+
+    /**
+     * Whether $slug is an active Hub form synced to this site.
+     */
+    public static function is_synced_hub_form(string $slug): bool {
+        global $wpdb;
+        $table = Peanut_Connect_Database::table('hub_forms');
+
+        $id = $wpdb->get_var(
+            $wpdb->prepare("SELECT id FROM $table WHERE slug = %s AND status = 'active' LIMIT 1", $slug) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        );
+
+        return !empty($id);
     }
 
     /**
@@ -160,13 +212,7 @@ class Peanut_Connect_Forms {
 
         $forms_active_url = trailingslashit($hub_url) . 'api/v1/forms/active';
         $response = wp_remote_get($forms_active_url, [
-            'headers' => array_merge(
-                [
-                    'X-Site-Api-Key' => $api_key,
-                    'Accept' => 'application/json',
-                ],
-                Peanut_Connect_Auth::outbound_signature_headers('GET', $forms_active_url, '')
-            ),
+            'headers' => self::hub_headers($api_key, 'GET', $forms_active_url, ''),
             'timeout' => 30,
         ]);
 
