@@ -23,6 +23,18 @@ class Peanut_Connect_Forms {
      */
     private const SUBMIT_KEYS = ['form_slug', 'data', 'visitor_id', 'session_id', 'metadata'];
 
+    /** The tracker's visitor cookie (Peanut_Connect_Tracker::COOKIE_NAME). */
+    public const VISITOR_COOKIE = 'peanut_vid';
+
+    /**
+     * This request's visitor id from the tracker cookie: 32 hex characters
+     * (the format tracker.js and the server mint), '' when absent or invalid.
+     */
+    public static function visitor_id_from_cookie(): string {
+        $raw = $_COOKIE[self::VISITOR_COOKIE] ?? '';
+        return (is_string($raw) && preg_match('/^[a-f0-9]{32}$/i', $raw)) ? strtolower($raw) : '';
+    }
+
     /**
      * Initialize forms functionality
      */
@@ -116,6 +128,16 @@ class Peanut_Connect_Forms {
         // Forward only Hub's submit contract; Hub derives site and agency from
         // the key, never from the body.
         $forward = array_intersect_key($payload, array_flip(self::SUBMIT_KEYS));
+
+        // The visitor is whoever owns this request's cookie, not whatever id
+        // the page handed the form script (a cached page hands every visitor
+        // the same one). No valid cookie: send no visitor id at all.
+        $visitor_id = self::visitor_id_from_cookie();
+        if ($visitor_id !== '') {
+            $forward['visitor_id'] = $visitor_id;
+        } else {
+            unset($forward['visitor_id']);
+        }
 
         $forms_endpoint = trailingslashit($hub_url) . 'api/v1/forms/submit';
         $forms_body = wp_json_encode($forward);
@@ -406,8 +428,12 @@ class Peanut_Connect_Forms {
      */
     protected static function render_hub_form(array $form, array $options = []): string {
         $form_id = 'peanut-form-' . esc_attr($form['slug']);
-        $visitor_id = Peanut_Connect_Tracker::get_visitor_id();
-        $session_id = wp_generate_uuid4();
+        // No per-visitor values in this markup: page caches serve it to every
+        // visitor. data-visitor-id / data-session-id used to be printed here,
+        // so behind a cache every submission carried the first visitor's ids.
+        // The form script reads the visitor id from the tracker's peanut_vid
+        // cookie and mints its own session id; the submit proxy re-derives
+        // the visitor id from the request cookie (handle_public_submit()).
 
         // Enqueue form assets
         self::enqueue_form_assets();
@@ -425,8 +451,7 @@ class Peanut_Connect_Forms {
         <div id="<?php echo esc_attr($form_id); ?>"
              class="peanut-form-container peanut-form-theme-<?php echo esc_attr($options['theme'] ?? 'default'); ?>"
              data-form-slug="<?php echo esc_attr($form['slug']); ?>"
-             data-visitor-id="<?php echo esc_attr($visitor_id); ?>"
-             data-session-id="<?php echo esc_attr($session_id); ?>"
+             data-visitor-cookie="<?php echo esc_attr(self::VISITOR_COOKIE); ?>"
              style="<?php echo esc_attr($style); ?>">
             <noscript>
                 <p><?php esc_html_e('Please enable JavaScript to use this form.', 'peanut-connect'); ?></p>

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **`[peanut_form]` markup is cache-safe.** The Hub form container printed `data-visitor-id` (the
+  rendering visitor's id) and `data-session-id` into the page. Behind a page cache, every visitor
+  submitted with the first visitor's ids. The markup now carries no per-visitor value. It names the
+  tracker cookie (`data-visitor-cookie="peanut_vid"`) so the form script can read the id itself.
+  The public submit proxy (`POST /forms/submit`) now sets `visitor_id` from the request's own
+  `peanut_vid` cookie, or drops it, and never forwards the body's value.
+
 ### Fixed
 - **Hub forms authenticate to Hub again, and the public submit proxy only relays this site's forms.** Forms sync (`GET /api/v1/forms/active`) and the public submit proxy (`POST /wp-json/peanut-connect/v1/forms/submit`) sent the site key as `X-Site-Api-Key`, which Hub does not read, so both got 401 and Hub forms were broken end to end. They now send `Authorization: Bearer` plus the D-11 signature headers, like every other outbound Hub call. The anonymous proxy now refuses (404, nothing sent to Hub) any `form_slug` that is not an active Hub form synced to this site, forwards only Hub's submit keys (`form_slug`, `data`, `visitor_id`, `session_id`, `metadata`), and keeps its nonce and rate limit.
 - Transcript backfills preserve literal dollar amounts and backslashes when replacing an existing transcript block; repeated updates no longer interpret transcript text as regular-expression replacement references.
