@@ -243,6 +243,10 @@ class Peanut_Connect_Auth {
     public static function clear_hub_api_key(): void {
         delete_option('peanut_connect_hub_api_key');
         delete_option('peanut_connect_hub_key_undecryptable');
+        // A pending rotation key belongs to the pairing being torn down.
+        if (class_exists('Peanut_Connect_Key_Rotation')) {
+            Peanut_Connect_Key_Rotation::clear_pending();
+        }
     }
 
     /**

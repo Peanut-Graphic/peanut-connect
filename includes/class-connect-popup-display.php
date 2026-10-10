@@ -170,11 +170,14 @@ class Peanut_Connect_Popup_Display {
             true
         );
 
+        // Site-wide values only: page caches serve this HTML to every visitor,
+        // so the visitor id is read by popups.js from the browser's own
+        // cookie (it used to be printed here, handing one visitor's id to all).
         wp_localize_script('peanut-connect-popups', 'peanutConnectPopups', [
             'popups' => $popups,
             'restUrl' => rest_url('peanut-connect/v1'),
             'nonce' => wp_create_nonce('wp_rest'),
-            'visitorId' => Peanut_Connect_Tracker::get_visitor_id(),
+            'cookieName' => Peanut_Connect_Tracker::COOKIE_NAME,
         ]);
     }
 
