@@ -100,12 +100,32 @@ The two-phase confirmed swap:
 
 Invariants:
 - The **old key stays valid until the new one is proven.** If `confirm` never
-  arrives, nothing changed — the site keeps working on the old key.
+  *reaches the Hub*, nothing changed — the site keeps working on the old key.
 - A **pending window expires after 15 minutes** and is garbage-collected
   **hourly** by `sites:purge-expired-key-rotations` (scheduled in the Hub), which
   only clears the pending slot — it never touches the active key.
-- Therefore a partial/failed rotation degrades to "stayed on the current key,"
-  not a lockout.
+
+**The lost-reply case (edge ≥ the release after 3.40.0).** If `confirm` reaches
+the Hub and the Hub promotes, but the edge never sees a 2xx (timeout, dropped
+connection, 5xx after commit), the old key is already retired. Edges before this
+fix discarded the new key here and locked themselves out (every request 401,
+then the 2×401 rule cleared the key → re-pair). The edge now:
+
+1. Stores the new key **encrypted, as pending** (`peanut_connect_hub_pending_key`,
+   autoload off) **before** proposing. Never logged, never plaintext.
+2. Retries `confirm` with the new key — 3 attempts total, 1 s then 2 s backoff,
+   inside a 45 s budget.
+3. Then probes `GET /api/v1/popups/active` with the **new** key, then the **old**:
+   new key 2xx → adopt it; new key 401 **and** old key 2xx → keep the old key and
+   drop the pending one; anything else (network error, 5xx, 429) → keep the
+   pending key, show the admin notice, retry on the next heartbeat.
+4. On any heartbeat `401` with the active key, tries the pending key once before
+   counting a revocation strike.
+
+The pending key is dropped only on proof it is dead, or on unpair/re-pair. A
+rotation lock (`peanut_connect_key_rotation_lock`) keeps the admin button, the
+heartbeat-triggered rotation and the cron retry from interleaving, and a new
+rotation is refused while an earlier one is unresolved.
 
 ## 5. Edge firmware requirement
 
@@ -122,6 +142,7 @@ Invariants:
 | Site shows "re-pair" notice unexpectedly | WP salts rotated → A5 key underivable (`peanut_connect_hub_key_undecryptable`) | Re-pair the site. (Tracked hardening: #56 / D-13 may move derivation off `wp_salt`.) |
 | Site never rotates despite being overdue | Edge < 3.14.0 ignores the signal | Update the plugin to ≥ 3.14.0 (verify the auto-updater is wired — uppercase install dirs broke it historically). |
 | Rotation "didn't take" | `confirm` didn't reach the Hub within 15 min | Harmless — site stayed on the old key; it will be signaled again next heartbeat. |
+| Admin notice: "a Hub key rotation could not be confirmed" | Hub unreachable during/after `confirm`; the new key is held as pending (`peanut_connect_key_rotation_unresolved` set) | None normally — the next heartbeat probes both keys and settles it. If it persists past a day, check Hub reachability from the site, then re-pair. |
 | Need to cut access now | Compromise / offboarding | Hub **Revoke** action — immediate. |
 
 ## 7. Quick reference

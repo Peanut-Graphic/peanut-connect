@@ -26,7 +26,7 @@ class Peanut_Connect_Approvals {
     const HISTORY_CAP = 200;
 
     /** Query params that never distinguish a page (mirror pageKey() in feedback.js). */
-    const STRIP_PARAMS = ['pp_review', 'pp_note', 'pp_as', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid'];
+    const STRIP_PARAMS = ['pp_review', 'pp_note', 'pp_as', 'pp_ak', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid'];
 
     /** Option: normalized paths currently flagged ready for review. */
     const READY_OPTION = 'peanut_connect_approvals_ready';
@@ -121,6 +121,42 @@ class Peanut_Connect_Approvals {
             }
         }
         return '';
+    }
+
+    /**
+     * Per-approver key carried by that approver's personal review link
+     * (?pp_as=<id>&pp_ak=<key>). HMAC-SHA256 under the site's auth salt over
+     * the approver id and the current review token, so it cannot be derived
+     * from the shared review token, and rotating the review token revokes
+     * every approver link with it. '' when no review token is set.
+     */
+    public static function approver_key(string $approver_id): string {
+        $review_token = (string) get_option('peanut_connect_feedback_review_token', '');
+        if ($review_token === '' || $approver_id === '') {
+            return '';
+        }
+        return substr(hash_hmac('sha256', 'pca-approver|' . strtolower($approver_id) . '|' . $review_token, wp_salt('auth')), 0, 32);
+    }
+
+    /** Constant-time check of an approver key. */
+    public static function approver_key_matches(string $approver_id, string $candidate): bool {
+        $expected = self::approver_key($approver_id);
+        return $expected !== '' && $candidate !== '' && hash_equals($expected, $candidate);
+    }
+
+    /**
+     * Whether this request may record a vote for $approver_id. An agency user
+     * (logged in, agency capability) may record any approver's sign-off. A
+     * reviewer on the shared review token may vote only as the approver whose
+     * personal key they present (X-Peanut-Approver-Key); before this, the
+     * body's approver_id was taken on trust, so anyone with the review link
+     * could sign off as any approver.
+     */
+    public static function may_vote_as(\WP_REST_Request $request, string $approver_id): bool {
+        if (Peanut_Connect_Feedback::can_review_agency($request)) {
+            return true;
+        }
+        return self::approver_key_matches($approver_id, (string) $request->get_header('X-Peanut-Approver-Key'));
     }
 
     /** The ?pp_as identity on this request, '' when absent or unknown. */
@@ -503,6 +539,13 @@ class Peanut_Connect_Approvals {
         if ($approver === null) {
             return new \WP_Error('pca_bad_approver', __('Unknown approver.', 'peanut-connect'), ['status' => 400]);
         }
+        if (! self::may_vote_as($request, $approver['id'])) {
+            return new \WP_Error(
+                'pca_not_your_approver',
+                __('Only this approver can sign off here. Open your personal approval link to vote.', 'peanut-connect'),
+                ['status' => 403]
+            );
+        }
 
         // A NO with a reason becomes a real Mark It Up note so it flows to
         // Hub with everything else. Failure to post the note never blocks
@@ -610,7 +653,7 @@ class Peanut_Connect_Approvals {
         <?php endif; ?>
         <p><a class="button" href="<?php echo esc_url(add_query_arg('pca_view', 'record')); ?>"><?php esc_html_e('View sign-off record', 'peanut-connect'); ?></a></p>
         <p style="max-width:640px">
-            <?php esc_html_e('Approvers appear as initials chips in the Mark It Up panel ("Click your initials to approve"). Anyone with review access can click a chip — this is a lightweight sign-off, not an authenticated signature.', 'peanut-connect'); ?>
+            <?php esc_html_e('Approvers appear as initials chips in the Mark It Up panel ("Click your initials to approve"). Each approver signs off through their own personal link below; the shared review link can leave notes but cannot vote as an approver. Agency users can record any approver\'s sign-off. Changing the review token revokes every personal link.', 'peanut-connect'); ?>
         </p>
 
         <form method="post">
@@ -634,7 +677,7 @@ class Peanut_Connect_Approvals {
                             <input type="text" name="pca_name[]" value="<?php echo esc_attr($row['name']); ?>" class="regular-text" />
                             <?php if ($review_token !== '') : ?>
                                 <br /><input type="text" class="large-text code" readonly onclick="this.select()"
-                                    value="<?php echo esc_attr(add_query_arg(['pp_review' => $review_token, 'pp_as' => $row['id']], home_url('/'))); ?>"
+                                    value="<?php echo esc_attr(add_query_arg(['pp_review' => $review_token, 'pp_as' => $row['id'], 'pp_ak' => self::approver_key($row['id'])], home_url('/'))); ?>"
                                     aria-label="<?php esc_attr_e('Personal review link', 'peanut-connect'); ?>" />
                             <?php endif; ?>
                         </td>

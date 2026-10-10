@@ -440,9 +440,27 @@ class Peanut_Connect_Hub_Sync {
 
     /**
      * Send heartbeat to hub
+     *
+     * Hooked to cron, where WordPress passes an empty-string argument, so the
+     * public signature takes no parameters; the one-shot post-heal retry goes
+     * through heartbeat() directly.
      */
     public static function send_heartbeat(): array {
+        return self::heartbeat(false);
+    }
+
+    /**
+     * @param bool $healed True on the single retry after a 401 self-heal.
+     */
+    private static function heartbeat(bool $healed): array {
         $hub_url = get_option('peanut_connect_hub_url');
+
+        // Next-cycle retry for a key rotation whose confirm reply was lost:
+        // settle which key HUB accepts before using the active one.
+        if (!$healed && class_exists('Peanut_Connect_Key_Rotation') && Peanut_Connect_Key_Rotation::has_pending()) {
+            Peanut_Connect_Key_Rotation::resolve_pending();
+        }
+
         $api_key = Peanut_Connect_Auth::get_hub_api_key();
 
         if (empty($hub_url) || empty($api_key)) {
@@ -494,6 +512,12 @@ class Peanut_Connect_Hub_Sync {
         // Revocation detection: two consecutive 401s clear the key and surface
         // the re-pair notice (A5). A single blip does not kill a live pairing.
         if ($status_code === 401) {
+            // Self-heal: HUB may have promoted a pending rotation key whose
+            // confirm reply never arrived. Try it once before taking a strike.
+            if (!$healed && class_exists('Peanut_Connect_Key_Rotation') && Peanut_Connect_Key_Rotation::heal_after_unauthorized()) {
+                self::reset_auth_failures();
+                return self::heartbeat(true);
+            }
             self::register_auth_failure();
             return [
                 'success' => false,

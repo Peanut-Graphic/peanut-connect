@@ -7,7 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+- **Approvers need new personal links.** A sign-off vote now has to come from the approver's own
+  link (`?pp_review=…&pp_as=<id>&pp_ak=<key>`) or from a logged-in agency user. Re-send each approver
+  the "Personal review link" shown under End to End > Mark It Up > Approvers. Old links still open
+  review mode and still take notes, but they cannot vote. Rotating the review token revokes every
+  personal link.
+
+### Security
+- **No per-visitor ids or review tokens in cacheable HTML.** The tracker config printed the visitor
+  id and Hub click id into the page, and `tracker.js` preferred those values to the browser's cookie
+  and then wrote them into the cookie. Behind a page cache, every visitor after the first was
+  attached to the first visitor's journey, and `/identify` from any of them relabelled that
+  visitor. The popups config had the same visitor-id leak. `tracker.js` now reads the visitor id
+  from its own `peanut_vid` cookie, or mints a 128-bit id in the browser, and takes the click id
+  only from the URL or its cookie. `popups.js` reads the cookie too. The server no longer prints
+  either id. The feedback widget config also printed the review token, copied out of the HttpOnly
+  `pp_review` cookie, so a cached review page gave the token to anyone. The widget now reads the
+  token from its own URL. Without one, it sends `X-Peanut-Review: 1`, and the REST gate reads the
+  HttpOnly cookie itself. A custom header cannot be sent cross-site without a preflight, so the
+  cookie cannot be ridden from another site. Review-mode pages now send `nocache_headers()` and set
+  `DONOTCACHEPAGE`.
+- **`/identify` is fill-only.** `POST /identify` and `POST /conversion` (with an email) overwrote the
+  visitor's email and name. They now fill a blank email, and a blank name only when the email on
+  record matches. One visitor's identity can no longer be replaced by another's.
+- **`/track` validates `click_id`.** A `click_id` in the request body was stored as sent and shipped
+  to Hub. It must now be a canonical UUID, otherwise the validated URL/cookie value is used. The
+  URL/cookie check is also stricter (8-4-4-4-12), and the `peanut_vid` cookie must be 32 hex characters.
+- **Approver votes are bound to the approver.** `POST /approvals/vote` took `approver_id` from the
+  request body, so anyone with the shared review link could sign off as any approver. A token
+  reviewer must now send that approver's personal key (`X-Peanut-Approver-Key`). The key is
+  HMAC-SHA256 under the auth salt over the approver id and the review token, so it cannot be derived
+  from the shared token. Logged-in agency users can still record any approver's sign-off. The widget
+  takes the identity from `?pp_as`/`?pp_ak` and remembers it.
+
 ### Fixed
+- **A lost key-rotation reply no longer locks the site out of Hub.** Hub promotes a rotated key
+  the moment the confirm request authenticates, retiring the old key. If that reply was lost
+  (timeout, dropped connection, 5xx after commit) the plugin used to throw the new key away and
+  keep the retired one, so every later Hub request 401'd and the site needed a re-pair. The new
+  key is now stored encrypted as *pending* before it is proposed; a failed confirm is retried
+  (3 attempts, 1 s / 2 s backoff, 45 s budget), then both keys are probed against
+  `GET /api/v1/popups/active` to see which one Hub accepts. If Hub can't be reached, the pending
+  key is kept, an admin notice explains the state, and the next heartbeat retries; a heartbeat
+  401 also tries the pending key once before counting a revocation strike. Key material never
+  reaches logs, plaintext options or messages. If the key can't be stored encrypted, the rotation
+  is aborted before anything is sent to Hub.
 - **Hub forms authenticate to Hub again, and the public submit proxy only relays this site's forms.** Forms sync (`GET /api/v1/forms/active`) and the public submit proxy (`POST /wp-json/peanut-connect/v1/forms/submit`) sent the site key as `X-Site-Api-Key`, which Hub does not read, so both got 401 and Hub forms were broken end to end. They now send `Authorization: Bearer` plus the D-11 signature headers, like every other outbound Hub call. The anonymous proxy now refuses (404, nothing sent to Hub) any `form_slug` that is not an active Hub form synced to this site, forwards only Hub's submit keys (`form_slug`, `data`, `visitor_id`, `session_id`, `metadata`), and keeps its nonce and rate limit.
 - Transcript backfills preserve literal dollar amounts and backslashes when replacing an existing transcript block; repeated updates no longer interpret transcript text as regular-expression replacement references.
 - **Short links are handed out on the client's own domain.** The campaign builder (link field and
