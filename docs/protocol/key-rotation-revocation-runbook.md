@@ -80,7 +80,15 @@ compromise, offboarding, or a decommissioned install.
   re-pair notice requires edge ≥ 3.14.0.
 - **Recovery:** re-pair the site (generate a new key and reconnect) via the edge's
   re-pair notice / Settings. There is no "un-revoke" — a revoked key is gone by
-  design.
+  design. With Hub ≥ peanut-hub#1756, re-pairing needs a one-time **pairing
+  token**: in Hub, open the site and click **Pair site** (30-minute expiry, single
+  use), then paste it into Settings → Hub Connection → Auto-connect → "Pairing
+  token from Hub". Without it Hub answers `PAIRING_TOKEN_REQUIRED` (no active
+  key) or `ALREADY_CONNECTED` (a different active key); a wrong, expired, used or
+  other-site token is `PAIRING_TOKEN_INVALID`. The edge never stores or logs the
+  token. Edges older than the pairing-token release cannot send one, so they can
+  only re-pair via "Use existing API key" with a key from Hub's **Regenerate API
+  key**.
 
 ---
 
@@ -152,7 +160,7 @@ rotation is refused while an earlier one is unresolved.
 | Scheduled rotate | heartbeat, when `isKeyRotationDue()` | two-phase swap | none |
 | On-demand rotate | Hub "Rotate key" / edge Settings | two-phase swap | none |
 | Revoke | Hub "Revoke" | immediate hash clear → 401 → re-pair | n/a (intended) |
-| Re-pair | edge re-pair notice / Settings | new key issued | — |
+| Re-pair | Hub "Pair site" token → edge Settings (auto-connect) | new key bound with the one-time token | — |
 
 **Endpoints:** `POST /api/v1/sites/rotate` (propose), `POST /api/v1/sites/rotate/confirm` (confirm).
 **Default cadence:** 90 days. **Pending TTL:** 15 min, GC'd hourly. **Min edge for rotation:** 3.14.0.

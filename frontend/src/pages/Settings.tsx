@@ -38,6 +38,7 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { formatRelative } from '@/utils/date';
+import { isWellFormedPairingToken } from '@/utils/pairingToken';
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -49,6 +50,10 @@ export default function Settings() {
   // server's own value below when the site is already paired.
   const [hubUrl, setHubUrl] = useState('');
   const [hubApiKey, setHubApiKey] = useState('');
+  // One-time Hub pairing token. Held only in component state for the single
+  // request and cleared after every attempt (it is spent either way).
+  const [pairingToken, setPairingToken] = useState('');
+  const pairingTokenMalformed = pairingToken.trim() !== '' && !isWellFormedPairingToken(pairingToken);
   const [hubConnectMode, setHubConnectMode] = useState<'auto' | 'manual'>('auto');
   const [showHubDisconnectModal, setShowHubDisconnectModal] = useState(false);
 
@@ -67,15 +72,18 @@ export default function Settings() {
 
   // Hub mutations
   const autoConnectHubMutation = useMutation({
-    mutationFn: () => settingsApi.autoConnectToHub(hubUrl),
+    mutationFn: () => settingsApi.autoConnectToHub(hubUrl, pairingToken),
     onSuccess: (data) => {
       toast.success(data.message || 'Successfully connected to Hub!');
       queryClient.invalidateQueries({ queryKey: ['settings'] });
     },
     onError: (err: Error & { code?: string }) => {
+      // The server maps Hub's PAIRING_TOKEN_* / ALREADY_CONNECTED codes to
+      // actionable copy, so surface its message as-is.
       const errorMessage = err.message || 'Failed to connect to Hub';
       toast.error(errorMessage);
     },
+    onSettled: () => setPairingToken(''),
   });
 
   const manualConnectHubMutation = useMutation({
@@ -628,8 +636,9 @@ export default function Settings() {
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">2</span>
                   <span>
-                    <strong>Auto-connect</strong> — enter your Hub URL and Connect generates a fresh API key
-                    automatically. Use this for sites that have never been connected before.
+                    <strong>Auto-connect</strong> — enter your Hub URL and a pairing token (in Hub, open this site
+                    and click <em>Pair site</em>). Connect generates a fresh API key automatically. Use this for new
+                    sites and for re-pairing a site that was disconnected or revoked.
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
@@ -637,7 +646,7 @@ export default function Settings() {
                   <span>
                     <strong>Use existing API key</strong> — paste both the Hub URL and the API key from{' '}
                     Hub → Sites → your site. Use this for sites that already have an active connection in Hub
-                    (auto-connect refuses to overwrite an active key).
+                    (auto-connect needs a pairing token to replace an active key).
                   </span>
                 </li>
               </ol>
@@ -680,10 +689,38 @@ export default function Settings() {
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="settings-hub-pairing-token">Pairing token from Hub</label>
+                  <input id="settings-hub-pairing-token"
+                    type="text"
+                    value={pairingToken}
+                    onChange={(e) => setPairingToken(e.target.value)}
+                    placeholder="hubpair_…"
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-invalid={pairingTokenMalformed}
+                    aria-describedby={
+                      pairingTokenMalformed
+                        ? 'settings-hub-pairing-token-help settings-hub-pairing-token-error'
+                        : 'settings-hub-pairing-token-help'
+                    }
+                    className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                      pairingTokenMalformed ? 'border-red-500' : 'border-slate-300'
+                    }`}
+                  />
+                  <p id="settings-hub-pairing-token-help" className="text-xs text-slate-500 mt-1">
+                    In Hub, open this site and click Pair site, then paste the token here. Tokens expire after 30 minutes and work once.
+                  </p>
+                  {pairingTokenMalformed && (
+                    <p id="settings-hub-pairing-token-error" className="text-xs text-red-700 mt-1" role="alert">
+                      That does not look like a Hub pairing token. Copy the whole token from Hub (it starts with "hubpair_").
+                    </p>
+                  )}
+                </div>
                 <Button
                   onClick={() => autoConnectHubMutation.mutate()}
                   loading={autoConnectHubMutation.isPending}
-                  disabled={!hubUrl}
+                  disabled={!hubUrl || pairingTokenMalformed}
                   icon={<Link2 className="w-4 h-4" />}
                 >
                   Connect to Hub

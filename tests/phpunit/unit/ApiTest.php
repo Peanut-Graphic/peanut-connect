@@ -146,6 +146,179 @@ class ApiTest extends TestCase {
         $this->assertSame('Bearer hub-secret', $GLOBALS['peanut_last_http']['args']['headers']['Authorization']);
     }
 
+    // ---------------------------------------------------------------------
+    // Auto-connect with a Hub pairing token (peanut-hub#1756)
+    // ---------------------------------------------------------------------
+
+    private const PAIRING_TOKEN = 'hubpair_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOpQrSt';
+
+    public function test_auto_connect_forwards_pairing_token_to_hub(): void {
+        $calls = $this->recordHub(200, $this->hubConnectSuccessBody());
+
+        $response = $this->api->auto_connect_to_hub($this->autoConnectRequest(self::PAIRING_TOKEN));
+
+        $this->assertSame(200, $response->status);
+        $this->assertTrue($response->data['success']);
+        $connect = $this->connectCall($calls);
+        $this->assertNotNull($connect, 'connect endpoint was never called');
+        $body = json_decode($connect['args']['body'], true);
+        $this->assertSame(self::PAIRING_TOKEN, $body['pairing_token']);
+        $this->assertSame(64, strlen($body['api_key']));
+        // The key Hub accepted is the key saved locally.
+        $this->assertSame($body['api_key'], Peanut_Connect_Auth::get_hub_api_key());
+    }
+
+    public function test_auto_connect_trims_a_pasted_pairing_token(): void {
+        $calls = $this->recordHub(200, $this->hubConnectSuccessBody());
+
+        $this->api->auto_connect_to_hub($this->autoConnectRequest("  " . self::PAIRING_TOKEN . "\n"));
+
+        $body = json_decode($this->connectCall($calls)['args']['body'], true);
+        $this->assertSame(self::PAIRING_TOKEN, $body['pairing_token']);
+    }
+
+    public function test_auto_connect_omits_pairing_token_when_none_given(): void {
+        $calls = $this->recordHub(200, $this->hubConnectSuccessBody());
+
+        $response = $this->api->auto_connect_to_hub($this->autoConnectRequest());
+
+        $this->assertTrue($response->data['success']);
+        $body = json_decode($this->connectCall($calls)['args']['body'], true);
+        $this->assertArrayNotHasKey('pairing_token', $body);
+    }
+
+    /**
+     * @dataProvider malformedPairingTokens
+     */
+    public function test_auto_connect_rejects_malformed_pairing_token_before_dispatch(string $token): void {
+        $response = $this->api->auto_connect_to_hub($this->autoConnectRequest($token));
+
+        $this->assertSame(400, $response->status);
+        $this->assertFalse($response->data['success']);
+        $this->assertSame('peanut_connect_pairing_token_malformed', $response->data['code']);
+        $this->assertNull($GLOBALS['peanut_last_http']);
+        $this->assertStringNotContainsString($token, json_encode($response->data));
+    }
+
+    public static function malformedPairingTokens(): array {
+        return [
+            'wrong prefix' => ['hubpaix_' . str_repeat('a', 56)],
+            'too short' => ['hubpair_' . str_repeat('a', 55)],
+            'too long' => ['hubpair_' . str_repeat('a', 57)],
+            'bad character' => ['hubpair_' . str_repeat('a', 55) . '-'],
+            'api key pasted instead' => [str_repeat('a', 64)],
+        ];
+    }
+
+    public function test_auto_connect_never_persists_or_logs_the_pairing_token(): void {
+        $errorLog = tempnam(sys_get_temp_dir(), 'pc-errlog');
+        $previous = ini_set('error_log', $errorLog);
+        try {
+            $this->recordHub(200, $this->hubConnectSuccessBody());
+            $success = $this->api->auto_connect_to_hub($this->autoConnectRequest(self::PAIRING_TOKEN));
+
+            $this->recordHub(403, [
+                'success' => false,
+                'code' => 'PAIRING_TOKEN_INVALID',
+                'message' => 'The pairing token is invalid, expired, or already used.',
+            ]);
+            $failure = $this->api->auto_connect_to_hub($this->autoConnectRequest(self::PAIRING_TOKEN));
+        } finally {
+            ini_set('error_log', (string) $previous);
+        }
+
+        $this->assertTrue($success->data['success']);
+        $this->assertFalse($failure->data['success']);
+        $haystacks = [
+            'options' => serialize($GLOBALS['peanut_test_options']),
+            'transients' => serialize($GLOBALS['peanut_test_transients']),
+            'activity log' => json_encode(\Peanut_Connect_Activity_Log::get_entries()),
+            'error_log' => (string) file_get_contents($errorLog),
+            'success response' => json_encode($success->data),
+            'failure response' => json_encode($failure->data),
+        ];
+        @unlink($errorLog);
+        foreach ($haystacks as $where => $haystack) {
+            $this->assertStringNotContainsString(self::PAIRING_TOKEN, $haystack, "pairing token leaked into $where");
+        }
+    }
+
+    /**
+     * @dataProvider hubConnectErrors
+     */
+    public function test_auto_connect_maps_hub_error_codes(int $status, string $code, string $expected): void {
+        $this->recordHub($status, [
+            'success' => false,
+            'code' => $code,
+            'message' => 'Raw Hub message',
+        ]);
+
+        $response = $this->api->auto_connect_to_hub($this->autoConnectRequest(self::PAIRING_TOKEN));
+
+        $this->assertSame($status, $response->status);
+        $this->assertFalse($response->data['success']);
+        $this->assertSame($code, $response->data['code']);
+        $this->assertSame($expected, $response->data['message']);
+        // A refused pairing saves nothing.
+        $this->assertFalse(get_option('peanut_connect_hub_url'));
+        $this->assertSame('', Peanut_Connect_Auth::get_hub_api_key());
+    }
+
+    public static function hubConnectErrors(): array {
+        return [
+            'token required' => [
+                403,
+                'PAIRING_TOKEN_REQUIRED',
+                'Open this site in Hub and click Pair site, then paste the token.',
+            ],
+            'token invalid' => [
+                403,
+                'PAIRING_TOKEN_INVALID',
+                'That pairing token is invalid or expired. Create a new one in Hub.',
+            ],
+            'already connected' => [
+                409,
+                'ALREADY_CONNECTED',
+                'This site is already connected to Hub with a different key. Open this site in Hub and click Pair site, then paste the token here to reconnect.',
+            ],
+        ];
+    }
+
+    public function test_auto_connect_accepts_legacy_hub_response_with_names(): void {
+        // Pre-#1756 HUB: ignores pairing_token and returns client/agency names.
+        $this->recordHub(200, [
+            'success' => true,
+            'message' => 'Site connected successfully',
+            'site' => ['id' => 7, 'name' => 'Example'],
+            'client' => ['id' => 3, 'name' => 'Client Co'],
+            'agency' => ['id' => 1, 'name' => 'Agency Co'],
+        ]);
+
+        $response = $this->api->auto_connect_to_hub($this->autoConnectRequest(self::PAIRING_TOKEN));
+
+        $this->assertSame(200, $response->status);
+        $this->assertTrue($response->data['success']);
+        $this->assertSame('Client Co', $response->data['data']['client']['name']);
+        $this->assertSame('Agency Co', $response->data['data']['agency']['name']);
+        $this->assertSame('https://hub.example.test', get_option('peanut_connect_hub_url'));
+    }
+
+    public function test_auto_connect_succeeds_without_client_or_agency_in_response(): void {
+        $this->recordHub(200, [
+            'success' => true,
+            'message' => 'Site connected successfully',
+            'site' => ['id' => 7, 'name' => 'Example'],
+        ]);
+
+        $response = $this->api->auto_connect_to_hub($this->autoConnectRequest(self::PAIRING_TOKEN));
+
+        $this->assertSame(200, $response->status);
+        $this->assertTrue($response->data['success']);
+        $this->assertSame([], $response->data['data']['client']);
+        $this->assertSame([], $response->data['data']['agency']);
+        $this->assertNotSame('', Peanut_Connect_Auth::get_hub_api_key());
+    }
+
     public function test_disconnect_hub_succeeds_when_already_disconnected(): void {
         $response = $this->api->disconnect_hub(new WP_REST_Request('POST', '/settings/hub/disconnect'));
 
@@ -287,6 +460,50 @@ class ApiTest extends TestCase {
         $request->set_param('hub_url', $hubUrl);
         $request->set_param('api_key', $apiKey);
         return $request;
+    }
+
+    private function autoConnectRequest(?string $pairingToken = null): WP_REST_Request {
+        $request = new WP_REST_Request('POST', '/settings/hub/connect');
+        $request->set_param('hub_url', 'https://hub.example.test');
+        if ($pairingToken !== null) {
+            $request->set_param('pairing_token', $pairingToken);
+        }
+        return $request;
+    }
+
+    private function hubConnectSuccessBody(): array {
+        // Post-#1756 HUB success shape.
+        return [
+            'success' => true,
+            'message' => 'Site connected successfully',
+            'site' => ['id' => 7, 'name' => 'Example', 'status' => 'active'],
+            'client' => ['id' => 3, 'name' => 'Client Co'],
+            'agency' => ['id' => 1, 'name' => 'Agency Co'],
+        ];
+    }
+
+    /**
+     * Answer every outbound POST with $status/$body and record each call
+     * (the success path also sends a heartbeat, which would otherwise
+     * overwrite $peanut_last_http).
+     */
+    private function recordHub(int $status, array $body): \ArrayObject {
+        $calls = new \ArrayObject();
+        $response = $this->hubResponse($status, $body);
+        $GLOBALS['mock_remote_response'] = static function (string $url, array $args) use ($calls, $response) {
+            $calls[] = ['url' => $url, 'args' => $args];
+            return $response;
+        };
+        return $calls;
+    }
+
+    private function connectCall(\ArrayObject $calls): ?array {
+        foreach ($calls as $call) {
+            if ($call['url'] === 'https://hub.example.test/api/v1/sites/connect') {
+                return $call;
+            }
+        }
+        return null;
     }
 
     private function hubResponse(int $status, array $body): array {
