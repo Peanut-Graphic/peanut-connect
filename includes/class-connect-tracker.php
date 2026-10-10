@@ -93,9 +93,10 @@ class Peanut_Connect_Tracker {
             return self::$visitor_id;
         }
 
-        // Check cookie
-        if (isset($_COOKIE[self::COOKIE_NAME])) {
-            self::$visitor_id = sanitize_text_field($_COOKIE[self::COOKIE_NAME]);
+        // Check cookie (32 hex characters, written by tracker.js)
+        if (isset($_COOKIE[self::COOKIE_NAME]) && is_string($_COOKIE[self::COOKIE_NAME])
+            && preg_match('/^[a-f0-9]{32}$/i', $_COOKIE[self::COOKIE_NAME])) {
+            self::$visitor_id = strtolower($_COOKIE[self::COOKIE_NAME]);
             return self::$visitor_id;
         }
 
@@ -279,7 +280,13 @@ class Peanut_Connect_Tracker {
 
         $table = Peanut_Connect_Database::table('events');
         $utm = self::get_utm_params();
-        $click_id = $data['click_id'] ?? self::get_click_id();
+        // A click id from the request body (POST /track) is caller input: keep
+        // it only when it is a well-formed UUID, otherwise fall back to the
+        // validated URL/cookie value. Junk ids used to be stored and shipped
+        // to Hub (the sync ships every row WHERE click_id IS NOT NULL).
+        $click_id = self::is_valid_click_id($data['click_id'] ?? null)
+            ? strtolower((string) $data['click_id'])
+            : self::get_click_id();
 
         $wpdb->insert(
             $table,
@@ -385,23 +392,43 @@ class Peanut_Connect_Tracker {
 
     /**
      * Identify a visitor (attach email/name)
+     *
+     * Fill-only. The public /identify and /conversion routes reach this with
+     * whatever visitor_id the caller names, so an overwrite let anyone who
+     * knew (or, from a cached page, was handed) another visitor's id replace
+     * that visitor's identity. An email is written only when the visitor has
+     * none; a name only when the visitor has none and the email on record is
+     * this one, so a second identity never mixes into the first.
      */
     public static function identify_visitor(string $visitor_id, string $email, ?string $name = null): void {
         global $wpdb;
 
+        $email = sanitize_email($email);
+        if ($email === '' || $visitor_id === '') {
+            return;
+        }
+
         $table = Peanut_Connect_Database::table('visitors');
 
-        $wpdb->update(
-            $table,
-            [
-                'email' => sanitize_email($email),
-                'name' => $name ? sanitize_text_field($name) : null,
-                'synced' => 0,
-            ],
-            ['visitor_id' => $visitor_id],
-            ['%s', '%s', '%d'],
-            ['%s']
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE $table SET email = %s, synced = 0 WHERE visitor_id = %s AND (email IS NULL OR email = '')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $email,
+                $visitor_id
+            )
         );
+
+        $name = $name ? sanitize_text_field($name) : '';
+        if ($name !== '') {
+            $wpdb->query(
+                $wpdb->prepare(
+                    "UPDATE $table SET name = %s, synced = 0 WHERE visitor_id = %s AND email = %s AND (name IS NULL OR name = '')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                    $name,
+                    $visitor_id,
+                    $email
+                )
+            );
+        }
     }
 
     /**
@@ -459,8 +486,8 @@ class Peanut_Connect_Tracker {
         // Check URL first (new visit from Hub short link)
         if (isset($_GET['click_id'])) {
             $click_id = sanitize_text_field($_GET['click_id']);
-            // Validate it looks like a UUID
-            if (preg_match('/^[a-f0-9\-]{36}$/i', $click_id)) {
+            // Validate it is a UUID (Hub issues and validates click ids as UUIDs)
+            if (self::is_valid_click_id($click_id)) {
                 self::$click_id = $click_id;
                 // Cookie will be set via JavaScript for better compatibility
                 return self::$click_id;
@@ -479,7 +506,7 @@ class Peanut_Connect_Tracker {
         foreach ($cookie_names as $name) {
             if (isset($_COOKIE[$name])) {
                 $click_id = sanitize_text_field($_COOKIE[$name]);
-                if (preg_match('/^[a-f0-9\-]{36}$/i', $click_id)) {
+                if (self::is_valid_click_id($click_id)) {
                     self::$click_id = $click_id;
                     return self::$click_id;
                 }
@@ -487,6 +514,16 @@ class Peanut_Connect_Tracker {
         }
 
         return null;
+    }
+
+    /**
+     * Whether a value is a Hub click id: a canonical 8-4-4-4-12 hex UUID,
+     * the same shape Hub's journey API validates (Laravel 'uuid'). The old
+     * check accepted any 36 characters of hex and dashes.
+     */
+    public static function is_valid_click_id($click_id): bool {
+        return is_string($click_id)
+            && (bool) preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $click_id);
     }
 
     /**
@@ -671,16 +708,20 @@ class Peanut_Connect_Tracker {
             true
         );
 
-        // Pass config to script
+        // Pass config to script. Only site-wide values: this lands in the
+        // page HTML, which page caches serve to every later visitor. The
+        // visitor id and click id used to be printed here, so with a page
+        // cache the first visitor's ids were handed to everyone after them
+        // (all attached to one journey, and /identify on any of them
+        // relabelled that visitor). tracker.js now reads both from its own
+        // cookies / the URL and mints a visitor id in the browser.
         wp_localize_script('peanut-connect-tracker', 'peanutConnectTracker', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'restUrl' => rest_url('peanut-connect/v1'),
             'nonce' => wp_create_nonce('peanut_connect_track'),
-            'visitorId' => self::get_visitor_id(),
             'cookieName' => self::COOKIE_NAME,
             'cookieExpiry' => self::COOKIE_EXPIRY,
             // Hub journey tracking
-            'clickId' => self::get_click_id(),
             'clickIdCookie' => self::CLICK_ID_COOKIE,
             'clickIdExpiry' => self::CLICK_ID_EXPIRY,
         ]);
