@@ -12,6 +12,9 @@
  *       would otherwise relay any slug the site key can reach.
  *   (c) the proxy forwards only Hub's submit contract keys and keeps its
  *       rate limit.
+ *   (d) no per-visitor value is printed into the form markup (page caches
+ *       replay it to every visitor), and the proxy takes the visitor id from
+ *       the request's own peanut_vid cookie, never from the body.
  *
  * @package Peanut_Connect
  */
@@ -32,6 +35,26 @@ if (!function_exists('wp_verify_nonce')) {
         return ($GLOBALS['pp_forms_nonce_ok'] ?? true) ? 1 : false;
     }
 }
+// Stand-ins for render_hub_form()'s asset enqueue (guarded).
+if (!function_exists('wp_enqueue_script')) {
+    function wp_enqueue_script(...$args) {}
+}
+if (!function_exists('wp_enqueue_style')) {
+    function wp_enqueue_style(...$args) {}
+}
+if (!function_exists('wp_localize_script')) {
+    function wp_localize_script(...$args) { return true; }
+}
+if (!function_exists('rest_url')) {
+    function rest_url($path = '') { return 'https://site.example/wp-json/' . ltrim((string) $path, '/'); }
+}
+if (!function_exists('wp_create_nonce')) {
+    function wp_create_nonce($action = -1) { return 'nonce'; }
+}
+if (!defined('PEANUT_CONNECT_VERSION')) {
+    define('PEANUT_CONNECT_VERSION', 'test');
+}
+
 if (!class_exists('WP_REST_Response')) {
     class WP_REST_Response {
         public $data;
@@ -239,6 +262,47 @@ class Test_Hub_Forms_Auth extends Peanut_Connect_TestCase {
 
         $this->assertSame(403, $this->status($res));
         $this->assertCount(0, $this->posts);
+    }
+
+    public function test_form_markup_carries_no_per_visitor_ids(): void {
+        $_COOKIE['peanut_vid'] = str_repeat('a', 32);
+        $render = new ReflectionMethod('Peanut_Connect_Forms', 'render_hub_form');
+        if (PHP_VERSION_ID < 80100) {
+            $render->setAccessible(true);
+        }
+
+        $first = (string) $render->invoke(null, ['slug' => 'contact-us', 'settings' => []]);
+        $second = (string) $render->invoke(null, ['slug' => 'contact-us', 'settings' => []]);
+        unset($_COOKIE['peanut_vid']);
+
+        $this->assertStringNotContainsString(str_repeat('a', 32), $first, 'the visitor id must not be printed');
+        $this->assertStringNotContainsString('data-visitor-id', $first);
+        $this->assertStringNotContainsString('data-session-id', $first);
+        $this->assertSame($first, $second, 'markup must be identical for every render (cache-safe)');
+        $this->assertStringContainsString('data-form-slug="contact-us"', $first);
+    }
+
+    public function test_public_submit_takes_the_visitor_from_the_request_cookie(): void {
+        $_COOKIE['peanut_vid'] = str_repeat('b', 32);
+        $this->submit([
+            'form_slug' => 'contact-us',
+            'data' => ['email' => 'jane@example.com'],
+            // What a cached page would have handed this browser.
+            'visitor_id' => str_repeat('a', 32),
+        ]);
+        unset($_COOKIE['peanut_vid']);
+
+        $sent = json_decode($this->posts[0]['args']['body'], true);
+        $this->assertSame(str_repeat('b', 32), $sent['visitor_id']);
+    }
+
+    public function test_public_submit_sends_no_visitor_without_a_valid_cookie(): void {
+        $_COOKIE['peanut_vid'] = '<script>';
+        $this->submit(['form_slug' => 'contact-us', 'data' => ['x' => 'y'], 'visitor_id' => str_repeat('a', 32)]);
+        unset($_COOKIE['peanut_vid']);
+
+        $sent = json_decode($this->posts[0]['args']['body'], true);
+        $this->assertArrayNotHasKey('visitor_id', $sent);
     }
 
     public function test_public_submit_keeps_its_rate_limit(): void {

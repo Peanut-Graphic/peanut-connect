@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   HMAC-SHA256 under the auth salt over the approver id and the review token, so it cannot be derived
   from the shared token. Logged-in agency users can still record any approver's sign-off. The widget
   takes the identity from `?pp_as`/`?pp_ak` and remembers it.
+- **`[peanut_form]` markup is cache-safe.** The Hub form container printed `data-visitor-id` (the
+  rendering visitor's id) and `data-session-id` into the page. Behind a page cache, every visitor
+  submitted with the first visitor's ids. The markup now carries no per-visitor value. It names the
+  tracker cookie (`data-visitor-cookie="peanut_vid"`) so the form script can read the id itself.
+  The public submit proxy (`POST /forms/submit`) now sets `visitor_id` from the request's own
+  `peanut_vid` cookie, or drops it, and never forwards the body's value.
 
 ### Fixed
 - **A lost key-rotation reply no longer locks the site out of Hub.** Hub promotes a rotated key
