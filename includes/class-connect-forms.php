@@ -41,6 +41,8 @@ class Peanut_Connect_Forms {
     public static function init(): void {
         // Register shortcode
         add_shortcode('peanut_form', [__CLASS__, 'shortcode_handler']);
+        add_action('wp_ajax_peanut_forms_nonce', [__CLASS__, 'fresh_form_nonce']);
+        add_action('wp_ajax_nopriv_peanut_forms_nonce', [__CLASS__, 'fresh_form_nonce']);
 
         // Hook into FormFlow submissions if available
         add_action('isf_submission_completed', [__CLASS__, 'handle_formflow_submission'], 10, 2);
@@ -277,7 +279,7 @@ class Peanut_Connect_Forms {
                 'hub_form_id' => $form['id'],
                 'slug' => $form['slug'],
                 'name' => $form['name'],
-                'form_type' => $form['form_type'] ?? 'contact',
+                'form_type' => $form['type'] ?? $form['form_type'] ?? 'contact',
                 'fields' => wp_json_encode($form['fields']),
                 'steps' => !empty($form['steps']) ? wp_json_encode($form['steps']) : null,
                 'settings' => !empty($form['settings']) ? wp_json_encode($form['settings']) : null,
@@ -431,8 +433,7 @@ class Peanut_Connect_Forms {
         // No per-visitor values in this markup: page caches serve it to every
         // visitor. data-visitor-id / data-session-id used to be printed here,
         // so behind a cache every submission carried the first visitor's ids.
-        // The form script reads the visitor id from the tracker's peanut_vid
-        // cookie and mints its own session id; the submit proxy re-derives
+        // The browser mints its own session id; only the submit proxy derives
         // the visitor id from the request cookie (handle_public_submit()).
 
         // Enqueue form assets
@@ -446,6 +447,14 @@ class Peanut_Connect_Forms {
             $style .= '--peanut-form-primary: ' . esc_attr($styling['primary_color']) . ';';
         }
 
+        // Only the public rendering contract goes into cacheable HTML. Never
+        // serialize the full synchronized settings (notifications/credentials).
+        $schema = [
+            'type' => $form['form_type'] ?? 'contact',
+            'fields' => $form['fields'] ?? [],
+            'steps' => $form['steps'] ?? [],
+            'button' => $settings['general']['submit_button_text'] ?? __('Submit', 'peanut-connect'),
+        ];
         ob_start();
         ?>
         <div id="<?php echo esc_attr($form_id); ?>"
@@ -453,6 +462,7 @@ class Peanut_Connect_Forms {
              data-form-slug="<?php echo esc_attr($form['slug']); ?>"
              data-visitor-cookie="<?php echo esc_attr(self::VISITOR_COOKIE); ?>"
              style="<?php echo esc_attr($style); ?>">
+            <script type="application/json" class="peanut-form-schema"><?php echo wp_json_encode($schema, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inert JSON with HTML characters escaped. ?></script>
             <noscript>
                 <p><?php esc_html_e('Please enable JavaScript to use this form.', 'peanut-connect'); ?></p>
             </noscript>
@@ -465,11 +475,11 @@ class Peanut_Connect_Forms {
      * Enqueue form assets
      */
     protected static function enqueue_form_assets(): void {
-        $hub_url = get_option('peanut_connect_hub_url');
+        $asset_url = plugins_url('assets/', dirname(__DIR__) . '/peanut-connect.php');
 
         wp_enqueue_script(
             'peanut-forms',
-            trailingslashit($hub_url) . 'js/peanut-forms.min.js',
+            $asset_url . 'js/forms.js',
             [],
             PEANUT_CONNECT_VERSION,
             true
@@ -477,7 +487,7 @@ class Peanut_Connect_Forms {
 
         wp_enqueue_style(
             'peanut-forms',
-            trailingslashit($hub_url) . 'css/peanut-forms.min.css',
+            $asset_url . 'css/forms.css',
             [],
             PEANUT_CONNECT_VERSION
         );
@@ -488,7 +498,7 @@ class Peanut_Connect_Forms {
         // page leaked the credential to every visitor and breached Hub-blind.
         wp_localize_script('peanut-forms', 'PeanutFormsConfig', [
             'submitUrl' => rest_url('peanut-connect/v1/forms/submit'),
-            'nonce' => wp_create_nonce('wp_rest'),
+            'nonceUrl' => admin_url('admin-ajax.php?action=peanut_forms_nonce'),
             'i18n' => [
                 'submitting' => __('Submitting...', 'peanut-connect'),
                 'error' => __('Something went wrong. Please try again.', 'peanut-connect'),
@@ -497,6 +507,12 @@ class Peanut_Connect_Forms {
                 'invalidPhone' => __('Please enter a valid phone number', 'peanut-connect'),
             ],
         ]);
+    }
+
+    /** Fresh token for this browser, even when the containing page is cached. */
+    public static function fresh_form_nonce(): void {
+        nocache_headers();
+        wp_send_json_success(['nonce' => wp_create_nonce('wp_rest')]);
     }
 
     /**
