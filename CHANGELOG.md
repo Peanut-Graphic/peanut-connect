@@ -181,6 +181,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs immediately when its hook has already fired, and the boot contract is pinned by
   a test that fails if the registration goes back to being too late.
 
+## [3.40.1] - 2026-10-14
+
+### Fixed
+- Database backup exports remove WordPress percent-placeholder tokens after escaping and declare the source connection charset, preserving encoded URLs and Unicode during restores. Existing failed archives are retained; fresh backups and isolated restore verification are required after installing this version.
+
 ## [3.37.0] - 2026-08-16
 
 ### Fixed
