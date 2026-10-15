@@ -181,6 +181,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs immediately when its hook has already fired, and the boot contract is pinned by
   a test that fails if the registration goes back to being too late.
 
+## [3.40.3] - 2026-10-14
+
+### Fixed
+- Include the running Connect version in fresh and forced health measurements, as well as cached responses.
+
 ## [3.40.2] - 2026-10-14
 
 ### Fixed
