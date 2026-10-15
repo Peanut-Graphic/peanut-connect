@@ -40,6 +40,7 @@ class Peanut_Connect_Health {
         }
 
         $data = [
+            'connect' => ['version' => PEANUT_CONNECT_VERSION],
             'wp_version' => self::get_wp_version_data(),
             'php_version' => self::get_php_version_data(),
             'ssl' => self::get_ssl_data(),
