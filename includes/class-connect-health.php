@@ -33,6 +33,8 @@ class Peanut_Connect_Health {
         if (!$force_refresh) {
             $cached = get_transient($cache_key);
             if ($cached !== false) {
+                // Runtime identity is fresh even while expensive measurements are cached.
+                $cached['connect'] = ['version' => PEANUT_CONNECT_VERSION];
                 return $cached;
             }
         }
