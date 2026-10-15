@@ -181,6 +181,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs immediately when its hook has already fired, and the boot contract is pinned by
   a test that fails if the registration goes back to being too late.
 
+## [3.40.2] - 2026-10-14
+
+### Fixed
+- Health responses report the currently running Connect version even when other measurements are cached. This lets HUB verify installed plugin and backup capability versions without changing measurement timestamps.
+
 ## [3.40.1] - 2026-10-14
 
 ### Fixed
