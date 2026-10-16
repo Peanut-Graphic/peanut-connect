@@ -449,7 +449,8 @@ class Peanut_Connect_Health {
         }
 
         return [
-            'plugin_detected' => $detected_backup_plugin,
+            'plugin_detected' => $detected_backup_plugin !== null,
+            'plugin_name' => $detected_backup_plugin,
             'last_backup' => $last_backup,
             'days_since_last' => $days_since_last,
         ];

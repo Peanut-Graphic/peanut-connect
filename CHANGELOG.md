@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Keep heartbeat backup detection boolean, display current HUB validation envelopes, and remove local copies of deleted test submissions without touching production records.
+
 ## [3.41.1] - 2026-10-16
 
 ### Fixed

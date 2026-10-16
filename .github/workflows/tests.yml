@@ -89,7 +89,9 @@ jobs:
         run: vendor/bin/phpunit -c phpunit.legacy-unit.xml
 
       - name: FormFlow Lite bridge regression
-        run: vendor/bin/phpunit --no-configuration tests/Standalone/FormFlowLiteBridgeTest.php
+        run: |
+          vendor/bin/phpunit --no-configuration tests/Standalone/FormFlowLiteBridgeTest.php
+          vendor/bin/phpunit --no-configuration tests/Standalone/HubPayloadContractTest.php
 
       - name: Coverage gate
         run: php coverage-gate.php coverage/clover.xml "$MIN_COVERAGE"

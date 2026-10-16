@@ -25,6 +25,7 @@ namespace {
         public array $rows=[];
         public array $queries=[];
         public bool $fail=false;
+        public function query($sql) { $this->queries[]=$sql; return 0; }
         public function prepare($sql,...$args) { $this->queries[]=$sql; return $args[0] ?? ''; }
         public function get_var($uuid) { return isset($this->rows[$uuid]) ? 1 : null; }
         public function insert($table,$row) { if ($this->fail) return false; $this->rows[$row['submission_uuid']]=$row; return 1; }

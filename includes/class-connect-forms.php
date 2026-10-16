@@ -661,6 +661,7 @@ class Peanut_Connect_Forms {
      * Get unsynced form submissions
      */
     public static function get_unsynced_submissions(int $limit = 100): array {
+        self::cleanup_deleted_formflow_test_submissions();
         self::backfill_formflow_lite_submissions();
         global $wpdb;
         $table = Peanut_Connect_Database::table('form_submissions');
@@ -719,5 +720,18 @@ class Peanut_Connect_Forms {
                 array_merge([current_time('mysql', true)], $ids)
             )
         );
+    }
+    public static function cleanup_deleted_formflow_test_submissions(): void {
+        if (!class_exists('FFFL\\Database\\Database')) return;
+        global $wpdb;
+        $queue = Peanut_Connect_Database::table('form_submissions');
+        $source = $wpdb->prefix . 'fffl_submissions';
+        $wpdb->query("DELETE FROM $queue
+            WHERE source = 'formflow'
+              AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.is_test')) IN ('true', '1')
+              AND JSON_EXTRACT(metadata, '$.formflow_submission_id') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM $source s
+                  WHERE s.id = CAST(JSON_UNQUOTE(JSON_EXTRACT($queue.metadata, '$.formflow_submission_id')) AS UNSIGNED))
+            LIMIT 100");
     }
 }
