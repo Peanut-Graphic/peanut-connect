@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
 ### Fixed
 - Bundle the Hub form renderer and styles in Connect instead of loading missing Hub assets.
   Render synchronized public field definitions, including multi-step forms; keep private settings
@@ -180,6 +181,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   callback was added and the migration silently never executed — since v3.7.24. It now
   runs immediately when its hook has already fired, and the boot contract is pinned by
   a test that fails if the registration goes back to being too late.
+
+## [3.41.0] - 2026-10-16
+
+### Added
+- Opt-in frontend Referrer-Policy, Permissions-Policy and nosniff headers, disabled by default. The option is reported by the security settings reader and the policy is filterable.
+- Preserve existing PHP response headers, skip malformed entries and avoid case-insensitive duplicates. Edge policies added after PHP remain the edge operator’s responsibility.
 
 ## [3.40.5] - 2026-10-16
 
