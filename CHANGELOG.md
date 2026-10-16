@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.41.1] - 2026-10-16
+
+### Fixed
+- Capture FormFlow Lite completion events using its decrypted database API; preserve confirmation and test metadata. Queue each completion once with a stable site-specific identity. Recover missed completed records in bounded sync batches and detect Lite correctly in diagnostics.
+
+
+## [3.41.1] - 2026-10-16
+
+### Fixed
+- Capture FormFlow Lite completion events using its decrypted database API; preserve confirmation and test metadata. Queue each completion once with a stable site-specific identity. Recover missed completed records in bounded sync batches and detect Lite correctly in diagnostics.
+
+
 
 ### Fixed
 - Bundle the Hub form renderer and styles in Connect instead of loading missing Hub assets.

@@ -47,6 +47,7 @@ class Peanut_Connect_Forms {
         // Hook into FormFlow submissions if available
         add_action('isf_submission_completed', [__CLASS__, 'handle_formflow_submission'], 10, 2);
         add_action('formflow_submission_completed', [__CLASS__, 'handle_formflow_submission'], 10, 2);
+        add_action('fffl_enrollment_completed', [__CLASS__, 'handle_formflow_submission'], 10, 2);
 
         // Register REST endpoints
         add_action('rest_api_init', [__CLASS__, 'register_endpoints']);
@@ -56,7 +57,8 @@ class Peanut_Connect_Forms {
      * Check if FormFlow plugin is active
      */
     public static function is_formflow_active(): bool {
-        return class_exists('ISF\\Plugin') || class_exists('FormFlow') || class_exists('FormFlow_Lite');
+        return class_exists('ISF\\Plugin') || class_exists('FormFlow') || class_exists('FormFlow_Lite')
+            || class_exists('FFFL\\Plugin');
     }
 
     /**
@@ -525,9 +527,15 @@ class Peanut_Connect_Forms {
             return;
         }
 
+        // Stable across retries and backfills, and unique across utility sites.
+        $hash = sha1(home_url('/') . '|formflow|' . $instance_id . '|' . $submission_id);
+        $uuid = substr($hash, 0, 8) . '-' . substr($hash, 8, 4) . '-5' . substr($hash, 13, 3)
+            . '-a' . substr($hash, 17, 3) . '-' . substr($hash, 20, 12);
+
         // Record in Connect's unified submissions table
         self::record_submission([
             'source' => 'formflow',
+            'submission_uuid' => $uuid,
             'formflow_instance_id' => $instance_id,
             'visitor_id' => Peanut_Connect_Tracker::get_visitor_id(),
             'form_name' => $submission_data['form_name'],
@@ -536,6 +544,9 @@ class Peanut_Connect_Forms {
                 'ip' => $submission_data['ip'] ?? null,
                 'user_agent' => $submission_data['user_agent'] ?? null,
                 'formflow_submission_id' => $submission_id,
+                'is_test' => $submission_data['is_test'] ?? false,
+                'formflow_status' => $submission_data['status'] ?? 'completed',
+                'confirmation_number' => $submission_data['data']['confirmation_number'] ?? '',
             ],
         ]);
     }
@@ -544,6 +555,24 @@ class Peanut_Connect_Forms {
      * Get FormFlow submission data
      */
     protected static function get_formflow_submission_data($submission_id, $instance_id): ?array {
+        // Lite encrypts form_data at rest. Its database API returns decoded,
+        // decrypted records; reading wp_fffl_submissions directly loses them.
+        if (class_exists('FFFL\\Database\\Database')) {
+            $db = new \FFFL\Database\Database();
+            $submission = $db->get_submission((int) $submission_id);
+            $instance = $db->get_instance((int) $instance_id);
+            if ($submission && $instance && (int) $submission['instance_id'] === (int) $instance_id) {
+                return [
+                    'form_name' => $instance['name'] ?? 'FormFlow Lite Form',
+                    'data' => $submission['form_data'] ?? [],
+                    'ip' => $submission['ip_address'] ?? null,
+                    'user_agent' => $submission['user_agent'] ?? null,
+                    'is_test' => (bool) ($submission['is_test'] ?? false),
+                    'status' => $submission['status'] ?? '',
+                ];
+            }
+            return null;
+        }
         // Try FormFlow Pro
         if (class_exists('ISF\\Database\\Database')) {
             try {
@@ -599,10 +628,14 @@ class Peanut_Connect_Forms {
     public static function record_submission(array $params): string {
         global $wpdb;
 
-        $submission_uuid = wp_generate_uuid4();
+        $submission_uuid = $params['submission_uuid'] ?? wp_generate_uuid4();
         $table = Peanut_Connect_Database::table('form_submissions');
 
-        $wpdb->insert($table, [
+        if ($wpdb->get_var($wpdb->prepare("SELECT id FROM $table WHERE submission_uuid = %s", $submission_uuid))) {
+            return $submission_uuid;
+        }
+
+        $inserted = $wpdb->insert($table, [
             'source' => $params['source'] ?? 'hub',
             'form_id' => $params['form_id'] ?? null,
             'hub_form_id' => $params['hub_form_id'] ?? null,
@@ -617,6 +650,10 @@ class Peanut_Connect_Forms {
             'synced' => 0,
         ]);
 
+        if ($inserted === false && !$wpdb->get_var($wpdb->prepare("SELECT id FROM $table WHERE submission_uuid = %s", $submission_uuid))) {
+            throw new \RuntimeException('Form submission could not be queued for Hub sync.');
+        }
+
         return $submission_uuid;
     }
 
@@ -624,6 +661,7 @@ class Peanut_Connect_Forms {
      * Get unsynced form submissions
      */
     public static function get_unsynced_submissions(int $limit = 100): array {
+        self::backfill_formflow_lite_submissions();
         global $wpdb;
         $table = Peanut_Connect_Database::table('form_submissions');
 
@@ -642,6 +680,25 @@ class Peanut_Connect_Forms {
         }
 
         return $submissions;
+    }
+
+    /** Recover completed Lite records missed by the old bridge, in bounded batches. */
+    public static function backfill_formflow_lite_submissions(): void {
+        if (!class_exists('FFFL\\Database\\Database')) {
+            return;
+        }
+        global $wpdb;
+        $cursor = (int) get_option('peanut_connect_fffl_completed_cursor', 0);
+        $table = $wpdb->prefix . 'fffl_submissions';
+        // Completion alone is mirrored; never enroll or book while backfilling.
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, instance_id FROM $table WHERE id > %d AND status = 'completed' ORDER BY id ASC LIMIT 100",
+            $cursor
+        ), ARRAY_A);
+        foreach ($rows ?: [] as $row) {
+            self::handle_formflow_submission((int) $row['id'], (int) $row['instance_id']);
+            update_option('peanut_connect_fffl_completed_cursor', (int) $row['id'], false);
+        }
     }
 
     /**
