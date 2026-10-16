@@ -181,6 +181,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs immediately when its hook has already fired, and the boot contract is pinned by
   a test that fails if the registration goes back to being too late.
 
+## [3.40.5] - 2026-10-16
+
+### Fixed
+- Use a phone navigation disclosure instead of squeezing content beside the desktop sidebar. Escape and destination selection close the menu and return focus to its button.
+- Preserve the desktop collapse preference when using phone navigation; keep navigation targets at least44px tall.
+- Remove the WordPress admin wrapper right-edge overflow and match its mobile padding.
+- Patch the locked DOMPurify, brace-expansion, js-yaml and source-map-js dependencies to clear the release audit.
+
 ## [3.40.4] - 2026-10-16
 
 ### Security

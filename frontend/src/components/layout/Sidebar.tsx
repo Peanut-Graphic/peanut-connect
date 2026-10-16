@@ -7,33 +7,36 @@ import { getVersion } from '@/api';
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  mobileOpen?: boolean;
+  onNavigate?: (destination: string) => void;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onNavigate }: SidebarProps) {
+  const showLabels = !collapsed || mobileOpen;
   return (
     <aside
+      id="pc-navigation"
       className={clsx(
         // In-content column (sticky), NOT viewport-fixed — must not overlap wp-admin's menu.
-        'sticky top-0 self-start h-[100dvh] overflow-y-auto flex-none bg-white border-r border-slate-200 transition-all duration-300',
-        collapsed ? 'w-16' : 'w-56',
+        'md:sticky md:top-0 self-start max-h-[70dvh] md:max-h-none md:h-[100dvh] overflow-y-auto overscroll-contain flex-none w-full bg-white border-r border-slate-200 transition-all duration-300 motion-reduce:transition-none',
+        mobileOpen ? 'block' : 'hidden md:block',
+        collapsed ? 'md:w-16' : 'md:w-56',
       )}
     >
       {/* Header / collapse toggle */}
-      <div className="h-14 flex items-center justify-between px-4 border-b border-slate-200">
-        {!collapsed ? (
-          <div className="flex items-center gap-2">
+      <div className="h-14 flex items-center justify-between px-2 border-b border-slate-200">
+        {showLabels && (
+          <div className={clsx('flex items-center gap-2', collapsed && 'md:hidden')}>
             <Link2 className="w-5 h-5 text-primary-600" />
             <span className="text-lg font-bold text-primary-600 leading-tight">End to End</span>
           </div>
-        ) : (
-          <Link2 className="w-5 h-5 text-primary-600 mx-auto" />
         )}
         <button
           type="button"
           onClick={onToggle}
           aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
           className={clsx(
-            'p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors',
+            'hidden md:flex items-center justify-center min-h-11 min-w-11 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors',
             collapsed && 'mx-auto',
           )}
         >
@@ -42,11 +45,16 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       {/* Grouped navigation */}
-      <nav className="p-3 space-y-4">
+      <nav aria-label="End to End" className={clsx('p-3 space-y-4', collapsed && 'md:p-2')}>
         {NAV.map((group) => (
           <div key={group.group} className="space-y-1">
-            {!collapsed && (
-              <h3 className="px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {showLabels && (
+              <h3
+                className={clsx(
+                  collapsed && 'md:hidden',
+                  'px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400',
+                )}
+              >
                 {group.group}
               </h3>
             )}
@@ -54,12 +62,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <NavLink
                 key={item.href}
                 to={item.href}
+                onClick={() => onNavigate?.(item.href)}
                 end={item.href === '/'}
                 aria-label={item.label}
                 title={collapsed ? item.label : undefined}
                 className={({ isActive }) =>
                   clsx(
-                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                    'flex items-center gap-3 min-h-11 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                     isActive
                       ? 'bg-primary-50 text-primary-700'
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
@@ -67,7 +76,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 }
               >
                 <item.icon className="w-5 h-5 flex-shrink-0 text-slate-500" />
-                {!collapsed && <span className="flex-1">{item.label}</span>}
+                {showLabels && <span className={clsx('flex-1', collapsed && 'md:hidden')}>{item.label}</span>}
               </NavLink>
             ))}
           </div>
