@@ -181,6 +181,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs immediately when its hook has already fired, and the boot contract is pinned by
   a test that fails if the registration goes back to being too late.
 
+## [3.40.4] - 2026-10-16
+
+### Security
+- Strip nested Git directories and gitfiles from staged release packages, including source-installed Composer dependencies. Reject Git metadata in the final ZIP while preserving the bundled runtime and signed-update verifier. Existing published assets are not replaced.
+
 ## [3.40.3] - 2026-10-14
 
 ### Fixed

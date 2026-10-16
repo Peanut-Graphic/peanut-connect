@@ -174,3 +174,24 @@ jobs:
       # configs-sync and surfaced in the weekly audit. PAR-406.
       - name: Could this be released at all?
         run: bash .peanut/release/verify-release-readiness.sh peanut-connect
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.2"
+          coverage: none
+          tools: composer
+      - name: Reject Git metadata in release artifacts
+        run: bash tests/release-artifact.test.sh
+      - name: Build and inspect an unsigned production artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer install --no-dev --prefer-source --optimize-autoloader --no-interaction
+          source .peanut/release/plugin-release-config.sh
+          peanut_release_config peanut-connect
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          mkdir -p "$stage/peanut-connect"
+          for item in "${INCLUDE[@]}"; do cp -a "$item" "$stage/peanut-connect/"; done
+          bash .peanut/release/package-plugin-artifact.sh "$stage" peanut-connect "$stage/release.zip"
+          unzip -q "$stage/release.zip" -d "$stage/extracted"
+          php -r 'define("ABSPATH", "/tmp/"); require $argv[1]; exit(class_exists("Peanut\\FormCore\\Update\\SignedUpdateGate") ? 0 : 1);' "$stage/extracted/peanut-connect/vendor/autoload.php"
