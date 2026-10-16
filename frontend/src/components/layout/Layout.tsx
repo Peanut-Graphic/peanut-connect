@@ -61,7 +61,7 @@ export default function Layout({ children, title, description, action }: LayoutP
     <div className="min-h-[100dvh] bg-slate-50 flex flex-col md:flex-row">
       {getAppMode() !== 'builder' && (
         <>
-          <div className="bg-white border-b border-slate-200 p-2 md:hidden">
+          <div className="pc-mobile-navigation-bar bg-white border-b border-slate-200 p-2">
             <button
               id="pc-mobile-navigation-toggle"
               ref={mobileToggle}

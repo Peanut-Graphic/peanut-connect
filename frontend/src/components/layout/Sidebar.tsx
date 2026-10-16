@@ -16,10 +16,10 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onNav
   return (
     <aside
       id="pc-navigation"
+      data-mobile-open={mobileOpen}
       className={clsx(
         // In-content column (sticky), NOT viewport-fixed — must not overlap wp-admin's menu.
-        'md:sticky md:top-0 self-start max-h-[70dvh] md:max-h-none md:h-[100dvh] overflow-y-auto overscroll-contain flex-none w-full bg-white border-r border-slate-200 transition-all duration-300 motion-reduce:transition-none',
-        mobileOpen ? 'block' : 'hidden md:block',
+        'pc-sidebar md:sticky md:top-0 self-start max-h-[70dvh] md:max-h-none md:h-[100dvh] overflow-y-auto overscroll-contain flex-none w-full bg-white border-r border-slate-200 transition-all duration-300 motion-reduce:transition-none',
         collapsed ? 'md:w-16' : 'md:w-56',
       )}
     >
@@ -36,7 +36,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onNav
           onClick={onToggle}
           aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
           className={clsx(
-            'hidden md:flex items-center justify-center min-h-11 min-w-11 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors',
+            'pc-sidebar-toggle flex items-center justify-center min-h-11 min-w-11 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors',
             collapsed && 'mx-auto',
           )}
         >

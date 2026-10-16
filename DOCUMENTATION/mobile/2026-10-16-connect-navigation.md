@@ -11,6 +11,8 @@ Date:2026-10-16. Scope: the WordPress admin app wrapper and shared navigation, w
 | Destination navigation remounts the layout and loses focus | Medium | Restore focus after the router reaches the chosen destination; Escape also closes and restores focus |
 | Small navigation controls | Medium | Navigation links and collapse/menu buttons have44px minimum targets |
 
+WordPress’s unlayered `.hidden` utility can override responsive Tailwind visibility; navigation display is therefore controlled by app-scoped selectors and verified with WordPress’s real styles loaded.
+
 The phone menu does not change the persisted desktop collapse preference. Desktop navigation remains an in-content sticky column, outside the WordPress admin menu. Reduced-motion users do not receive the sidebar transition.
 
 ## Validation
