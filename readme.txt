@@ -4,7 +4,7 @@ Tags: campaigns, marketing, utm, popups, monitoring, updates, analytics, forms, 
 Requires at least: 6.0
 Tested up to: 6.4
 Requires PHP: 8.0
-Stable tag: 3.40.4
+Stable tag: 3.40.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,10 @@ Yes. Peanut End to End works on any WordPress site. If Peanut Suite is also inst
 No. The plugin only loads what each page needs — the tracker is a small first-party script, popups and banners are conditional, and admin endpoints only respond to authenticated API requests from your paired Hub.
 
 == Changelog ==
+
+= 3.40.5 =
+* Keep phone navigation collapsible and full-width; close it on Escape or after choosing a page.
+* Remove admin page overflow and preserve the desktop sidebar preference.
 
 = 3.40.4 =
 * Strip nested Git repository metadata from release packages while retaining runtime dependencies and signature verification. Add a regression check against the actual production ZIP.

@@ -283,3 +283,24 @@
 #peanut-connect-app.dark .bg-slate-200 {
   background-color: #334155;
 }
+
+/* WordPress defines an unlayered .hidden utility. Keep responsive navigation
+   visibility scoped here so that rule cannot override Tailwind's media layer. */
+#peanut-connect-app .pc-mobile-navigation-bar {
+  display: none;
+}
+
+#peanut-connect-app .pc-sidebar {
+  display: block;
+}
+
+@media (max-width: 767px) {
+  #peanut-connect-app .pc-mobile-navigation-bar {
+    display: block;
+  }
+
+  #peanut-connect-app .pc-sidebar[data-mobile-open="false"],
+  #peanut-connect-app .pc-sidebar-toggle {
+    display: none;
+  }
+}
