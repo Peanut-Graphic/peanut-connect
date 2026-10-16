@@ -12,6 +12,26 @@ export interface Video {
   created_at: string | null;
   // Always present — Hub's present() returns url('/video/{slug}/embed') (never null).
   embed_url: string;
+  // Older Hubs omit these; treat absence as unknown, not zero.
+  duration_seconds?: number | null;
+  stats?: VideoListStats;
+  // Added by the plugin (not Hub): the WordPress page made for this video, if any.
+  page?: VideoPage | null;
+}
+
+export interface VideoListStats {
+  plays_30d: number;
+  total_plays: number;
+  avg_watch_seconds_30d: number;
+  completion_rate_30d: number;
+}
+
+export interface VideoPage {
+  id: number;
+  status: string;
+  edit_url: string;
+  view_url: string;
+  created?: boolean;
 }
 
 export interface VideoInput {
@@ -49,6 +69,10 @@ export const videosApi = {
   },
   remove: async (id: number): Promise<void> => {
     await api.delete(`/videos/${id}`);
+  },
+  createPage: async (id: number): Promise<VideoPage> => {
+    const res = await api.post(`/videos/${id}/page`);
+    return res.data as VideoPage;
   },
   analytics: async (id: number, days: 7 | 30 | 90 = 30): Promise<VideoAnalytics> => {
     const res = await api.get(`/videos/${id}/analytics`, { params: { days } });

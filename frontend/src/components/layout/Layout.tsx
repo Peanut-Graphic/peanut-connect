@@ -1,5 +1,6 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import Sidebar from './Sidebar';
+import { useLocation } from 'react-router-dom';
 import { getAppMode } from '@/config/appMode';
 
 interface LayoutProps {
@@ -10,8 +11,24 @@ interface LayoutProps {
 }
 
 const COLLAPSE_KEY = 'pc-sidebar-collapsed';
+// Pages remount Layout; carry only the requested destination across that remount.
+let pendingMobileNavigationFocus: string | null = null;
 
 export default function Layout({ children, title, description, action }: LayoutProps) {
+  const { pathname } = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const mobileToggle = useRef<HTMLButtonElement>(null);
+  const closeMobileNavigation = (destination: string) => {
+    if (!mobileOpen) return;
+    pendingMobileNavigationFocus = destination === pathname ? null : destination;
+    setMobileOpen(false);
+    mobileToggle.current?.focus();
+  };
+  useEffect(() => {
+    if (pendingMobileNavigationFocus !== pathname) return;
+    pendingMobileNavigationFocus = null;
+    mobileToggle.current?.focus();
+  }, [pathname]);
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(COLLAPSE_KEY) === '1';
@@ -28,10 +45,42 @@ export default function Layout({ children, title, description, action }: LayoutP
     }
   }, [collapsed]);
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setMobileOpen(false);
+      mobileToggle.current?.focus();
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [mobileOpen]);
+
   return (
-    <div className="min-h-[100dvh] bg-slate-50 flex">
+    <div className="min-h-[100dvh] bg-slate-50 flex flex-col md:flex-row">
       {getAppMode() !== 'builder' && (
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+        <>
+          <div className="pc-mobile-navigation-bar bg-white border-b border-slate-200 p-2">
+            <button
+              id="pc-mobile-navigation-toggle"
+              ref={mobileToggle}
+              type="button"
+              aria-expanded={mobileOpen}
+              aria-controls="pc-navigation"
+              onClick={() => setMobileOpen((open) => !open)}
+              className="min-h-11 px-4 rounded-lg text-primary-700 font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              {mobileOpen ? 'Close navigation' : 'Open navigation'}
+            </button>
+          </div>
+          <Sidebar
+            collapsed={collapsed}
+            onToggle={() => setCollapsed((c) => !c)}
+            mobileOpen={mobileOpen}
+            onNavigate={closeMobileNavigation}
+          />
+        </>
       )}
 
       <div className="flex-1 min-w-0 flex flex-col">

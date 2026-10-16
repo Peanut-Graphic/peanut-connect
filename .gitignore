@@ -7,6 +7,10 @@ vendor/
 /dist/
 # assets/dist/
 
+# Signed release artifacts staged by peanut-meta/scripts/publish-plugin.sh,
+# which copies _publish-<slug>-<version>/ into this working directory.
+/_publish-*/
+
 # IDE
 .idea/
 .vscode/

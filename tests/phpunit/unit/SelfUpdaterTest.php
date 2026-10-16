@@ -62,10 +62,11 @@ class SelfUpdaterTest extends TestCase {
 
         // Mock a response with a newer version
         $mock_remote_response = [
+            'response' => ['code' => 200],
             'body' => json_encode([
                 'plugin_info' => (object) [
                     'version' => '3.0.0',
-                    'download_url' => 'https://example.com/peanut-connect.zip',
+                    'download_url' => 'https://github.com/peanutgraphic/peanut-connect/releases/download/v3.0.0/peanut-connect.zip',
                     'homepage' => 'https://peanutgraphic.com',
                     'tested' => '6.4',
                     'requires_php' => '8.0',
@@ -87,7 +88,7 @@ class SelfUpdaterTest extends TestCase {
 
         $update = $result->response['peanut-connect/peanut-connect.php'];
         $this->assertEquals('3.0.0', $update->new_version);
-        $this->assertEquals('https://example.com/peanut-connect.zip', $update->package);
+        $this->assertEquals('https://github.com/peanutgraphic/peanut-connect/releases/download/v3.0.0/peanut-connect.zip', $update->package);
     }
 
     /**
@@ -98,6 +99,7 @@ class SelfUpdaterTest extends TestCase {
 
         // Mock a response with same version
         $mock_remote_response = [
+            'response' => ['code' => 200],
             'body' => json_encode([
                 'plugin_info' => (object) [
                     'version' => '2.1.3',
@@ -147,6 +149,7 @@ class SelfUpdaterTest extends TestCase {
 
         // Mock an invalid response
         $mock_remote_response = [
+            'response' => ['code' => 200],
             'body' => 'not valid json',
         ];
 
@@ -191,13 +194,14 @@ class SelfUpdaterTest extends TestCase {
         global $mock_remote_response;
 
         $mock_remote_response = [
+            'response' => ['code' => 200],
             'body' => json_encode([
                 'plugin_info' => (object) [
                     'name' => 'Peanut Connect',
                     'version' => '2.1.3',
                     'author' => '<a href="https://peanutgraphic.com">Peanut Graphic</a>',
                     'homepage' => 'https://peanutgraphic.com/peanut-connect',
-                    'download_url' => 'https://example.com/peanut-connect.zip',
+                    'download_url' => 'https://github.com/peanutgraphic/peanut-connect/releases/download/v2.1.3/peanut-connect.zip',
                     'requires' => '6.0',
                     'tested' => '6.4',
                     'requires_php' => '8.0',
@@ -254,6 +258,7 @@ class SelfUpdaterTest extends TestCase {
 
         // First call sets cache
         $mock_remote_response = [
+            'response' => ['code' => 200],
             'body' => json_encode([
                 'plugin_info' => (object) [
                     'version' => '3.0.0',
@@ -271,6 +276,7 @@ class SelfUpdaterTest extends TestCase {
 
         // Change mock response - but cache should be used
         $mock_remote_response = [
+            'response' => ['code' => 200],
             'body' => json_encode([
                 'plugin_info' => (object) [
                     'version' => '4.0.0',
@@ -301,10 +307,11 @@ class SelfUpdaterTest extends TestCase {
         ];
 
         $mock_remote_response = [
+            'response' => ['code' => 200],
             'body' => json_encode([
                 'plugin_info' => (object) [
                     'version' => '3.0.0',
-                    'download_url' => 'https://example.com/peanut-connect.zip',
+                    'download_url' => 'https://github.com/peanutgraphic/peanut-connect/releases/download/v3.0.0/peanut-connect.zip',
                 ],
             ]),
         ];
@@ -346,10 +353,11 @@ class SelfUpdaterTest extends TestCase {
         global $mock_remote_response;
 
         $mock_remote_response = [
+            'response' => ['code' => 200],
             'body' => json_encode([
                 'plugin_info' => (object) [
                     'version' => $remote,
-                    'download_url' => 'https://example.com/plugin.zip',
+                    'download_url' => 'https://github.com/peanutgraphic/peanut-connect/releases/download/test/plugin.zip',
                 ],
             ]),
         ];
@@ -390,10 +398,11 @@ class SelfUpdaterTest extends TestCase {
         global $mock_remote_response;
 
         $mock_remote_response = [
+            'response' => ['code' => 200],
             'body' => json_encode([
                 'plugin_info' => (object) [
                     'version' => '3.0.0',
-                    'download_url' => 'https://example.com/peanut-connect.zip',
+                    'download_url' => 'https://github.com/peanutgraphic/peanut-connect/releases/download/v3.0.0/peanut-connect.zip',
                     'homepage' => 'https://peanutgraphic.com/peanut-connect',
                     'tested' => '6.4',
                     'requires_php' => '8.0',
@@ -414,7 +423,7 @@ class SelfUpdaterTest extends TestCase {
         $this->assertEquals('peanut-connect', $update->slug);
         $this->assertEquals('peanut-connect/peanut-connect.php', $update->plugin);
         $this->assertEquals('3.0.0', $update->new_version);
-        $this->assertEquals('https://example.com/peanut-connect.zip', $update->package);
+        $this->assertEquals('https://github.com/peanutgraphic/peanut-connect/releases/download/v3.0.0/peanut-connect.zip', $update->package);
         $this->assertEquals('https://peanutgraphic.com/peanut-connect', $update->url);
         $this->assertEquals('6.4', $update->tested);
         $this->assertEquals('8.0', $update->requires_php);

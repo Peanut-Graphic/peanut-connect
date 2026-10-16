@@ -40,6 +40,19 @@ class TranscriptBlockTest extends TestCase {
         $this->assertStringNotContainsString('>X<', $out);
     }
 
+    public function test_replacement_preserves_literal_dollars_and_backslashes(): void {
+        $block = '<p>Price: $5; reference: ${1}; path: \\1; literal: $0.</p>';
+        $content = "<p>Before.</p>\n<!-- HB-TRANSCRIPT:start -->\nOLD\n<!-- HB-TRANSCRIPT:end -->\n<p>After.</p>";
+        $expected = "<p>Before.</p>\n<!-- HB-TRANSCRIPT:start -->\n" . $block . "\n<!-- HB-TRANSCRIPT:end -->\n<p>After.</p>";
+
+        $updated = pc_apply_transcript_block($content, $block);
+
+        $this->assertSame($expected, $updated);
+        $this->assertSame($expected, pc_apply_transcript_block($updated, $block));
+        $appended = pc_apply_transcript_block('<p>Before.</p>', $block);
+        $this->assertSame($appended, pc_apply_transcript_block($appended, $block));
+    }
+
     public function test_merge_powerpress_urls_sets_transcript_and_chapters(): void {
         $settings = ['episode_title' => 'Ep', 'pci_transcript' => 0];
         $enclosure = "https://m/a.mp3\n123\naudio/mpeg\n" . serialize($settings);

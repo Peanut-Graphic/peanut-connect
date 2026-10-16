@@ -18,8 +18,11 @@
     }
 
     const config = peanutConnectTracker;
-    let visitorId = config.visitorId;
-    let clickId = config.clickId || null;
+    // Per-visitor ids come from this browser only (cookie / URL), never from
+    // the page config: page caches serve one HTML to every visitor, so an id
+    // printed into it would be shared by all of them.
+    let visitorId = null;
+    let clickId = null;
 
     // Engagement tracking state
     const engagement = {
@@ -55,13 +58,43 @@
 
     function getVisitorFromCookie() {
         const match = document.cookie.match(new RegExp('(^| )' + config.cookieName + '=([^;]+)'));
-        return match ? match[2] : null;
+        return match && VISITOR_ID_RE.test(match[2]) ? match[2].toLowerCase() : null;
+    }
+
+    const VISITOR_ID_RE = /^[a-f0-9]{32}$/i;
+    const CLICK_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    // 128 random bits as 32 hex characters (the server-side format).
+    function generateVisitorId() {
+        const bytes = new Uint8Array(16);
+        if (window.crypto && window.crypto.getRandomValues) {
+            window.crypto.getRandomValues(bytes);
+        } else {
+            for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+        }
+        return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // The visitor id is this browser's own: its cookie, else a fresh one
+    // (persisted at once, so every caller in this page agrees on it).
+    function resolveVisitorId() {
+        return getVisitorFromCookie() || generateVisitorId();
+    }
+
+    function currentVisitorId() {
+        if (!visitorId) {
+            visitorId = resolveVisitorId();
+            if (getVisitorFromCookie() !== visitorId) {
+                setVisitorCookie();
+            }
+        }
+        return visitorId;
     }
 
     function getClickId() {
         const urlParams = new URLSearchParams(window.location.search);
         const urlClickId = urlParams.get('click_id');
-        if (urlClickId && /^[a-f0-9\-]{36}$/i.test(urlClickId)) {
+        if (urlClickId && CLICK_ID_RE.test(urlClickId)) {
             setClickIdCookie(urlClickId);
             return urlClickId;
         }
@@ -78,7 +111,7 @@
     function getClickIdFromCookie() {
         if (!config.clickIdCookie) return null;
         const match = document.cookie.match(new RegExp('(^| )' + config.clickIdCookie + '=([^;]+)'));
-        return match ? match[2] : null;
+        return match && CLICK_ID_RE.test(match[2]) ? match[2] : null;
     }
 
     // Read click_id from any known cookie. The Hub tracker writes `_pnut_cid`;
@@ -129,7 +162,7 @@
 
     function trackEvent(eventType, eventName, eventData = {}) {
         const data = {
-            visitor_id: visitorId,
+            visitor_id: currentVisitorId(),
             event_type: eventType,
             event_name: eventName,
             page_url: window.location.href,
@@ -747,7 +780,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': config.nonce },
             body: JSON.stringify({
-                visitor_id: visitorId,
+                visitor_id: currentVisitorId(),
                 email: email,
                 name: name,
                 properties: properties,
@@ -770,7 +803,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': config.nonce },
             body: JSON.stringify({
-                visitor_id: visitorId,
+                visitor_id: currentVisitorId(),
                 type: type,
                 value: value,
                 ...properties,
@@ -783,10 +816,8 @@
     // ==========================================
 
     function init() {
-        // Ensure visitor cookie is set
-        if (!getVisitorFromCookie()) {
-            setVisitorCookie();
-        }
+        // Resolve this browser's visitor id and make sure its cookie is set.
+        currentVisitorId();
 
         // Check for Hub click_id
         const detectedClickId = getClickId();

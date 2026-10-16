@@ -50,6 +50,19 @@ class Peanut_Connect_Database {
      * Initialize database
      */
     public static function init(): void {
+        // The plugin boots on the `init` hook (peanut_connect_init -- chosen
+        // for translation loading), which fires AFTER plugins_loaded. From
+        // v3.7.24 until this fix, the add_action below therefore registered
+        // on a hook that had already finished firing, and check_db_version()
+        // NEVER ran on any web request -- migrations only happened on plugin
+        // activation. That is how dominionenergyptr.com and the canary both
+        // sat with `Unknown column 'event_name'` INSERT failures for days
+        // while a fully working self-heal sat unreachable beside them.
+        if (did_action('plugins_loaded')) {
+            self::check_db_version();
+            return;
+        }
+
         add_action('plugins_loaded', [__CLASS__, 'check_db_version']);
     }
 

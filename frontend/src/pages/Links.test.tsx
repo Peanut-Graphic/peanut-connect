@@ -6,8 +6,10 @@ import { ToastProvider } from '@/components/common/Toast';
 import Links from './Links';
 
 const listLinks = vi.fn();
-vi.mock('@/api', () => ({
+vi.mock('@/api', async () => ({
   getVersion: () => '0.0.0-test',
+  // Real helper, not a stub — which URL wins is the behaviour under test.
+  preferredShortUrl: (await vi.importActual<typeof import('@/api/marketing')>('@/api/marketing')).preferredShortUrl,
   marketingApi: {
     listLinks: (...a: any[]) => listLinks(...a),
     toggleLink: vi.fn(),
@@ -52,5 +54,30 @@ describe('Links — click-to-call badge', () => {
     // Exactly one "Call" badge — on the tel: link, not the web link.
     const badges = screen.getAllByText('Call');
     expect(badges).toHaveLength(1);
+  });
+});
+
+describe('Links — site-branded short URL', () => {
+  beforeEach(() => listLinks.mockReset());
+
+  it('shows the branded site URL when the plugin supplies one, else Hub\'s', async () => {
+    listLinks.mockResolvedValue({
+      data: [
+        link({
+          id: 1,
+          slug: 'branded',
+          short_url: 'https://hub.example.test/go/branded',
+          branded_url: 'https://client.example.test/branded',
+        }),
+        link({ id: 2, slug: 'collides', short_url: 'https://hub.example.test/go/collides', branded_url: null }),
+      ],
+      meta: { current_page: 1, last_page: 1, per_page: 50, total: 2 },
+    });
+
+    wrap();
+
+    await waitFor(() => expect(screen.getAllByLabelText('Open short link')).toHaveLength(2));
+    const hrefs = screen.getAllByLabelText('Open short link').map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual(['https://client.example.test/branded', 'https://hub.example.test/go/collides']);
   });
 });

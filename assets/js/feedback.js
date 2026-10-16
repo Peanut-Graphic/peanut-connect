@@ -15,6 +15,30 @@
   const cfg = window.peanutConnectFeedback;
   if (!cfg) return;
 
+  // Review credentials come from this browser, never from the page config
+  // (page caches replay one HTML to every visitor). The review token is read
+  // from this page's own URL; without one, requests carry X-Peanut-Review
+  // and the server reads the reviewer's HttpOnly pp_review cookie.
+  const pageParams = (function () { try { return new URL(location.href).searchParams; } catch (e) { return new URLSearchParams(''); } })();
+  const reviewToken = pageParams.get('pp_review') || '';
+
+  // Approver identity: a personal link carries ?pp_as=<id>&pp_ak=<key>; it is
+  // remembered so the identity follows the approver across pages.
+  const APPROVER_KEY = 'ppFeedbackApprover';
+  const approverIdentity = (function () {
+    const id = (pageParams.get('pp_as') || '').toLowerCase();
+    const key = pageParams.get('pp_ak') || '';
+    if (id && key) {
+      try { localStorage.setItem(APPROVER_KEY, JSON.stringify({ id: id, key: key })); } catch (e) { /* storage off */ }
+      return { id: id, key: key };
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(APPROVER_KEY) || 'null');
+      if (saved && typeof saved.id === 'string' && typeof saved.key === 'string' && saved.id && saved.key) return saved;
+    } catch (e) { /* ignore */ }
+    return id ? { id: id, key: '' } : null;
+  })();
+
   const NAME_KEY = 'ppFeedbackReviewerName';
   function reviewerName() {
     let n = localStorage.getItem(NAME_KEY);
@@ -45,15 +69,16 @@
   }
   function isMine(id) { return myNoteIds().indexOf(id) !== -1; }
 
-  function api(method, path, body) {
-    const headers = { 'Content-Type': 'application/json' };
+  function api(method, path, body, extraHeaders) {
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, extraHeaders || {});
     // Send the WP auth nonce for agency users (identity + attribution) and
-    // for logged-in reviewers with no token — the 'users'-mode path, where
-    // the REST gate authenticates them via the wp_rest cookie nonce. Token
-    // reviewers keep the token-only header: on page-cached sites a stale
-    // baked-in nonce would 403 an otherwise-valid token request.
-    if (cfg.nonce && (cfg.isAgency || !cfg.reviewToken)) headers['X-WP-Nonce'] = cfg.nonce;
-    if (cfg.reviewToken) headers['X-Peanut-Review-Token'] = cfg.reviewToken;
+    // for logged-in reviewers with no URL token — the 'users'-mode path,
+    // where the REST gate authenticates them via the wp_rest cookie nonce.
+    // Token reviewers keep the token-only header: on page-cached sites a
+    // stale baked-in nonce would 403 an otherwise-valid token request.
+    if (cfg.nonce && (cfg.isAgency || !reviewToken)) headers['X-WP-Nonce'] = cfg.nonce;
+    if (reviewToken) headers['X-Peanut-Review-Token'] = reviewToken;
+    else headers['X-Peanut-Review'] = '1';
     return fetch(cfg.restUrl.replace(/\/feedback$/, '') + path, {
       method, headers, credentials: 'same-origin',
       body: body ? JSON.stringify(body) : undefined,
@@ -63,7 +88,7 @@
   function pageKey() {
     try {
       const u = new URL(location.href);
-      ['pp_review', 'pp_note', 'pp_as', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid']
+      ['pp_review', 'pp_note', 'pp_as', 'pp_ak', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_cid', 'mc_eid']
         .forEach((k) => u.searchParams.delete(k));
       const qs = u.searchParams.toString();
       return u.pathname + (qs ? '?' + qs : '');
@@ -557,7 +582,8 @@
 
   // ---- approval chips ("Click your initials to approve") ----
   const approvers = Array.isArray(cfg.approvers) ? cfg.approvers : [];
-  const youId = typeof cfg.youApproverId === 'string' ? cfg.youApproverId : '';
+  const you = approverIdentity && approvers.some((a) => a.id === approverIdentity.id) ? approverIdentity : null;
+  const youId = you ? you.id : '';
   let apprVotes = {};
   let readyList = [];
 
@@ -609,7 +635,22 @@
     if (!err) { err = document.createElement('div'); err.className = 'pp-approve-err'; flow.appendChild(err); }
     err.textContent = "couldn't save — try again";
   }
+  // A reviewer signs off only as the approver whose personal key they hold;
+  // agency users may record anyone's sign-off (the server enforces both).
+  function canVoteAs(ap) {
+    return !!cfg.isAgency || !!(you && you.key && ap.id === you.id);
+  }
+  function needPersonalLink(ap) {
+    const flow = panel.querySelector('.pp-approve-flow');
+    flow.innerHTML = ''; flow.hidden = false;
+    const q = document.createElement('div'); q.className = 'pp-approve-q'; q.setAttribute('role', 'status');
+    q.textContent = 'Only ' + ap.name + ' can sign off here. To vote, open your personal approval link (ask the site team if you do not have one).';
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'pp-approve-btn pp-approve-no'; ok.textContent = 'OK';
+    ok.addEventListener('click', () => hideApproveFlow());
+    flow.append(q, ok);
+  }
   function askApprove(ap) {
+    if (!canVoteAs(ap)) { needPersonalLink(ap); return; }
     if (youId && ap.id !== youId) { confirmIdentity(ap); return; }
     askApproveFlow(ap);
   }
@@ -653,10 +694,11 @@
     edit.addEventListener('click', () => hideApproveFlow());
   }
   function sendVote(ap, vote, reason, flow) {
+    const extra = (you && you.key && ap.id === you.id) ? { 'X-Peanut-Approver-Key': you.key } : {};
     api('POST', '/approvals/vote', {
       path: pageKey(), page_title: document.title,
       approver_id: ap.id, vote: vote, reason: reason, author_key: authorKey(),
-    }).then((res) => {
+    }, extra).then((res) => {
       if (res && res.success) {
         apprVotes = res.votes || {};
         readyList = (res && res.ready) || [];

@@ -18,11 +18,31 @@ if (!defined('ABSPATH')) {
 class Peanut_Connect_Forms {
 
     /**
+     * Body keys the public submit proxy forwards to Hub (Hub's
+     * POST /api/v1/forms/submit contract). Anything else is dropped.
+     */
+    private const SUBMIT_KEYS = ['form_slug', 'data', 'visitor_id', 'session_id', 'metadata'];
+
+    /** The tracker's visitor cookie (Peanut_Connect_Tracker::COOKIE_NAME). */
+    public const VISITOR_COOKIE = 'peanut_vid';
+
+    /**
+     * This request's visitor id from the tracker cookie: 32 hex characters
+     * (the format tracker.js and the server mint), '' when absent or invalid.
+     */
+    public static function visitor_id_from_cookie(): string {
+        $raw = $_COOKIE[self::VISITOR_COOKIE] ?? '';
+        return (is_string($raw) && preg_match('/^[a-f0-9]{32}$/i', $raw)) ? strtolower($raw) : '';
+    }
+
+    /**
      * Initialize forms functionality
      */
     public static function init(): void {
         // Register shortcode
         add_shortcode('peanut_form', [__CLASS__, 'shortcode_handler']);
+        add_action('wp_ajax_peanut_forms_nonce', [__CLASS__, 'fresh_form_nonce']);
+        add_action('wp_ajax_nopriv_peanut_forms_nonce', [__CLASS__, 'fresh_form_nonce']);
 
         // Hook into FormFlow submissions if available
         add_action('isf_submission_completed', [__CLASS__, 'handle_formflow_submission'], 10, 2);
@@ -65,8 +85,9 @@ class Peanut_Connect_Forms {
 
     /**
      * Public form submission proxy: validate the same-origin nonce, rate-limit,
-     * then forward the submission to Hub server-side with the site key. The key
-     * is read from options here and never leaves the server.
+     * check the slug is a Hub form synced to this site, then forward the
+     * submission to Hub server-side with the site key. The key is read from
+     * options here and never leaves the server.
      */
     public static function handle_public_submit(WP_REST_Request $request): WP_REST_Response {
         // Same-origin nonce (best-effort CSRF guard for an anonymous form).
@@ -94,18 +115,36 @@ class Peanut_Connect_Forms {
         if (!is_array($payload)) {
             $payload = $request->get_params();
         }
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+
+        // Anonymous callers may only submit to a form Hub synced to THIS site.
+        // The site key can reach every agency-wide Hub form, so without this
+        // the proxy would relay any slug a visitor guesses.
+        $slug = $payload['form_slug'] ?? null;
+        if (!is_string($slug) || $slug === '' || !self::is_synced_hub_form($slug)) {
+            return new WP_REST_Response(['success' => false, 'message' => __('Form not found.', 'peanut-connect')], 404);
+        }
+
+        // Forward only Hub's submit contract; Hub derives site and agency from
+        // the key, never from the body.
+        $forward = array_intersect_key($payload, array_flip(self::SUBMIT_KEYS));
+
+        // The visitor is whoever owns this request's cookie, not whatever id
+        // the page handed the form script (a cached page hands every visitor
+        // the same one). No valid cookie: send no visitor id at all.
+        $visitor_id = self::visitor_id_from_cookie();
+        if ($visitor_id !== '') {
+            $forward['visitor_id'] = $visitor_id;
+        } else {
+            unset($forward['visitor_id']);
+        }
 
         $forms_endpoint = trailingslashit($hub_url) . 'api/v1/forms/submit';
-        $forms_body = wp_json_encode($payload);
+        $forms_body = wp_json_encode($forward);
         $response = wp_remote_post($forms_endpoint, [
-            'headers' => array_merge(
-                [
-                    'X-Site-Api-Key' => $api_key,
-                    'Accept' => 'application/json',
-                    'Content-Type' => 'application/json',
-                ],
-                Peanut_Connect_Auth::outbound_signature_headers('POST', $forms_endpoint, $forms_body)
-            ),
+            'headers' => self::hub_headers($api_key, 'POST', $forms_endpoint, $forms_body),
             'body' => $forms_body,
             'timeout' => 15,
         ]);
@@ -121,6 +160,43 @@ class Peanut_Connect_Forms {
             is_array($body) ? $body : ['success' => $code >= 200 && $code < 300],
             ($code >= 200 && $code < 600) ? $code : 502
         );
+    }
+
+    /**
+     * Headers for a request to Hub's site-key API: the same
+     * `Authorization: Bearer` + D-11 signature contract every other outbound
+     * Hub call uses. Hub's ValidateSiteApiKey reads only Bearer / X-Api-Key;
+     * the previous `X-Site-Api-Key` header was ignored, so forms got 401.
+     *
+     * @return array<string,string>
+     */
+    protected static function hub_headers(string $api_key, string $method, string $url, string $body): array {
+        $headers = [
+            'Authorization' => 'Bearer ' . $api_key,
+            'Accept' => 'application/json',
+        ];
+        if ($body !== '') {
+            $headers['Content-Type'] = 'application/json';
+        }
+
+        return array_merge(
+            $headers,
+            Peanut_Connect_Auth::outbound_signature_headers($method, $url, $body)
+        );
+    }
+
+    /**
+     * Whether $slug is an active Hub form synced to this site.
+     */
+    public static function is_synced_hub_form(string $slug): bool {
+        global $wpdb;
+        $table = Peanut_Connect_Database::table('hub_forms');
+
+        $id = $wpdb->get_var(
+            $wpdb->prepare("SELECT id FROM $table WHERE slug = %s AND status = 'active' LIMIT 1", $slug) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        );
+
+        return !empty($id);
     }
 
     /**
@@ -160,13 +236,7 @@ class Peanut_Connect_Forms {
 
         $forms_active_url = trailingslashit($hub_url) . 'api/v1/forms/active';
         $response = wp_remote_get($forms_active_url, [
-            'headers' => array_merge(
-                [
-                    'X-Site-Api-Key' => $api_key,
-                    'Accept' => 'application/json',
-                ],
-                Peanut_Connect_Auth::outbound_signature_headers('GET', $forms_active_url, '')
-            ),
+            'headers' => self::hub_headers($api_key, 'GET', $forms_active_url, ''),
             'timeout' => 30,
         ]);
 
@@ -209,7 +279,7 @@ class Peanut_Connect_Forms {
                 'hub_form_id' => $form['id'],
                 'slug' => $form['slug'],
                 'name' => $form['name'],
-                'form_type' => $form['form_type'] ?? 'contact',
+                'form_type' => $form['type'] ?? $form['form_type'] ?? 'contact',
                 'fields' => wp_json_encode($form['fields']),
                 'steps' => !empty($form['steps']) ? wp_json_encode($form['steps']) : null,
                 'settings' => !empty($form['settings']) ? wp_json_encode($form['settings']) : null,
@@ -360,8 +430,11 @@ class Peanut_Connect_Forms {
      */
     protected static function render_hub_form(array $form, array $options = []): string {
         $form_id = 'peanut-form-' . esc_attr($form['slug']);
-        $visitor_id = Peanut_Connect_Tracker::get_visitor_id();
-        $session_id = wp_generate_uuid4();
+        // No per-visitor values in this markup: page caches serve it to every
+        // visitor. data-visitor-id / data-session-id used to be printed here,
+        // so behind a cache every submission carried the first visitor's ids.
+        // The browser mints its own session id; only the submit proxy derives
+        // the visitor id from the request cookie (handle_public_submit()).
 
         // Enqueue form assets
         self::enqueue_form_assets();
@@ -374,14 +447,22 @@ class Peanut_Connect_Forms {
             $style .= '--peanut-form-primary: ' . esc_attr($styling['primary_color']) . ';';
         }
 
+        // Only the public rendering contract goes into cacheable HTML. Never
+        // serialize the full synchronized settings (notifications/credentials).
+        $schema = [
+            'type' => $form['form_type'] ?? 'contact',
+            'fields' => $form['fields'] ?? [],
+            'steps' => $form['steps'] ?? [],
+            'button' => $settings['general']['submit_button_text'] ?? __('Submit', 'peanut-connect'),
+        ];
         ob_start();
         ?>
         <div id="<?php echo esc_attr($form_id); ?>"
              class="peanut-form-container peanut-form-theme-<?php echo esc_attr($options['theme'] ?? 'default'); ?>"
              data-form-slug="<?php echo esc_attr($form['slug']); ?>"
-             data-visitor-id="<?php echo esc_attr($visitor_id); ?>"
-             data-session-id="<?php echo esc_attr($session_id); ?>"
+             data-visitor-cookie="<?php echo esc_attr(self::VISITOR_COOKIE); ?>"
              style="<?php echo esc_attr($style); ?>">
+            <script type="application/json" class="peanut-form-schema"><?php echo wp_json_encode($schema, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inert JSON with HTML characters escaped. ?></script>
             <noscript>
                 <p><?php esc_html_e('Please enable JavaScript to use this form.', 'peanut-connect'); ?></p>
             </noscript>
@@ -394,11 +475,11 @@ class Peanut_Connect_Forms {
      * Enqueue form assets
      */
     protected static function enqueue_form_assets(): void {
-        $hub_url = get_option('peanut_connect_hub_url');
+        $asset_url = plugins_url('assets/', dirname(__DIR__) . '/peanut-connect.php');
 
         wp_enqueue_script(
             'peanut-forms',
-            trailingslashit($hub_url) . 'js/peanut-forms.min.js',
+            $asset_url . 'js/forms.js',
             [],
             PEANUT_CONNECT_VERSION,
             true
@@ -406,7 +487,7 @@ class Peanut_Connect_Forms {
 
         wp_enqueue_style(
             'peanut-forms',
-            trailingslashit($hub_url) . 'css/peanut-forms.min.css',
+            $asset_url . 'css/forms.css',
             [],
             PEANUT_CONNECT_VERSION
         );
@@ -417,7 +498,7 @@ class Peanut_Connect_Forms {
         // page leaked the credential to every visitor and breached Hub-blind.
         wp_localize_script('peanut-forms', 'PeanutFormsConfig', [
             'submitUrl' => rest_url('peanut-connect/v1/forms/submit'),
-            'nonce' => wp_create_nonce('wp_rest'),
+            'nonceUrl' => admin_url('admin-ajax.php?action=peanut_forms_nonce'),
             'i18n' => [
                 'submitting' => __('Submitting...', 'peanut-connect'),
                 'error' => __('Something went wrong. Please try again.', 'peanut-connect'),
@@ -426,6 +507,12 @@ class Peanut_Connect_Forms {
                 'invalidPhone' => __('Please enter a valid phone number', 'peanut-connect'),
             ],
         ]);
+    }
+
+    /** Fresh token for this browser, even when the containing page is cached. */
+    public static function fresh_form_nonce(): void {
+        nocache_headers();
+        wp_send_json_success(['nonce' => wp_create_nonce('wp_rest')]);
     }
 
     /**

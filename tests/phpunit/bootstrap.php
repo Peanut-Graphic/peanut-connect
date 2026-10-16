@@ -9,7 +9,7 @@
 
 // Define WordPress constants if not already defined
 if (!defined('ABSPATH')) {
-    define('ABSPATH', '/tmp/wordpress/');
+    define('ABSPATH', sys_get_temp_dir() . '/peanut-connect-wordpress/');
 }
 
 if (!defined('WP_CONTENT_DIR')) {
@@ -346,11 +346,14 @@ if (!class_exists('WP_REST_Response')) {
  * Helper function to reset test state
  */
 function peanut_reset_test_state(): void {
-    global $peanut_test_options, $peanut_test_transients, $peanut_test_shortcodes, $peanut_test_blocks;
+    global $peanut_test_options, $peanut_test_transients, $peanut_test_shortcodes, $peanut_test_blocks, $mock_remote_response, $peanut_last_http, $mock_user_caps;
     $peanut_test_options = [];
     $peanut_test_transients = [];
     $peanut_test_shortcodes = [];
     $peanut_test_blocks = [];
+    $mock_remote_response = null;
+    $peanut_last_http = null;
+    $mock_user_caps = ['manage_options' => true];
 }
 
 // ==========================================
@@ -363,6 +366,7 @@ function peanut_reset_test_state(): void {
 if (!isset($GLOBALS['wpdb'])) {
     $GLOBALS['wpdb'] = new class {
         public string $prefix = 'wp_';
+        public string $options = 'wp_options';
 
         public function prepare(string $query, ...$args): string {
             return sprintf($query, ...$args);
@@ -460,6 +464,12 @@ if (!function_exists('wp_get_themes')) {
                 public function exists(): bool {
                     return true;
                 }
+                public function parent() {
+                    return false;
+                }
+                public function get_screenshot(): string {
+                    return '';
+                }
             },
         ];
     }
@@ -485,6 +495,12 @@ if (!function_exists('wp_get_theme')) {
                 public function exists(): bool {
                     return true;
                 }
+                public function parent() {
+                    return false;
+                }
+                public function get_screenshot(): string {
+                    return '';
+                }
             };
         }
 
@@ -502,6 +518,12 @@ if (!function_exists('wp_get_theme')) {
             }
             public function exists(): bool {
                 return $this->stylesheet === 'twentytwentyfour';
+            }
+            public function parent() {
+                return false;
+            }
+            public function get_screenshot(): string {
+                return '';
             }
         };
     }
@@ -676,6 +698,15 @@ if (!function_exists('current_user_can')) {
 }
 
 /**
+ * Stable WordPress salt for exercising encrypted credential storage.
+ */
+if (!function_exists('wp_salt')) {
+    function wp_salt(string $scheme = 'auth'): string {
+        return 'peanut-connect-test-salt-' . $scheme;
+    }
+}
+
+/**
  * Mock add_action
  */
 if (!function_exists('add_action')) {
@@ -694,6 +725,40 @@ if (!function_exists('add_filter')) {
 }
 
 /**
+ * Mock apply_filters as an identity transform.
+ */
+if (!function_exists('apply_filters')) {
+    function apply_filters(string $hook, $value, ...$args) {
+        return $value;
+    }
+}
+
+/**
+ * Mock wp_trim_words with WordPress's default ellipsis behaviour.
+ */
+if (!function_exists('wp_trim_words')) {
+    function wp_trim_words(string $text, int $num_words = 55, ?string $more = null): string {
+        $more = $more ?? '&hellip;';
+        $words = preg_split('/\s+/', trim(strip_tags($text))) ?: [];
+
+        if (count($words) <= $num_words) {
+            return implode(' ', $words);
+        }
+
+        return implode(' ', array_slice($words, 0, $num_words)) . $more;
+    }
+}
+
+/**
+ * Mock the active theme stylesheet slug used by health reporting.
+ */
+if (!function_exists('get_stylesheet')) {
+    function get_stylesheet(): string {
+        return 'test-theme';
+    }
+}
+
+/**
  * Mock wp_remote_get
  */
 if (!function_exists('wp_remote_get')) {
@@ -701,6 +766,22 @@ if (!function_exists('wp_remote_get')) {
         global $mock_remote_response;
         if (isset($mock_remote_response)) {
             return $mock_remote_response;
+        }
+        return new WP_Error('http_request_failed', 'Mock: No response configured');
+    }
+}
+
+/**
+ * Mock wp_remote_post and retain the dispatched request for contract assertions.
+ */
+if (!function_exists('wp_remote_post')) {
+    function wp_remote_post(string $url, array $args = []) {
+        global $mock_remote_response, $peanut_last_http;
+        $peanut_last_http = ['url' => $url, 'args' => $args];
+        if (isset($mock_remote_response)) {
+            return is_callable($mock_remote_response)
+                ? ($mock_remote_response)($url, $args)
+                : $mock_remote_response;
         }
         return new WP_Error('http_request_failed', 'Mock: No response configured');
     }
@@ -928,6 +1009,144 @@ if (!function_exists('esc_attr')) {
 }
 if (!function_exists('esc_html')) {
     function esc_html(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
+}
+if (!function_exists('esc_html__')) {
+    function esc_html__(string $s, string $domain = 'default'): string { return htmlspecialchars($s, ENT_QUOTES); }
+}
+if (!function_exists('wp_strip_all_tags')) {
+    function wp_strip_all_tags(string $s): string { return trim(strip_tags($s)); }
+}
+// Minimal page/post store for the videos "Create page" and podcast publish
+// tests: $mock_pages is a list of ['ID'=>int,'status'=>string,
+// 'meta'=>[key=>value], optional 'post_type'=>string, 'tags'=>string[]].
+if (!function_exists('get_posts')) {
+    function get_posts(array $args = []): array {
+        global $mock_pages;
+        $out = [];
+        foreach ((array) $mock_pages as $p) {
+            foreach ((array) ($args['meta_query'] ?? []) as $q) {
+                $v = $p['meta'][$q['key']] ?? null;
+                if (!in_array($v, (array) $q['value'], true)) {
+                    continue 2;
+                }
+            }
+            if (isset($args['meta_key'], $args['meta_value'])
+                && ($p['meta'][$args['meta_key']] ?? null) !== $args['meta_value']) {
+                continue;
+            }
+            $out[] = ($args['fields'] ?? '') === 'ids' ? $p['ID'] : (object) ['ID' => $p['ID']];
+        }
+        return $out;
+    }
+}
+if (!function_exists('get_post')) {
+    function get_post($id) {
+        global $mock_pages;
+        foreach ((array) $mock_pages as $p) {
+            if ($p['ID'] === (int) $id) {
+                return (object) ['ID' => $p['ID'], 'post_type' => $p['post_type'] ?? 'page'];
+            }
+        }
+        return null;
+    }
+}
+if (!function_exists('wp_insert_post')) {
+    function wp_insert_post(array $postarr, bool $wp_error = false) {
+        global $mock_pages;
+        $id = 100;
+        foreach ((array) $mock_pages as $p) {
+            $id = max($id, $p['ID'] + 1);
+        }
+        $mock_pages[] = [
+            'ID' => $id,
+            'status' => $postarr['post_status'] ?? 'draft',
+            'post_type' => $postarr['post_type'] ?? 'post',
+            'meta' => [],
+            'tags' => [],
+        ];
+        return $id;
+    }
+}
+if (!function_exists('wp_update_post')) {
+    function wp_update_post(array $postarr, bool $wp_error = false) {
+        global $mock_pages;
+        foreach ((array) $mock_pages as $i => $p) {
+            if ($p['ID'] === (int) ($postarr['ID'] ?? 0)) {
+                if (isset($postarr['post_status'])) {
+                    $mock_pages[$i]['status'] = $postarr['post_status'];
+                }
+                return $p['ID'];
+            }
+        }
+        return 0;
+    }
+}
+if (!function_exists('update_post_meta')) {
+    function update_post_meta(int $id, string $key, $value) {
+        global $mock_pages;
+        foreach ((array) $mock_pages as $i => $p) {
+            if ($p['ID'] === $id) {
+                $mock_pages[$i]['meta'][$key] = $value;
+                return true;
+            }
+        }
+        return false;
+    }
+}
+if (!function_exists('wp_set_post_tags')) {
+    function wp_set_post_tags(int $id, $tags = '', bool $append = false) {
+        global $mock_pages;
+        $tags = is_array($tags) ? $tags : array_map('trim', explode(',', (string) $tags));
+        foreach ((array) $mock_pages as $i => $p) {
+            if ($p['ID'] === $id) {
+                $mock_pages[$i]['tags'] = $append
+                    ? array_values(array_unique(array_merge($p['tags'] ?? [], $tags)))
+                    : array_values($tags);
+                return $mock_pages[$i]['tags'];
+            }
+        }
+        return false;
+    }
+}
+if (!function_exists('has_post_thumbnail')) {
+    function has_post_thumbnail($id = null): bool { return false; }
+}
+if (!function_exists('wp_kses_post')) {
+    function wp_kses_post($s): string { return (string) $s; }
+}
+if (!function_exists('sanitize_textarea_field')) {
+    function sanitize_textarea_field($s): string { return trim(strip_tags((string) $s)); }
+}
+if (!function_exists('get_post_meta')) {
+    function get_post_meta(int $id, string $key = '', bool $single = false) {
+        global $mock_pages;
+        foreach ((array) $mock_pages as $p) {
+            if ($p['ID'] === $id) {
+                return $p['meta'][$key] ?? '';
+            }
+        }
+        return '';
+    }
+}
+if (!function_exists('get_post_status')) {
+    function get_post_status($id) {
+        global $mock_pages;
+        foreach ((array) $mock_pages as $p) {
+            if ($p['ID'] === (int) $id) {
+                return $p['status'];
+            }
+        }
+        return false;
+    }
+}
+if (!function_exists('get_edit_post_link')) {
+    function get_edit_post_link($id, string $context = 'display'): string { return 'https://site.test/wp-admin/post.php?post=' . (int) $id . '&action=edit'; }
+}
+if (!function_exists('get_permalink')) {
+    function get_permalink($id) { return 'https://site.test/?page_id=' . (int) $id; }
+}
+if (!function_exists('get_preview_post_link')) {
+    function get_preview_post_link($id): string { return 'https://site.test/?page_id=' . (int) $id . '&preview=true'; }
 }
 if (!function_exists('shortcode_atts')) {
     function shortcode_atts(array $defaults, $atts, string $shortcode = ''): array {

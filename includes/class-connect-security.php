@@ -50,6 +50,11 @@ class Peanut_Connect_Security {
                 self::hide_login($slug);
             }
         }
+
+        // Block user enumeration
+        if (get_option('peanut_connect_block_user_enumeration', '1') === '1') {
+            self::block_user_enumeration();
+        }
     }
 
     /**
@@ -70,6 +75,7 @@ class Peanut_Connect_Security {
             'disable_file_editing' => defined('DISALLOW_FILE_EDIT') && DISALLOW_FILE_EDIT,
             'remove_version' => get_option('peanut_connect_remove_version', '0') === '1',
             'security_headers' => get_option('peanut_connect_security_headers', '0') === '1',
+            'block_user_enumeration' => get_option('peanut_connect_block_user_enumeration', '1') === '1',
         ];
     }
 
@@ -202,6 +208,91 @@ class Peanut_Connect_Security {
     }
 
     /**
+     * Block unauthenticated user (author) enumeration.
+     *
+     * Stock WordPress publishes the exact login name of any user with content
+     * through three unauthenticated vectors:
+     *
+     *   1. GET /wp-json/wp/v2/users     -> JSON including `slug` (the login name)
+     *   2. GET /?author=<id>            -> 301 to /author/<login-name>/
+     *   3. GET /wp-sitemap-users-1.xml  -> author archive URLs
+     *
+     * On a client site the admin login name is half of a credential pair, so
+     * all three are closed. The block is scoped to callers that cannot already
+     * list users, leaving the block editor, the REST author picker and any
+     * authenticated tooling untouched.
+     *
+     * Hook timing: init() runs on `init` priority 0. Every hook used here fires
+     * after `init` -- `rest_endpoints` during REST dispatch, `template_redirect`
+     * and `wp_sitemaps_add_provider` during the main query -- so none of them is
+     * registered too late to take effect.
+     */
+    private static function block_user_enumeration(): void {
+        add_filter('rest_endpoints', [__CLASS__, 'filter_user_endpoints']);
+        // Priority 0: must beat redirect_canonical() (priority 10), which is
+        // what turns ?author=<id> into the slug-revealing 301.
+        add_action('template_redirect', [__CLASS__, 'block_author_archive'], 0);
+        add_filter('wp_sitemaps_add_provider', [__CLASS__, 'remove_users_sitemap'], 10, 2);
+    }
+
+    /**
+     * Whether the current caller is already entitled to see the user list.
+     */
+    private static function can_list_users(): bool {
+        return function_exists('current_user_can') && current_user_can('list_users');
+    }
+
+    /**
+     * Remove the public user collection from the REST API.
+     *
+     * `/wp/v2/users/me` is deliberately preserved: it only ever returns the
+     * caller's own record, already 401s when logged out, and the block editor
+     * depends on it.
+     */
+    public static function filter_user_endpoints($endpoints) {
+        if (!is_array($endpoints) || self::can_list_users()) {
+            return $endpoints;
+        }
+
+        unset($endpoints['/wp/v2/users']);
+        unset($endpoints['/wp/v2/users/(?P<id>[\d]+)']);
+
+        return $endpoints;
+    }
+
+    /**
+     * Turn author archives into a 404 for callers who cannot list users.
+     */
+    public static function block_author_archive(): void {
+        if (self::can_list_users() || !is_author()) {
+            return;
+        }
+
+        global $wp_query;
+        if (isset($wp_query) && is_object($wp_query) && method_exists($wp_query, 'set_404')) {
+            $wp_query->set_404();
+        }
+
+        // redirect_canonical() would otherwise still 301 ?author=<id> to the
+        // named archive, leaking the login name we just hid.
+        remove_action('template_redirect', 'redirect_canonical');
+
+        status_header(404);
+        nocache_headers();
+    }
+
+    /**
+     * Drop the users provider from core sitemaps (wp-sitemap-users-N.xml).
+     */
+    public static function remove_users_sitemap($provider, $name) {
+        if ($name === 'users') {
+            return false;
+        }
+
+        return $provider;
+    }
+
+    /**
      * Hide WordPress login page with custom slug
      */
     private static function hide_login(string $custom_slug): void {
@@ -304,28 +395,49 @@ class Peanut_Connect_Security {
      * Show 404 page
      */
     private static function show_404(): void {
+        // Decide early, render late.
+        //
+        // The block itself is detected on `init` priority 1 so we get in front
+        // of anything that might leak the custom login slug. The *render* can
+        // not happen there: themes register their template classes during
+        // `init` itself -- Enfold loads class-font-manager.php on `init`
+        // priority 5 -- so including 404.php at priority 1 fatals on
+        // `avia_font_manager` before the theme has had a chance to define it.
+        //
+        // `wp_loaded` fires after the whole of `init` has run, and it fires in
+        // every entry point we block: wp-login.php and wp-admin/ both reach it
+        // while bootstrapping, before either authenticates or redirects. So the
+        // slug stays hidden and the theme is fully loaded by the time we render.
+        add_action('wp_loaded', [__CLASS__, 'render_404'], 0);
+    }
+
+    /**
+     * Render the 404 deferred from show_404(). Public only so it can be used
+     * as a hook callback; treat it as internal.
+     */
+    public static function render_404(): void {
         global $wp_query;
 
         status_header(404);
         nocache_headers();
 
-        if ($wp_query) {
+        if ($wp_query instanceof \WP_Query) {
             $wp_query->set_404();
         }
 
         // Try to load theme's 404 template
         $template = get_404_template();
-        if ($template) {
+        if ($template && is_readable($template)) {
             include($template);
-        } else {
-            // Fallback
-            wp_die(
-                __('Page not found.', 'peanut-connect'),
-                __('404 Not Found', 'peanut-connect'),
-                ['response' => 404]
-            );
+            exit;
         }
-        exit;
+
+        // Fallback
+        wp_die(
+            __('Page not found.', 'peanut-connect'),
+            __('404 Not Found', 'peanut-connect'),
+            ['response' => 404]
+        );
     }
 
     /**

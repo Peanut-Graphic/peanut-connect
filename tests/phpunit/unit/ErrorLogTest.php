@@ -54,7 +54,6 @@ class ErrorLogTest extends TestCase {
     public function test_error_type_name_mapping(int $errno, string $expected): void {
         // Use reflection to test private method
         $method = new ReflectionMethod(Peanut_Connect_Error_Log::class, 'get_error_type_name');
-        $method->setAccessible(true);
 
         $result = $method->invoke(null, $errno);
         $this->assertEquals($expected, $result);
@@ -84,7 +83,6 @@ class ErrorLogTest extends TestCase {
      */
     public function test_unknown_error_type_returns_unknown(): void {
         $method = new ReflectionMethod(Peanut_Connect_Error_Log::class, 'get_error_type_name');
-        $method->setAccessible(true);
 
         $result = $method->invoke(null, 99999);
         $this->assertEquals('UNKNOWN', $result);
@@ -101,7 +99,6 @@ class ErrorLogTest extends TestCase {
      */
     public function test_error_level_categorization(int $errno, string $expected_level): void {
         $method = new ReflectionMethod(Peanut_Connect_Error_Log::class, 'get_error_level');
-        $method->setAccessible(true);
 
         $result = $method->invoke(null, $errno);
         $this->assertEquals($expected_level, $result);

@@ -10,7 +10,7 @@ export {
   permissionsApi,
   trackingApi,
 } from './endpoints';
-export { marketingApi } from './marketing';
+export { marketingApi, preferredShortUrl } from './marketing';
 export type {
   Utm,
   UtmUpdateInput,
@@ -39,4 +39,4 @@ export type {
   DominionFunnelParams,
 } from './marketing';
 export { videosApi } from './videos';
-export type { Video, VideoInput, VideoAnalytics } from './videos';
+export type { Video, VideoInput, VideoAnalytics, VideoListStats, VideoPage } from './videos';

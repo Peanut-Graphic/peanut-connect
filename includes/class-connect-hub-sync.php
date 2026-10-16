@@ -32,6 +32,30 @@ class Peanut_Connect_Hub_Sync {
     const MAX_BATCHES_PER_RUN = 50;
 
     /**
+     * Rows marked synced per statement in mark_non_campaign_data_synced().
+     *
+     * These are local UPDATEs, not HTTP pushes, so they can be much larger
+     * than BATCH_SIZE — but they must still be bounded. An unbounded
+     * `UPDATE ... WHERE synced = 0` holds row locks across the whole matching
+     * set and stalls the tracker INSERTs happening on the same tables, which
+     * is the same reasoning behind Database::CLEANUP_CHUNK_SIZE.
+     */
+    const MARK_CHUNK_SIZE = 1000;
+
+    /**
+     * Chunks per statement per tick before deferring the rest to the next run.
+     *
+     * This matters because the backlog can be enormous: sync was never
+     * scheduled on any site (the `fifteen_minutes` recurrence was registered
+     * after it was used), so the first run after that fix meets six months of
+     * unsynced rows — 1.4M events and 1.37M visitors on the worst site, where
+     * EXPLAIN showed the visitor statement doing a full table scan of 718k
+     * rows. 50 × 1000 = 50,000 rows per statement per tick drains that in a
+     * few hours of ordinary ticks instead of one multi-minute lock.
+     */
+    const MAX_MARK_BATCHES_PER_RUN = 50;
+
+    /**
      * Sync interval in minutes
      */
     const SYNC_INTERVAL = 15;
@@ -287,39 +311,67 @@ class Peanut_Connect_Hub_Sync {
         $conversions_table = Peanut_Connect_Database::table('conversions');
         $now = current_time('mysql', true);
 
+        // Every statement here is chunked. Each one can match a backlog far
+        // larger than a normal tick's worth of traffic, and an unbounded
+        // UPDATE would hold locks across that whole set while the tracker is
+        // still INSERTing into the same tables.
+
         // Mark non-campaign events as synced
-        $wpdb->query(
-            $wpdb->prepare(
-                "UPDATE $events_table SET synced = 1, synced_at = %s WHERE synced = 0 AND (click_id IS NULL OR click_id = '')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $now
-            )
+        self::mark_chunked(
+            "UPDATE $events_table SET synced = 1, synced_at = %s WHERE synced = 0 AND (click_id IS NULL OR click_id = '')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            $now
         );
 
         // Mark non-campaign visitors as synced
-        $wpdb->query(
-            $wpdb->prepare(
-                "UPDATE $visitors_table SET synced = 1, synced_at = %s WHERE synced = 0 AND visitor_id NOT IN (
+        self::mark_chunked(
+            "UPDATE $visitors_table SET synced = 1, synced_at = %s WHERE synced = 0 AND visitor_id NOT IN (
                     SELECT DISTINCT visitor_id FROM $events_table WHERE click_id IS NOT NULL AND click_id != ''
                 )", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $now
-            )
+            $now
         );
 
         // Mark all touches as synced (not needed for journey tracking)
-        $wpdb->query(
-            $wpdb->prepare(
-                "UPDATE $touches_table SET synced = 1, synced_at = %s WHERE synced = 0", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $now
-            )
+        self::mark_chunked(
+            "UPDATE $touches_table SET synced = 1, synced_at = %s WHERE synced = 0", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            $now
         );
 
         // Mark all conversions as synced (not needed for journey tracking)
-        $wpdb->query(
-            $wpdb->prepare(
-                "UPDATE $conversions_table SET synced = 1, synced_at = %s WHERE synced = 0", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $now
-            )
+        self::mark_chunked(
+            "UPDATE $conversions_table SET synced = 1, synced_at = %s WHERE synced = 0", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            $now
         );
+    }
+
+    /**
+     * Run a marking `UPDATE ... WHERE synced = 0 ...` in bounded batches.
+     *
+     * Appends `LIMIT MARK_CHUNK_SIZE` and loops until a batch comes back short
+     * (no rows left), the statement errors, or MAX_MARK_BATCHES_PER_RUN is
+     * reached — whichever happens first. Leftovers are simply picked up by the
+     * next tick, because the WHERE clause is self-advancing: rows this run
+     * marked are no longer `synced = 0`.
+     *
+     * @param string $sql_no_limit UPDATE statement with `%s` for synced_at and no LIMIT.
+     * @param string $now          Datetime bound to `%s`.
+     * @return int Rows marked in this run.
+     */
+    private static function mark_chunked(string $sql_no_limit, string $now): int {
+        global $wpdb;
+
+        $sql = $sql_no_limit . ' LIMIT ' . (int) self::MARK_CHUNK_SIZE;
+        $total = 0;
+        $batches = 0;
+
+        do {
+            $count = (int) $wpdb->query(
+                $wpdb->prepare($sql, $now) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            );
+            $total += $count;
+            $batches++;
+        } while ($count >= self::MARK_CHUNK_SIZE && $batches < self::MAX_MARK_BATCHES_PER_RUN);
+
+        return $total;
     }
 
     /**
@@ -388,9 +440,27 @@ class Peanut_Connect_Hub_Sync {
 
     /**
      * Send heartbeat to hub
+     *
+     * Hooked to cron, where WordPress passes an empty-string argument, so the
+     * public signature takes no parameters; the one-shot post-heal retry goes
+     * through heartbeat() directly.
      */
     public static function send_heartbeat(): array {
+        return self::heartbeat(false);
+    }
+
+    /**
+     * @param bool $healed True on the single retry after a 401 self-heal.
+     */
+    private static function heartbeat(bool $healed): array {
         $hub_url = get_option('peanut_connect_hub_url');
+
+        // Next-cycle retry for a key rotation whose confirm reply was lost:
+        // settle which key HUB accepts before using the active one.
+        if (!$healed && class_exists('Peanut_Connect_Key_Rotation') && Peanut_Connect_Key_Rotation::has_pending()) {
+            Peanut_Connect_Key_Rotation::resolve_pending();
+        }
+
         $api_key = Peanut_Connect_Auth::get_hub_api_key();
 
         if (empty($hub_url) || empty($api_key)) {
@@ -442,6 +512,12 @@ class Peanut_Connect_Hub_Sync {
         // Revocation detection: two consecutive 401s clear the key and surface
         // the re-pair notice (A5). A single blip does not kill a live pairing.
         if ($status_code === 401) {
+            // Self-heal: HUB may have promoted a pending rotation key whose
+            // confirm reply never arrived. Try it once before taking a strike.
+            if (!$healed && class_exists('Peanut_Connect_Key_Rotation') && Peanut_Connect_Key_Rotation::heal_after_unauthorized()) {
+                self::reset_auth_failures();
+                return self::heartbeat(true);
+            }
             self::register_auth_failure();
             return [
                 'success' => false,

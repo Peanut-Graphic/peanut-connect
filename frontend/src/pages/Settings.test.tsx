@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Settings from './Settings';
@@ -11,6 +11,7 @@ vi.mock('@/api', () => ({
   getVersion: () => '0.0.0-test', // consumed by the Layout sidebar chrome
   settingsApi: {
     get: vi.fn(),
+    autoConnectToHub: vi.fn(),
     generateKey: vi.fn(),
     regenerateKey: vi.fn(),
     disconnect: vi.fn(),
@@ -214,5 +215,68 @@ describe('Settings Page', () => {
 
     // The Disconnect button itself
     expect(screen.getByRole('button', { name: /^disconnect$/i })).toBeInTheDocument();
+  });
+
+  describe('auto-connect pairing token', () => {
+    const TOKEN = 'hubpair_' + 'Ab1'.repeat(18) + 'xy';
+
+    async function renderNotConnected() {
+      (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue(notConnectedSettings);
+      render(<Settings />, { wrapper: createTestWrapper() });
+      await waitFor(() => {
+        expect(screen.getByText('Not Connected to Hub')).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByLabelText('Hub URL'), { target: { value: 'https://hub.example.com' } });
+      return screen.getByLabelText('Pairing token from Hub') as HTMLInputElement;
+    }
+
+    it('renders the token field next to the Hub URL with its helper text', async () => {
+      const field = await renderNotConnected();
+      expect(field).toHaveAttribute('autocomplete', 'off');
+      expect(field).toHaveAccessibleDescription(
+        'In Hub, open this site and click Pair site, then paste the token here. Tokens expire after 30 minutes and work once.'
+      );
+    });
+
+    it('sends the pasted token with the Hub URL and clears the field afterwards', async () => {
+      (settingsApi.autoConnectToHub as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+        message: 'Successfully connected to Hub!',
+      });
+      const field = await renderNotConnected();
+      fireEvent.change(field, { target: { value: TOKEN } });
+      fireEvent.click(screen.getByRole('button', { name: /connect to hub/i }));
+
+      await waitFor(() => {
+        expect(settingsApi.autoConnectToHub).toHaveBeenCalledWith('https://hub.example.com', TOKEN);
+      });
+      await waitFor(() => expect(field.value).toBe(''));
+    });
+
+    it('flags a malformed token and blocks Connect', async () => {
+      const field = await renderNotConnected();
+      fireEvent.change(field, { target: { value: 'hubpair_too-short' } });
+
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.getByText(/does not look like a Hub pairing token/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /connect to hub/i })).toBeDisabled();
+      expect(settingsApi.autoConnectToHub).not.toHaveBeenCalled();
+    });
+
+    it("shows the plugin's mapped Hub error and drops the spent token", async () => {
+      (settingsApi.autoConnectToHub as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('That pairing token is invalid or expired. Create a new one in Hub.')
+      );
+      const field = await renderNotConnected();
+      fireEvent.change(field, { target: { value: TOKEN } });
+      fireEvent.click(screen.getByRole('button', { name: /connect to hub/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('That pairing token is invalid or expired. Create a new one in Hub.')
+        ).toBeInTheDocument();
+      });
+      expect(field.value).toBe('');
+    });
   });
 });

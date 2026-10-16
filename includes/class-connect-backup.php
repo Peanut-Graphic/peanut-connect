@@ -14,9 +14,18 @@ if (!defined('ABSPATH')) {
 class Peanut_Connect_Backup {
 
     /**
+     * Seconds between build heartbeats.
+     *
+     * Comfortably under the job runner's STALE_AFTER so a healthy build is
+     * never mistaken for a dead one, and long enough that the option write
+     * is noise next to the zipping.
+     */
+    const PROGRESS_INTERVAL = 15;
+
+    /**
      * Create a full site backup
      *
-     * @param array $params Optional parameters (type, storage_driver).
+     * @param array $params Optional parameters (type, storage_driver, progress).
      * @return array|WP_Error Backup result or error.
      */
     public static function create_backup(array $params = []): array|WP_Error {
@@ -39,14 +48,19 @@ class Peanut_Connect_Backup {
         $backup_name = "{$site_slug}-{$timestamp}-{$token}";
         $backup_path = "{$backup_dir}/{$backup_name}";
 
+        $progress = isset($params['progress']) && is_callable($params['progress'])
+            ? $params['progress']
+            : null;
+
         // 1. Export database
-        $db_file = self::export_database($backup_path);
+        $db_file = self::export_database($backup_path, $progress);
         if (is_wp_error($db_file)) {
             return $db_file;
         }
 
         // 2. Create zip of wp-content (excluding peanut-backups, cache, upgrade dirs)
-        $zip_file = self::create_zip($backup_path, $db_file);
+
+        $zip_file = self::create_zip($backup_path, $db_file, $progress);
         if (is_wp_error($zip_file)) {
             return $zip_file;
         }
@@ -94,9 +108,10 @@ class Peanut_Connect_Backup {
      * @param string $backup_path Base path for the backup file (without extension).
      * @return string|WP_Error Path to the SQL file or error.
      */
-    private static function export_database(string $backup_path): string|WP_Error {
+    private static function export_database(string $backup_path, ?callable $progress = null): string|WP_Error {
         global $wpdb;
         $db_file = $backup_path . '.sql';
+        $last_beat = time();
 
         // Get all tables for this site
         $tables = $wpdb->get_col($wpdb->prepare(
@@ -112,10 +127,21 @@ class Peanut_Connect_Backup {
             return new WP_Error('file_error', __('Could not create database export file.', 'peanut-connect'));
         }
 
+        // Beat unconditionally at the phase boundary, not only on the interval.
+        // A site whose export finishes inside PROGRESS_INTERVAL would otherwise
+        // leave no trace that the phase ran at all, and the record could not
+        // distinguish "exported quickly" from "never started".
+        if ($progress !== null) {
+            $progress(0);
+        }
+
         // Write header
         fwrite($handle, "-- Peanut Connect Database Backup\n");
         fwrite($handle, "-- Generated: " . current_time('mysql') . "\n");
         fwrite($handle, "-- Site: " . get_site_url() . "\n\n");
+        // Preserve the source connection charset when importing Unicode values.
+        $charset = isset($wpdb->charset) && preg_match('/^[a-zA-Z0-9_]+$/', $wpdb->charset) ? $wpdb->charset : 'utf8mb4';
+        fwrite($handle, "SET NAMES {$charset};\n");
         fwrite($handle, "SET FOREIGN_KEY_CHECKS=0;\n\n");
 
         foreach ($tables as $table) {
@@ -136,7 +162,7 @@ class Peanut_Connect_Backup {
                 );
                 foreach ($rows as $row) {
                     $values = array_map(function ($v) use ($wpdb) {
-                        return $v === null ? 'NULL' : "'" . $wpdb->_real_escape($v) . "'";
+                        return $v === null ? 'NULL' : "'" . $wpdb->remove_placeholder_escape($wpdb->_real_escape($v)) . "'";
                     }, $row);
                     $columns = array_map(function ($c) {
                         return "`{$c}`";
@@ -144,6 +170,17 @@ class Peanut_Connect_Backup {
                     fwrite($handle, "INSERT INTO `{$table}` (" . implode(',', $columns) . ") VALUES (" . implode(',', $values) . ");\n");
                 }
                 $offset += $batch_size;
+
+                // The export is the OTHER half of the build, and on a real
+                // site it is the bigger half — peanutgraphic.com writes a
+                // 276 MB .sql before a single file is zipped. 3.37.2 only
+                // beat during zipping, so a long export looked exactly like
+                // a dead worker and would be reaped as one: the same blind
+                // spot, moved rather than closed.
+                if ($progress !== null && (time() - $last_beat) >= self::PROGRESS_INTERVAL) {
+                    $last_beat = time();
+                    $progress(0);
+                }
             } while (count($rows) === $batch_size);
 
             fwrite($handle, "\n");
@@ -162,7 +199,7 @@ class Peanut_Connect_Backup {
      * @param string $db_file     Path to the database SQL file.
      * @return string|WP_Error Path to the zip file or error.
      */
-    private static function create_zip(string $backup_path, string $db_file): string|WP_Error {
+    private static function create_zip(string $backup_path, string $db_file, ?callable $progress = null): string|WP_Error {
         $zip_file = $backup_path . '.zip';
 
         if (!class_exists('ZipArchive')) {
@@ -176,6 +213,9 @@ class Peanut_Connect_Backup {
 
         // Add database export
         $zip->addFile($db_file, 'database.sql');
+
+        $added = 0;
+        $last_beat = time();
 
         // Add wp-content directory (excluding large/cache dirs)
         $exclude_dirs = ['peanut-backups', 'cache', 'upgrade', 'wflogs', 'ai1wm-backups'];
@@ -208,9 +248,34 @@ class Peanut_Connect_Backup {
             }
 
             $zip->addFile($file_path, 'wp-content/' . $relative_path);
+            $added++;
+
+            // Heartbeat on a time interval, not a file count: file sizes vary
+            // by orders of magnitude, so "every N files" is silent for minutes
+            // on a media library and chatty on a plugin directory. Each beat
+            // is one option write, so seconds-not-files keeps the cost flat
+            // regardless of what the site is made of.
+            if ($progress !== null && (time() - $last_beat) >= self::PROGRESS_INTERVAL) {
+                $last_beat = time();
+                $progress($added);
+            }
+        }
+
+        // The single most likely place to be killed: close() is where libzip
+        // actually writes the archive, and on a large site that is minutes of
+        // solid I/O after the last file was queued. Beat immediately before,
+        // so a death in there is dated to the close rather than looking like
+        // a stall that began at the last file.
+        if ($progress !== null) {
+            $progress($added);
         }
 
         $zip->close();
+
+        if ($progress !== null) {
+            $progress($added);
+        }
+
         return $zip_file;
     }
 

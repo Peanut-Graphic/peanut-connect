@@ -7,6 +7,7 @@ import { Card, CardHeader, Button, Input, Alert, InfoPanel } from '@/components/
 import { useToast } from '@/components/common/Toast';
 import {
   marketingApi,
+  preferredShortUrl,
   type CampaignBuildInput,
   type CampaignResult,
   type TrackingSetup,
@@ -786,6 +787,7 @@ function DoneStep({
   tracking: TrackingSetup | undefined;
   onReset: () => void;
 }) {
+  const shortUrl = preferredShortUrl({ ...result, slug: result.link.slug });
   return (
     <Card>
       <CardHeader
@@ -798,10 +800,10 @@ function DoneStep({
         description="Campaign created. Here's everything you need."
       />
       <div className="space-y-5">
-        <CopyableField label="Short link (use this on print / QR / email)" value={result.short_url} openInNewTab />
+        <CopyableField label="Short link (use this on print / QR / email)" value={shortUrl} openInNewTab />
         <CopyableField label="Full UTM URL (raw, in case you need it)" value={result.full_url} openInNewTab />
 
-        <QrPanel url={result.short_url} filenameBase={result.link.slug} />
+        <QrPanel url={shortUrl} filenameBase={result.link.slug} />
 
         <div className="rounded-md bg-slate-50 border border-slate-200 p-4 text-sm text-slate-700">
           <div className="font-medium text-slate-900 mb-2">Next steps</div>

@@ -158,9 +158,9 @@ class RateLimiterTest extends TestCase {
     }
 
     /**
-     * Test that get_client_identifier includes API key hash
+     * Test that get_client_identifier does not include credential material
      */
-    public function test_get_client_identifier_includes_key_hash(): void {
+    public function test_get_client_identifier_ignores_api_key(): void {
         $_SERVER['REMOTE_ADDR'] = '192.168.1.101';
 
         $request = new WP_REST_Request('GET', '/test');
@@ -168,9 +168,8 @@ class RateLimiterTest extends TestCase {
 
         $identifier = Peanut_Connect_Rate_Limiter::get_client_identifier($request);
 
-        // Should contain both IP and key hash
-        $this->assertStringContainsString('192.168.1.101', $identifier);
-        $this->assertStringContainsString('_', $identifier); // Separator
+        // Credentials must not create fresh rate-limit buckets for each guess.
+        $this->assertSame('192.168.1.101', $identifier);
 
         // Clean up
         unset($_SERVER['REMOTE_ADDR']);

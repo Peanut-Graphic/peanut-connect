@@ -182,7 +182,7 @@ class Peanut_Connect_Marketing {
     public static function create_campaign(WP_REST_Request $request) {
         $response = self::forward('POST', '/marketing/campaigns', $request->get_json_params());
         Peanut_Connect_Short_Links::clear_cache();
-        return $response;
+        return self::with_branded_urls($response);
     }
 
     // ===== UTMs =====
@@ -218,7 +218,9 @@ class Peanut_Connect_Marketing {
     // ===== Links =====
 
     public static function list_links(WP_REST_Request $request) {
-        return self::forward('GET', '/marketing/links', null, $request->get_query_params());
+        return self::with_branded_urls(
+            self::forward('GET', '/marketing/links', null, $request->get_query_params())
+        );
     }
 
     public static function create_link(WP_REST_Request $request) {
@@ -385,6 +387,24 @@ class Peanut_Connect_Marketing {
         }
 
         return new WP_REST_Response($data, $status > 0 ? $status : 502);
+    }
+
+    /**
+     * Add site-branded short URLs to a successful Hub link/campaign response.
+     *
+     * @param WP_REST_Response|WP_Error $response
+     * @return WP_REST_Response|WP_Error
+     */
+    private static function with_branded_urls($response) {
+        if (!$response instanceof WP_REST_Response) {
+            return $response;
+        }
+        $status = $response->get_status();
+        $data   = $response->get_data();
+        if ($status >= 200 && $status < 300 && is_array($data)) {
+            $response->set_data(Peanut_Connect_Short_Links::brand_response($data));
+        }
+        return $response;
     }
 
     /**

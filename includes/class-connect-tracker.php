@@ -23,6 +23,15 @@ class Peanut_Connect_Tracker {
     const COOKIE_NAME = 'peanut_vid';
 
     /**
+     * Idle time after which the next pageview counts as a new visit.
+     *
+     * 30 minutes is the long-standing web-analytics session convention, so
+     * "visits" here means the same thing it means in every other tool the
+     * client is likely comparing against.
+     */
+    const SESSION_GAP = 1800;
+
+    /**
      * Hub click ID cookie name (for journey tracking)
      */
     const CLICK_ID_COOKIE = 'peanut_click_id';
@@ -84,9 +93,10 @@ class Peanut_Connect_Tracker {
             return self::$visitor_id;
         }
 
-        // Check cookie
-        if (isset($_COOKIE[self::COOKIE_NAME])) {
-            self::$visitor_id = sanitize_text_field($_COOKIE[self::COOKIE_NAME]);
+        // Check cookie (32 hex characters, written by tracker.js)
+        if (isset($_COOKIE[self::COOKIE_NAME]) && is_string($_COOKIE[self::COOKIE_NAME])
+            && preg_match('/^[a-f0-9]{32}$/i', $_COOKIE[self::COOKIE_NAME])) {
+            self::$visitor_id = strtolower($_COOKIE[self::COOKIE_NAME]);
             return self::$visitor_id;
         }
 
@@ -143,32 +153,59 @@ class Peanut_Connect_Tracker {
     public static function update_visitor(string $visitor_id, array $data = []): void {
         global $wpdb;
 
+        // Same reasoning as record_event(): the visitors table is the other
+        // thing the public REST routes write to, and it is where the bogus
+        // rows actually accumulated -- 690,977 of 1.37M on one site came from
+        // user-agents that matched nothing at all.
+        if (self::is_bot()) {
+            return;
+        }
+
         $table = Peanut_Connect_Database::table('visitors');
         $now = current_time('mysql', true);
 
         // Check if visitor exists
         $existing = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT id, total_visits, total_pageviews FROM $table WHERE visitor_id = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                "SELECT id, total_visits, total_pageviews, last_seen_at, email, name FROM $table WHERE visitor_id = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
                 $visitor_id
             )
         );
 
         if ($existing) {
-            // Update existing visitor
-            $wpdb->update(
-                $table,
-                [
-                    'last_seen_at' => $now,
-                    'total_pageviews' => $existing->total_pageviews + 1,
-                    'email' => $data['email'] ?? null,
-                    'name' => $data['name'] ?? null,
-                    'synced' => 0, // Mark for re-sync
-                ],
-                ['id' => $existing->id],
-                ['%s', '%d', '%s', '%s', '%d'],
-                ['%d']
-            );
+            $update = [
+                'last_seen_at' => $now,
+                'total_pageviews' => $existing->total_pageviews + 1,
+                'synced' => 0, // Mark for re-sync
+            ];
+            $formats = ['%s', '%d', '%d'];
+
+            // A new visit is a return after the session gap, which is what
+            // makes the column mean anything. total_visits used to be written
+            // as 1 on insert and then never appear in this update at all, so
+            // it was permanently 1 for every row ever created -- 1,368,120 of
+            // 1,368,120 on nattybumpercar.com, max 1 -- and any "visits"
+            // figure was really just a count of visitor rows.
+            $last_seen = strtotime((string) $existing->last_seen_at);
+            if ($last_seen === false || (strtotime($now) - $last_seen) >= self::SESSION_GAP) {
+                $update['total_visits'] = ((int) $existing->total_visits) + 1;
+                $formats[] = '%d';
+            }
+
+            // Only ever fill identification in, never blank it out. This was
+            // `'email' => $data['email'] ?? null` on every pageview, so one
+            // ordinary anonymous hit after a form submission wiped the
+            // captured email and name back to NULL.
+            if (!empty($data['email'])) {
+                $update['email'] = $data['email'];
+                $formats[] = '%s';
+            }
+            if (!empty($data['name'])) {
+                $update['name'] = $data['name'];
+                $formats[] = '%s';
+            }
+
+            $wpdb->update($table, $update, ['id' => $existing->id], $formats, ['%d']);
         } else {
             // Create new visitor
             $device_info = self::get_device_info();
@@ -215,6 +252,23 @@ class Peanut_Connect_Tracker {
     public static function record_event(string $visitor_id, string $event_type, array $data = []): int {
         global $wpdb;
 
+        // Guard the write, not the entry point.
+        //
+        // is_bot() used to be called in exactly one place -- track_pageview()
+        // -- so the server-side path filtered bots while every REST tracking
+        // route (all `permission_callback => __return_true`, since the browser
+        // tracker posts unauthenticated) reached this method directly and
+        // filtered nothing.
+        //
+        // Checking here instead of in the REST prechecks covers all of them at
+        // once and, importantly, does not preempt request validation: an
+        // oversized or malformed payload still earns its 400/413 rather than a
+        // silent 200. An earlier attempt at the precheck did preempt it, and
+        // the public-endpoint hardening tests caught it.
+        if (self::is_bot()) {
+            return 0;
+        }
+
         // Canonicalize event_type aliases.
         if ($event_type === 'page_view') {
             $event_type = 'pageview';
@@ -226,7 +280,13 @@ class Peanut_Connect_Tracker {
 
         $table = Peanut_Connect_Database::table('events');
         $utm = self::get_utm_params();
-        $click_id = $data['click_id'] ?? self::get_click_id();
+        // A click id from the request body (POST /track) is caller input: keep
+        // it only when it is a well-formed UUID, otherwise fall back to the
+        // validated URL/cookie value. Junk ids used to be stored and shipped
+        // to Hub (the sync ships every row WHERE click_id IS NOT NULL).
+        $click_id = self::is_valid_click_id($data['click_id'] ?? null)
+            ? strtolower((string) $data['click_id'])
+            : self::get_click_id();
 
         $wpdb->insert(
             $table,
@@ -332,23 +392,43 @@ class Peanut_Connect_Tracker {
 
     /**
      * Identify a visitor (attach email/name)
+     *
+     * Fill-only. The public /identify and /conversion routes reach this with
+     * whatever visitor_id the caller names, so an overwrite let anyone who
+     * knew (or, from a cached page, was handed) another visitor's id replace
+     * that visitor's identity. An email is written only when the visitor has
+     * none; a name only when the visitor has none and the email on record is
+     * this one, so a second identity never mixes into the first.
      */
     public static function identify_visitor(string $visitor_id, string $email, ?string $name = null): void {
         global $wpdb;
 
+        $email = sanitize_email($email);
+        if ($email === '' || $visitor_id === '') {
+            return;
+        }
+
         $table = Peanut_Connect_Database::table('visitors');
 
-        $wpdb->update(
-            $table,
-            [
-                'email' => sanitize_email($email),
-                'name' => $name ? sanitize_text_field($name) : null,
-                'synced' => 0,
-            ],
-            ['visitor_id' => $visitor_id],
-            ['%s', '%s', '%d'],
-            ['%s']
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE $table SET email = %s, synced = 0 WHERE visitor_id = %s AND (email IS NULL OR email = '')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $email,
+                $visitor_id
+            )
         );
+
+        $name = $name ? sanitize_text_field($name) : '';
+        if ($name !== '') {
+            $wpdb->query(
+                $wpdb->prepare(
+                    "UPDATE $table SET name = %s, synced = 0 WHERE visitor_id = %s AND email = %s AND (name IS NULL OR name = '')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                    $name,
+                    $visitor_id,
+                    $email
+                )
+            );
+        }
     }
 
     /**
@@ -406,8 +486,8 @@ class Peanut_Connect_Tracker {
         // Check URL first (new visit from Hub short link)
         if (isset($_GET['click_id'])) {
             $click_id = sanitize_text_field($_GET['click_id']);
-            // Validate it looks like a UUID
-            if (preg_match('/^[a-f0-9\-]{36}$/i', $click_id)) {
+            // Validate it is a UUID (Hub issues and validates click ids as UUIDs)
+            if (self::is_valid_click_id($click_id)) {
                 self::$click_id = $click_id;
                 // Cookie will be set via JavaScript for better compatibility
                 return self::$click_id;
@@ -426,7 +506,7 @@ class Peanut_Connect_Tracker {
         foreach ($cookie_names as $name) {
             if (isset($_COOKIE[$name])) {
                 $click_id = sanitize_text_field($_COOKIE[$name]);
-                if (preg_match('/^[a-f0-9\-]{36}$/i', $click_id)) {
+                if (self::is_valid_click_id($click_id)) {
                     self::$click_id = $click_id;
                     return self::$click_id;
                 }
@@ -434,6 +514,16 @@ class Peanut_Connect_Tracker {
         }
 
         return null;
+    }
+
+    /**
+     * Whether a value is a Hub click id: a canonical 8-4-4-4-12 hex UUID,
+     * the same shape Hub's journey API validates (Laravel 'uuid'). The old
+     * check accepted any 36 characters of hex and dashes.
+     */
+    public static function is_valid_click_id($click_id): bool {
+        return is_string($click_id)
+            && (bool) preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $click_id);
     }
 
     /**
@@ -549,19 +639,50 @@ class Peanut_Connect_Tracker {
      * Check if request is from a bot
      */
     public static function is_bot(): bool {
-        $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        $ua = trim((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+
+        // No user-agent at all is not a browser. This was the biggest hole:
+        // an empty string contains none of the patterns below, so it fell
+        // through and was recorded -- and because get_device_info() defaults
+        // to desktop/Unknown, it was stored as a desktop visitor. On
+        // nattybumpercar.com 690,977 rows (~50% of the table) had browser,
+        // OS *and* device all unresolved, which is exactly that signature.
+        if ($ua === '') {
+            return true;
+        }
+
+        $ua_lower = strtolower($ua);
 
         $bot_patterns = [
             'bot', 'crawl', 'spider', 'slurp', 'facebook', 'twitter',
             'linkedin', 'pinterest', 'whatsapp', 'telegram', 'preview',
             'headless', 'phantom', 'selenium', 'puppeteer',
+            // Plain HTTP clients and common SEO/monitoring agents. None of
+            // these are a person looking at the page.
+            'curl/', 'wget', 'python-requests', 'python-urllib', 'go-http-client',
+            'java/', 'okhttp', 'axios', 'guzzle', 'libwww-perl', 'scrapy',
+            'ahrefs', 'semrush', 'mj12', 'dotbot', 'petalsearch', 'yandex',
+            'baidu', 'duckduck', 'pingdom', 'uptimerobot', 'lighthouse',
+            'gtmetrix', 'statuscake', 'newrelic', 'datadog',
         ];
 
-        $ua_lower = strtolower($ua);
         foreach ($bot_patterns as $pattern) {
             if (strpos($ua_lower, $pattern) !== false) {
                 return true;
             }
+        }
+
+        // Positive check, deliberately last: essentially every real browser
+        // sends a UA beginning "Mozilla/" -- a convention every engine kept
+        // for compatibility -- while scripted HTTP clients generally do not.
+        // Requiring it catches the long tail of one-off scrapers that no
+        // blocklist will ever enumerate.
+        //
+        // Note this is a check on the UA *shape*, not on whether we could
+        // parse a browser name out of it: a niche or new browser still says
+        // Mozilla/5.0 and is still tracked, it just reports as "Unknown".
+        if (strpos($ua_lower, 'mozilla/') === false) {
+            return true;
         }
 
         return false;
@@ -587,16 +708,20 @@ class Peanut_Connect_Tracker {
             true
         );
 
-        // Pass config to script
+        // Pass config to script. Only site-wide values: this lands in the
+        // page HTML, which page caches serve to every later visitor. The
+        // visitor id and click id used to be printed here, so with a page
+        // cache the first visitor's ids were handed to everyone after them
+        // (all attached to one journey, and /identify on any of them
+        // relabelled that visitor). tracker.js now reads both from its own
+        // cookies / the URL and mints a visitor id in the browser.
         wp_localize_script('peanut-connect-tracker', 'peanutConnectTracker', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'restUrl' => rest_url('peanut-connect/v1'),
             'nonce' => wp_create_nonce('peanut_connect_track'),
-            'visitorId' => self::get_visitor_id(),
             'cookieName' => self::COOKIE_NAME,
             'cookieExpiry' => self::COOKIE_EXPIRY,
             // Hub journey tracking
-            'clickId' => self::get_click_id(),
             'clickIdCookie' => self::CLICK_ID_COOKIE,
             'clickIdExpiry' => self::CLICK_ID_EXPIRY,
         ]);

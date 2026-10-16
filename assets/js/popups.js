@@ -20,6 +20,17 @@
     const dismissedPopups = JSON.parse(localStorage.getItem('peanut_dismissed_popups') || '[]');
 
     /**
+     * This browser's visitor id (the tracker's cookie), or null. Never taken
+     * from the page config: page caches serve one HTML to every visitor.
+     * Without one, the server falls back to the request's own cookie.
+     */
+    function visitorId() {
+        const name = config.cookieName || 'peanut_vid';
+        const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([a-f0-9]{32})(?:;|$)', 'i'));
+        return match ? match[1].toLowerCase() : null;
+    }
+
+    /**
      * Track popup interaction
      */
     function trackInteraction(popupId, action, data = {}) {
@@ -31,7 +42,7 @@
             },
             body: JSON.stringify({
                 popup_id: popupId,
-                visitor_id: config.visitorId,
+                visitor_id: visitorId(),
                 action: action,
                 page_url: window.location.href,
                 data: data,

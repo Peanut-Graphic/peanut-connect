@@ -3,7 +3,7 @@
  * Plugin Name: End-to-End
  * Plugin URI: https://peanutgraphic.com/peanut-connect
  * Description: End-to-end campaign and site platform for WordPress — runs campaigns, UTM links, popups, forms, and on-site tracking, plus health monitoring, updates, and backups, all wired to a central Peanut Hub.
- * Version: 3.36.0
+ * Version: 3.40.5
  * Author: Peanut Graphic
  * Author URI: https://peanutgraphic.com
  * License: GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PEANUT_CONNECT_VERSION', '3.36.0');
+define('PEANUT_CONNECT_VERSION', '3.40.5');
 define('PEANUT_CONNECT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PEANUT_CONNECT_API_NAMESPACE', 'peanut-connect/v1');
 
@@ -89,6 +89,7 @@ final class Peanut_Connect {
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-health.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-updates.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-error-log.php';
+        require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-backup-job.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-api.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-self-updater.php';
         require_once PEANUT_CONNECT_PLUGIN_DIR . 'includes/class-connect-roles.php';
@@ -169,6 +170,21 @@ final class Peanut_Connect {
      * Initialize hooks
      */
     private function init_hooks(): void {
+        // Register the custom cron schedule before anything schedules against
+        // it. wp_schedule_event() validates the recurrence against
+        // wp_get_schedules() at call time and silently returns false for one it
+        // does not know, so registering `fifteen_minutes` at the END of this
+        // method meant `peanut_connect_hub_sync` was never scheduled on any
+        // site -- while its siblings survived purely because `hourly`, `daily`
+        // and `weekly` are core recurrences that need no filter.
+        //
+        // Nothing syncing meant nothing was ever marked synced, and
+        // cleanup_old_records() only deletes rows WHERE synced = 1, so the
+        // events/visitors tables grew without bound: 1.42M events / 1.37M
+        // visitors on one site, every row synced = 0, oldest 2026-03-13,
+        // 416MB of a 711MB database. Scheduled on 0 of 17 installs.
+        add_filter('cron_schedules', [$this, 'add_cron_schedules']);
+
         add_action('rest_api_init', [$this, 'register_api_routes']);
         // Register the Peanut Video Gutenberg block (delegates render to the
         // [peanut_video] shortcode). register_block_type() must run on init;
@@ -177,10 +193,14 @@ final class Peanut_Connect {
         add_action('init', ['Peanut_Connect_Videos', 'register_block']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
         Peanut_Connect_Roles::boot(); // scoped UTM Builder role: cap filter + upgrade-safe install
+        // Registers the cron handler that builds queued backup archives. Without
+        // it the scheduled event fires into nothing and every job stays queued.
+        Peanut_Connect_Backup_Job::boot();
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('admin_head', [$this, 'hide_admin_notices_on_react_page']);
         add_action('admin_notices', [$this, 'maybe_show_rekey_notice']);
+        add_action('admin_notices', [Peanut_Connect_Key_Rotation::class, 'render_unresolved_notice']);
 
         // Add settings link to plugins page
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [$this, 'add_settings_link']);
@@ -228,9 +248,6 @@ final class Peanut_Connect {
         if (!wp_next_scheduled('peanut_ml_connect_train')) {
             wp_schedule_event(time(), 'weekly', 'peanut_ml_connect_train');
         }
-
-        // Register custom cron schedule
-        add_filter('cron_schedules', [$this, 'add_cron_schedules']);
 
         // Hub Mode: Hide/disable Suite when connected to Hub (v2.6.0+)
         if ($this->is_hub_connected()) {
@@ -464,13 +481,18 @@ final class Peanut_Connect {
                 margin: 0 !important;
                 padding: 0 !important;
                 margin-left: -20px !important;
-                margin-right: -20px !important;
+                margin-right: 0 !important;
                 margin-top: -10px !important;
-                min-height: calc(100vh - 32px);
+                min-height: calc(100dvh - 32px);
                 background: #f8fafc;
             }
             #wpbody-content {
                 padding-bottom: 0 !important;
+            }
+            @media screen and (max-width: 782px) {
+                .peanut-connect-wrap {
+                    margin-left: -10px !important;
+                }
             }
         </style>';
     }

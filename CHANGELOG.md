@@ -11,8 +11,232 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Opt-in security response headers (`peanut_connect_security_headers`). When enabled, front-end page responses carry `Referrer-Policy: strict-origin-when-cross-origin`, a restrictive `Permissions-Policy` (geolocation/camera/microphone/payment/usb denied), and `X-Content-Type-Options: nosniff`. Values are overridable via the `peanut_connect_security_headers` filter, and any header already set by an upstream (edge WAF or server) is left untouched so no duplicate/conflicting header is emitted. Default off; intended mainly for sites without an edge that already sets these. Exposed in `Peanut_Connect_Security::get_settings()`.
 
 ### Fixed
+- Bundle the Hub form renderer and styles in Connect instead of loading missing Hub assets.
+  Render synchronized public field definitions, including multi-step forms; keep private settings
+  out of HTML. Refresh the browser's WordPress nonce at submit time so cached pages do not retain
+  expired or another user's tokens. Visitor identity remains exclusively request-cookie-derived.
+- Preserve Hub's `type` when synchronizing forms. Specialized enrollment/scheduler, file/signature,
+  and conditional field flows show an unavailable message rather than submit partial data.
+
+
+### Upgrade notes
+- **Approvers need new personal links.** A sign-off vote now has to come from the approver's own
+  link (`?pp_review=…&pp_as=<id>&pp_ak=<key>`) or from a logged-in agency user. Re-send each approver
+  the "Personal review link" shown under End to End > Mark It Up > Approvers. Old links still open
+  review mode and still take notes, but they cannot vote. Rotating the review token revokes every
+  personal link.
+
+### Security
+- **No per-visitor ids or review tokens in cacheable HTML.** The tracker config printed the visitor
+  id and Hub click id into the page, and `tracker.js` preferred those values to the browser's cookie
+  and then wrote them into the cookie. Behind a page cache, every visitor after the first was
+  attached to the first visitor's journey, and `/identify` from any of them relabelled that
+  visitor. The popups config had the same visitor-id leak. `tracker.js` now reads the visitor id
+  from its own `peanut_vid` cookie, or mints a 128-bit id in the browser, and takes the click id
+  only from the URL or its cookie. `popups.js` reads the cookie too. The server no longer prints
+  either id. The feedback widget config also printed the review token, copied out of the HttpOnly
+  `pp_review` cookie, so a cached review page gave the token to anyone. The widget now reads the
+  token from its own URL. Without one, it sends `X-Peanut-Review: 1`, and the REST gate reads the
+  HttpOnly cookie itself. A custom header cannot be sent cross-site without a preflight, so the
+  cookie cannot be ridden from another site. Review-mode pages now send `nocache_headers()` and set
+  `DONOTCACHEPAGE`.
+- **`/identify` is fill-only.** `POST /identify` and `POST /conversion` (with an email) overwrote the
+  visitor's email and name. They now fill a blank email, and a blank name only when the email on
+  record matches. One visitor's identity can no longer be replaced by another's.
+- **`/track` validates `click_id`.** A `click_id` in the request body was stored as sent and shipped
+  to Hub. It must now be a canonical UUID, otherwise the validated URL/cookie value is used. The
+  URL/cookie check is also stricter (8-4-4-4-12), and the `peanut_vid` cookie must be 32 hex characters.
+- **Approver votes are bound to the approver.** `POST /approvals/vote` took `approver_id` from the
+  request body, so anyone with the shared review link could sign off as any approver. A token
+  reviewer must now send that approver's personal key (`X-Peanut-Approver-Key`). The key is
+  HMAC-SHA256 under the auth salt over the approver id and the review token, so it cannot be derived
+  from the shared token. Logged-in agency users can still record any approver's sign-off. The widget
+  takes the identity from `?pp_as`/`?pp_ak` and remembers it.
+- **`[peanut_form]` markup is cache-safe.** The Hub form container printed `data-visitor-id` (the
+  rendering visitor's id) and `data-session-id` into the page. Behind a page cache, every visitor
+  submitted with the first visitor's ids. The markup now carries no per-visitor value. It names the
+  tracker cookie (`data-visitor-cookie="peanut_vid"`) so the form script can read the id itself.
+  The public submit proxy (`POST /forms/submit`) now sets `visitor_id` from the request's own
+  `peanut_vid` cookie, or drops it, and never forwards the body's value.
+
+### Fixed
+- **A lost key-rotation reply no longer locks the site out of Hub.** Hub promotes a rotated key
+  the moment the confirm request authenticates, retiring the old key. If that reply was lost
+  (timeout, dropped connection, 5xx after commit) the plugin used to throw the new key away and
+  keep the retired one, so every later Hub request 401'd and the site needed a re-pair. The new
+  key is now stored encrypted as *pending* before it is proposed; a failed confirm is retried
+  (3 attempts, 1 s / 2 s backoff, 45 s budget), then both keys are probed against
+  `GET /api/v1/popups/active` to see which one Hub accepts. If Hub can't be reached, the pending
+  key is kept, an admin notice explains the state, and the next heartbeat retries; a heartbeat
+  401 also tries the pending key once before counting a revocation strike. Key material never
+  reaches logs, plaintext options or messages. If the key can't be stored encrypted, the rotation
+  is aborted before anything is sent to Hub.
+- **Hub forms authenticate to Hub again, and the public submit proxy only relays this site's forms.** Forms sync (`GET /api/v1/forms/active`) and the public submit proxy (`POST /wp-json/peanut-connect/v1/forms/submit`) sent the site key as `X-Site-Api-Key`, which Hub does not read, so both got 401 and Hub forms were broken end to end. They now send `Authorization: Bearer` plus the D-11 signature headers, like every other outbound Hub call. The anonymous proxy now refuses (404, nothing sent to Hub) any `form_slug` that is not an active Hub form synced to this site, forwards only Hub's submit keys (`form_slug`, `data`, `visitor_id`, `session_id`, `metadata`), and keeps its nonce and rate limit.
+- Transcript backfills preserve literal dollar amounts and backslashes when replacing an existing transcript block; repeated updates no longer interpret transcript text as regular-expression replacement references.
+- **Short links are handed out on the client's own domain.** The campaign builder (link field and
+  QR code) and the Short Links list showed Hub's `https://hub.peanutgraphic.com/go/{slug}`, even
+  though the plugin's 404 handler already serves `https://client-site/{slug}` by forwarding to that
+  Hub route for tracking. The plugin now adds a `branded_url` to campaign and link responses and the
+  SPA prefers it. A slug that a real post or page already answers keeps Hub's URL, since the 404
+  redirect could never reach it there. Old Hub-domain links and QR codes keep working.
+- **Hub validation failures now say what was wrong.** Hub answers a rejected request with a 422
+  whose body lists per-field `errors` but no top-level `message`, and the SPA only ever read
+  `message` — so the campaign builder showed a bare "Request failed with status code 422" when,
+  for example, the chosen short-link slug was already taken. The API client now falls back to the
+  field errors ("The custom slug has already been taken."), for every screen that talks to Hub.
+
+### Added
+- **Auto-connect accepts a one-time Hub pairing token.** Hub (peanut-hub#1756) no longer binds a
+  new site key on a first-come basis: a site with no active key, or a request with a different
+  key, needs a token an operator creates in Hub (open the site → **Pair site**; 30-minute expiry,
+  single use). Settings → Hub Connection → Auto-connect has a new "Pairing token from Hub" field
+  next to the Hub URL; `POST /peanut-connect/v1/settings/hub/connect` takes an optional
+  `pairing_token`, rejects one that isn't `hubpair_` + 56 letters/digits before contacting Hub,
+  and forwards it as `pairing_token` to `/api/v1/sites/connect`. The token is never stored,
+  logged or echoed back, and the field clears after every attempt. Hub's `PAIRING_TOKEN_REQUIRED`,
+  `PAIRING_TOKEN_INVALID` and `ALREADY_CONNECTED` replies now explain the next step. The connect
+  reply's client/agency names are treated as optional. Hubs without pairing tokens ignore the
+  extra field, so connecting without a token keeps working against them.
+- **Podcast publish applies episode topics as post tags (3.40.0).** `POST /podcast/publish` now
+  reads an optional `tags` array (episode topics sent by Hullabaloo), sanitizes each entry, drops
+  blanks/duplicates, and replaces the post's tags with that list, so a republish reflects the
+  current topics. An absent, empty, or non-array `tags` leaves existing tags untouched, so older
+  Hullabaloo releases never wipe hand-typed tags. The `dry_run` preview now includes the `tags`
+  list it would apply.
+- **Unauthenticated user enumeration is now blocked by default.** Stock WordPress publishes
+  the exact login name of any user with content through three public vectors: `/wp-json/wp/v2/users`
+  returns it in the `slug` field, `/?author=<id>` 301-redirects to `/author/<login-name>/`, and
+  `wp-sitemap-users-N.xml` lists the author archives. On a client site that login name is half of
+  a credential pair, and it was readable by anyone — the admin account on a live Itron staging site
+  was recoverable in a single unauthenticated request. All three vectors are now closed for callers
+  who cannot already `list_users`, so the block editor, the REST author picker and authenticated
+  tooling are unaffected, and `/wp/v2/users/me` (self-scoped, already 401s when logged out) is
+  preserved. Sites that legitimately publish author archives can opt out via the `security`
+  endpoint's `block_user_enumeration` flag.
+
+### Fixed
+- The blocking PHP coverage gate now enforces a 9% statement floor against the current 14.26% baseline, replacing the zero-threshold placeholder while retaining roughly five points of headroom.
 - Mark It Up request handling now uses strict presence checks, so a literal `"0"` review token is not discarded by PHP's empty-value coercion; admin actions are sanitized before dispatch.
 - The test suite no longer calls PHP 8.5-deprecated reflection no-ops and now fails when PHPUnit marks a test risky.
+- The blocking Unit gate now runs 203 previously dormant module and API tests. The former Manager-era API quarantine has been rewritten around the current Hub admin contract, including encrypted credentials, manual pairing outcomes, SSRF rejection, disconnect cleanup, Hub modes, permissions, health, updates, and activity responses. Its WordPress mock filesystem is isolated from other repositories so shared `/tmp` state cannot inject real core files or redeclare test stubs.
+
+## [3.37.5] - 2026-08-24
+
+### Fixed
+- **A Hub-driven update could leave the plugin switched off, and still report success.**
+  WordPress deactivates a plugin before swapping its files and does not reliably switch it
+  back on when the upgrade runs outside wp-admin. A fleet-wide push left Peanut Connect
+  **inactive on seven client sites**: files correct and current, homepages fine, and every
+  Hub capability silently gone — no health reporting, no backups, no remote control —
+  while the update call had answered "Plugin updated to version 3.37.1." Recovering four
+  of them took a single reactivation; the other three needed someone with wp-admin,
+  because the API required to fix a site was the one that had been switched off.
+  A plugin that was running before an update is now running after it, a deliberately
+  deactivated plugin is still left alone, and an update that cannot restore the plugin
+  reports a failure instead of a version number. The response now also carries the
+  plugin's real `active` state so Hub can verify the outcome rather than trust it.
+
+## [3.37.4] - 2026-08-24
+
+### Fixed
+- **A Hub-driven update installed whatever was cached, not what was current.** The remote
+  update read WordPress's `update_plugins` transient — its own cache, up to 12 hours
+  stale — without refreshing it first. A fleet-wide push hours after 3.37.3 shipped
+  therefore installed **3.37.1** on five sites and was refused outright on four more with
+  "no update available"; every one of those was a cache artefact rather than a true
+  state. Hub asking for an update is precisely the moment a site should find out what is
+  actually available, so the check is now refreshed before the decision is read.
+
+## [3.37.3] - 2026-08-24
+
+### Fixed
+- **The database export reported no progress, so a long export still looked like a dead
+  backup.** 3.37.2 made the build heartbeat, but only while zipping files. On a real site
+  the export is the bigger half — peanutgraphic.com writes a 276 MB `.sql` before a single
+  file is zipped — and watching a live build showed its progress timestamp frozen for the
+  whole export. The blind spot had been moved rather than closed. The export now
+  heartbeats on the same interval, plus once at the phase boundary so even a fast export
+  leaves a trace.
+
+## [3.37.2] - 2026-08-24
+
+### Fixed
+- **A backup that died mid-build reported `running` forever, and a healthy long build
+  risked being called dead.** Five scheduled backups on 2026-08-23 sat `running` for
+  hours while Hub had to guess why. Three causes, all in the same seam. The build never
+  raised its execution limit — WP-Cron runs over HTTP, so it inherited the web server's
+  request cap and was killed mid-zip, and a killed request never reaches the failure
+  path. Staleness was already understood by the plugin but applied only when a *new*
+  backup was requested, so the status endpoint — the only thing Hub reads — kept
+  answering `running` for a worker that was already gone. And measuring staleness from
+  the start would have condemned honest long builds, so the build now heartbeats every
+  15 seconds (including either side of the archive write, where a large site is most
+  likely to be killed): silence means dead, duration does not.
+- Backup job records reported a null size for every backup, reading a `size` key where
+  the builder returns `size_bytes`.
+
+## [3.37.1] - 2026-08-21
+
+### Fixed
+- **The database migration could never run.** Its `plugins_loaded` hook was registered
+  from a boot path that already runs on `init`, so the hook had fired long before the
+  callback was added and the migration silently never executed — since v3.7.24. It now
+  runs immediately when its hook has already fired, and the boot contract is pinned by
+  a test that fails if the registration goes back to being too late.
+
+## [3.40.5] - 2026-10-16
+
+### Fixed
+- Use a phone navigation disclosure instead of squeezing content beside the desktop sidebar. Escape and destination selection close the menu and return focus to its button.
+- Preserve the desktop collapse preference when using phone navigation; keep navigation targets at least44px tall.
+- Remove the WordPress admin wrapper right-edge overflow and match its mobile padding.
+- Patch the locked DOMPurify, brace-expansion, js-yaml and source-map-js dependencies to clear the release audit.
+
+## [3.40.4] - 2026-10-16
+
+### Security
+- Strip nested Git directories and gitfiles from staged release packages, including source-installed Composer dependencies. Reject Git metadata in the final ZIP while preserving the bundled runtime and signed-update verifier. Existing published assets are not replaced.
+
+## [3.40.3] - 2026-10-14
+
+### Fixed
+- Include the running Connect version in fresh and forced health measurements, as well as cached responses.
+
+## [3.40.2] - 2026-10-14
+
+### Fixed
+- Health responses report the currently running Connect version even when other measurements are cached. This lets HUB verify installed plugin and backup capability versions without changing measurement timestamps.
+
+## [3.40.1] - 2026-10-14
+
+### Fixed
+- Database backup exports remove WordPress percent-placeholder tokens after escaping and declare the source connection charset, preserving encoded URLs and Unicode during restores. Existing failed archives are retained; fresh backups and isolated restore verification are required after installing this version.
+
+## [3.37.0] - 2026-08-16
+
+### Fixed
+- **`POST /backup` no longer builds the archive inside the request.** It zipped the
+  entire database and wp-content before answering, so the response could only arrive
+  if that finished inside the caller's timeout. On real client sites it did not:
+  Hub's only two recorded backup attempts both died at cURL 28 after 120s, leaving a
+  failed row and no archive. Across 23 active client sites, zero backups had ever
+  succeeded.
+
+### Added
+- Backups now run as a background job. `POST /backup` records the job and returns
+  **202** with a `job_id`; the archive is built on a WP-Cron request, and
+  `spawn_cron()` is called on queue so a quiet site does not wait for a visitor.
+- `GET /backup/job` reports a job's state. Called without `job` it returns the most
+  recent one, so Hub can recover the outcome of a request whose response it never saw.
+- A backup already queued or running returns that job rather than starting a
+  competing zip of the same disk.
+- A job left `running` beyond 30 minutes is reported as failed rather than believed.
+  Fatal errors, OOM kills and host request limits all end the worker without reaching
+  the failure path, so without this one killed run would wedge backups permanently.
+
+### Why this is a version bump
+- Hub's `SiteBackupCapability` gates on the reported Connect version, so the async
+  contract — 202 plus a pollable job — needs its own floor to be detectable.
 
 ## [3.36.0] - 2026-08-10
 
