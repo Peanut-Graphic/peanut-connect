@@ -31,9 +31,8 @@ class Peanut_Connect_Security {
 
         // Extra response headers (Referrer-Policy / Permissions-Policy). Opt-in
         // and filterable. Primarily for sites with no edge WAF already setting
-        // these — behind an F5/Cloudflare the same headers are better set at the
-        // edge. Never clobbers a header an upstream already emitted, so it is
-        // safe to leave on even where the edge sets some of them.
+        // these. PHP can preserve headers already queued in this response;
+        // policies added later by an edge proxy must be coordinated there.
         if (get_option('peanut_connect_security_headers', '0') === '1') {
             add_action('send_headers', [__CLASS__, 'send_security_headers']);
         }
@@ -84,8 +83,8 @@ class Peanut_Connect_Security {
      *
      * Values are filterable via `peanut_connect_security_headers`; return an
      * empty string for any key to skip it, or an empty array to send nothing.
-     * A header already present on the response (e.g. set by an edge WAF or the
-     * server) is left untouched so we never emit a conflicting duplicate.
+     * Headers already queued in PHP are preserved. PHP cannot inspect policies
+     * a reverse proxy adds after this application response has been sent.
      */
     public static function send_security_headers(): void {
         // Front-end page responses only. Admin, AJAX, REST, and login already
@@ -107,23 +106,42 @@ class Peanut_Connect_Security {
             return;
         }
 
-        $already = [];
-        foreach (headers_list() as $sent) {
-            $name = strtolower(trim(strtok($sent, ':')));
-            if ($name !== '') {
-                $already[$name] = true;
-            }
-        }
-
-        foreach ($headers as $name => $value) {
-            if (!is_string($name) || $value === '' || $value === null) {
-                continue;
-            }
-            if (isset($already[strtolower($name)])) {
-                continue; // do not clobber an upstream-set header
-            }
+        foreach (self::build_security_headers($headers, headers_list()) as $name => $value) {
             header($name . ': ' . $value, true);
         }
+    }
+
+    /**
+     * Validate the filtered policy against headers already queued by PHP.
+     * First spelling wins when filters supply case-insensitive duplicates.
+     */
+    public static function build_security_headers(array $headers, array $existing): array {
+        $already = [];
+        foreach ($existing as $sent) {
+            if (!is_string($sent)) {
+                continue;
+            }
+            $name = strtolower(trim(explode(':', $sent, 2)[0]));
+            $already[$name] = true;
+        }
+
+        $result = [];
+        foreach ($headers as $name => $value) {
+            if (!is_string($name) || !is_string($value) || $value === '') {
+                continue;
+            }
+            if (preg_match("/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/D", $name) !== 1
+                || preg_match('/[\r\n\x00]/', $value)) {
+                continue;
+            }
+            $normalized = strtolower($name);
+            if (isset($already[$normalized])) {
+                continue;
+            }
+            $result[$name] = $value;
+            $already[$normalized] = true;
+        }
+        return $result;
     }
 
     /**

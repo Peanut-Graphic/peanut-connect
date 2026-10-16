@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Opt-in security response headers (`peanut_connect_security_headers`). When enabled, front-end page responses carry `Referrer-Policy: strict-origin-when-cross-origin`, a restrictive `Permissions-Policy` (geolocation/camera/microphone/payment/usb denied), and `X-Content-Type-Options: nosniff`. Values are overridable via the `peanut_connect_security_headers` filter, and any header already set by an upstream (edge WAF or server) is left untouched so no duplicate/conflicting header is emitted. Default off; intended mainly for sites without an edge that already sets these. Exposed in `Peanut_Connect_Security::get_settings()`.
 
 ### Fixed
 - Bundle the Hub form renderer and styles in Connect instead of loading missing Hub assets.
@@ -183,6 +181,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   callback was added and the migration silently never executed — since v3.7.24. It now
   runs immediately when its hook has already fired, and the boot contract is pinned by
   a test that fails if the registration goes back to being too late.
+
+## [3.41.0] - 2026-10-16
+
+### Added
+- Opt-in frontend Referrer-Policy, Permissions-Policy and nosniff headers, disabled by default. The option is reported by the security settings reader and the policy is filterable.
+- Preserve existing PHP response headers, skip malformed entries and avoid case-insensitive duplicates. Edge policies added after PHP remain the edge operator’s responsibility.
 
 ## [3.40.5] - 2026-10-16
 
