@@ -68,6 +68,7 @@ final class Test_Backup_Progress extends TestCase {
             }
 
             public function _real_escape(string $v): string { return $v; }
+            public function remove_placeholder_escape(string $v): string { return $v; }
         };
     }
 

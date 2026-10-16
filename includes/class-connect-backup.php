@@ -139,6 +139,9 @@ class Peanut_Connect_Backup {
         fwrite($handle, "-- Peanut Connect Database Backup\n");
         fwrite($handle, "-- Generated: " . current_time('mysql') . "\n");
         fwrite($handle, "-- Site: " . get_site_url() . "\n\n");
+        // Preserve the source connection charset when importing Unicode values.
+        $charset = isset($wpdb->charset) && preg_match('/^[a-zA-Z0-9_]+$/', $wpdb->charset) ? $wpdb->charset : 'utf8mb4';
+        fwrite($handle, "SET NAMES {$charset};\n");
         fwrite($handle, "SET FOREIGN_KEY_CHECKS=0;\n\n");
 
         foreach ($tables as $table) {
@@ -159,7 +162,7 @@ class Peanut_Connect_Backup {
                 );
                 foreach ($rows as $row) {
                     $values = array_map(function ($v) use ($wpdb) {
-                        return $v === null ? 'NULL' : "'" . $wpdb->_real_escape($v) . "'";
+                        return $v === null ? 'NULL' : "'" . $wpdb->remove_placeholder_escape($wpdb->_real_escape($v)) . "'";
                     }, $row);
                     $columns = array_map(function ($c) {
                         return "`{$c}`";

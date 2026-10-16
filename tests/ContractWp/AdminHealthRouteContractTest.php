@@ -39,6 +39,16 @@ class AdminHealthRouteContractTest extends WP_UnitTestCase {
         do_action('rest_api_init');
     }
 
+    public function test_uncached_and_forced_health_include_runtime_identity(): void {
+        delete_transient('peanut_connect_health');
+        $fresh = \Peanut_Connect_Health::get_health_data();
+        $this->assertSame(PEANUT_CONNECT_VERSION, $fresh['connect']['version'] ?? null);
+        $forced = \Peanut_Connect_Health::get_health_data(true);
+        $this->assertSame(PEANUT_CONNECT_VERSION, $forced['connect']['version'] ?? null);
+        $cached = \Peanut_Connect_Health::get_health_data();
+        $this->assertSame(PEANUT_CONNECT_VERSION, $cached['connect']['version'] ?? null);
+    }
+
     public function test_admin_health_route_is_registered(): void {
         $routes = rest_get_server()->get_routes();
 
