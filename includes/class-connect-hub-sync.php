@@ -413,7 +413,7 @@ class Peanut_Connect_Hub_Sync {
 
         return [
             'success' => false,
-            'message' => $body['message'] ?? "HTTP $status_code",
+            'message' => self::hub_error_message($body, $status_code),
         ];
     }
 
@@ -572,7 +572,7 @@ class Peanut_Connect_Hub_Sync {
 
         return [
             'success' => false,
-            'message' => $body['message'] ?? "HTTP $status_code",
+            'message' => self::hub_error_message($body, $status_code),
         ];
     }
 
@@ -640,7 +640,7 @@ class Peanut_Connect_Hub_Sync {
 
         return [
             'success' => false,
-            'message' => $body['message'] ?? "HTTP $status_code",
+            'message' => self::hub_error_message($body, $status_code),
         ];
     }
 
@@ -695,4 +695,13 @@ class Peanut_Connect_Hub_Sync {
     // Removed in 3.7.20: unschedule() only cleared the legacy
     // peanut_connect_sync_to_hub hook (dead since 3.7.17). Real cleanup
     // lives in the deactivation hook in peanut-connect.php.
+    public static function hub_error_message($body, int $status_code): string {
+        if (!is_array($body)) return "HTTP $status_code";
+        $message = $body['message'] ?? ($body['error']['message'] ?? "HTTP $status_code");
+        $validation = $body['error']['validation'] ?? [];
+        if (is_array($validation) && $validation) {
+            $message .= ' Fields: ' . implode(', ', array_keys($validation));
+        }
+        return is_string($message) ? $message : "HTTP $status_code";
+    }
 }

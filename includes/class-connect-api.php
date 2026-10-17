@@ -3092,7 +3092,8 @@ class Peanut_Connect_API {
         $tracking_enabled = get_option('peanut_connect_tracking_enabled', false);
 
         // Check FormFlow status
-        $formflow_active = class_exists('ISF\\Plugin') || class_exists('FormFlow');
+        $formflow_lite_active = class_exists('FFFL\\Plugin');
+        $formflow_active = $formflow_lite_active || class_exists('ISF\\Plugin') || class_exists('FormFlow');
         $formflow_version = null;
         if ($formflow_active) {
             if (defined('ISF_VERSION')) {
@@ -3220,14 +3221,15 @@ class Peanut_Connect_API {
             }
         }
 
-        // Check FormFlow
-        $formflow_active = class_exists('ISF\\Plugin') || class_exists('FormFlow');
+        // Check the namespaced Lite plugin as well as the older Pro runtime.
+        $formflow_lite_active = class_exists('FFFL\\Plugin');
+        $formflow_active = $formflow_lite_active || class_exists('ISF\\Plugin') || class_exists('FormFlow');
         $diagnostics['formflow']['active'] = $formflow_active;
 
         if ($formflow_active) {
             // Try to get FormFlow instance and submission counts
-            $ff_instances_table = $wpdb->prefix . 'isf_instances';
-            $ff_submissions_table = $wpdb->prefix . 'isf_submissions';
+            $ff_instances_table = $wpdb->prefix . ($formflow_lite_active ? 'fffl_instances' : 'isf_instances');
+            $ff_submissions_table = $wpdb->prefix . ($formflow_lite_active ? 'fffl_submissions' : 'isf_submissions');
 
             $ff_instances_exists = $wpdb->get_var($wpdb->prepare(
                 "SHOW TABLES LIKE %s",
