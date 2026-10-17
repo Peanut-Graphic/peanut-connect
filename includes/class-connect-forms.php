@@ -696,6 +696,13 @@ class Peanut_Connect_Forms {
             "SELECT id, instance_id FROM $table WHERE id > %d AND status = 'completed' ORDER BY id ASC LIMIT 100",
             $cursor
         ), ARRAY_A);
+        // IDs describe creation order, not completion order. Revisit older
+        // records after exhausting the tail so a missed late completion can
+        // recover. Each pass stays bounded; stable UUIDs suppress duplicates.
+        if (!$rows && $cursor > 0) {
+            update_option('peanut_connect_fffl_completed_cursor', 0, false);
+            return;
+        }
         foreach ($rows ?: [] as $row) {
             self::handle_formflow_submission((int) $row['id'], (int) $row['instance_id']);
             update_option('peanut_connect_fffl_completed_cursor', (int) $row['id'], false);

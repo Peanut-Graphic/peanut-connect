@@ -25,11 +25,12 @@ namespace {
         public array $rows=[];
         public array $queries=[];
         public bool $fail=false;
+        public ?array $sourceCompletion=null;
         public function query($sql) { $this->queries[]=$sql; return 0; }
         public function prepare($sql,...$args) { $this->queries[]=$sql; return $args[0] ?? ''; }
         public function get_var($uuid) { return isset($this->rows[$uuid]) ? 1 : null; }
         public function insert($table,$row) { if ($this->fail) return false; $this->rows[$row['submission_uuid']]=$row; return 1; }
-        public function get_results($cursor,$mode) { return $cursor < 42 ? [['id'=>42,'instance_id'=>5]] : []; }
+        public function get_results($cursor,$mode) { if ($this->sourceCompletion===null) return $cursor < 42 ? [['id'=>42,'instance_id'=>5]] : []; $rows=[]; foreach ($this->sourceCompletion as $id=>$done) if ($done && $id>$cursor) $rows[]=['id'=>$id,'instance_id'=>5]; return array_slice($rows,0,100); }
     }
     require_once dirname(__DIR__, 2).'/includes/class-connect-forms.php';
     final class FormFlowLiteBridgeTest extends \PHPUnit\Framework\TestCase {
@@ -55,11 +56,25 @@ namespace {
             $GLOBALS['wpdb']=new BridgeWpdb();
             $GLOBALS['bridge_options']=[];
             Peanut_Connect_Forms::backfill_formflow_lite_submissions();
+            self::assertSame(42,$GLOBALS['bridge_options']['peanut_connect_fffl_completed_cursor']);
             Peanut_Connect_Forms::backfill_formflow_lite_submissions();
             self::assertCount(1,$GLOBALS['wpdb']->rows);
-            self::assertSame(42,$GLOBALS['bridge_options']['peanut_connect_fffl_completed_cursor']);
+            self::assertSame(0,$GLOBALS['bridge_options']['peanut_connect_fffl_completed_cursor']);
             self::assertStringContainsString("status = 'completed'",$GLOBALS['wpdb']->queries[0]);
             self::assertStringContainsString('LIMIT 100',$GLOBALS['wpdb']->queries[0]);
+        }
+        public function testMissedEarlierSubmissionRecoversAfterItCompletesLater(): void {
+            $GLOBALS['wpdb']=new BridgeWpdb();
+            $GLOBALS['wpdb']->sourceCompletion=[40=>false,42=>true];
+            $GLOBALS['bridge_options']=[];
+            Peanut_Connect_Forms::backfill_formflow_lite_submissions();
+            $GLOBALS['wpdb']->sourceCompletion[40]=true;
+            Peanut_Connect_Forms::backfill_formflow_lite_submissions();
+            Peanut_Connect_Forms::backfill_formflow_lite_submissions();
+            $ids=array_map(fn($row)=>json_decode($row['metadata'],true)['formflow_submission_id'],array_values($GLOBALS['wpdb']->rows));
+            sort($ids);
+            self::assertSame([40,42],$ids);
+            self::assertCount(2,$GLOBALS['wpdb']->rows);
         }
         public function testFailedQueueWriteDoesNotAdvanceBackfillCursor(): void {
             $GLOBALS['wpdb']=new BridgeWpdb();
